@@ -1,0 +1,6 @@
+# Ignore venv and cache
+venv/
+__pycache__/
+*.pyc
+.git/
+*.md
