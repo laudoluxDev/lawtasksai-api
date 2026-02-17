@@ -17,6 +17,7 @@ import zipfile
 import json
 import stripe
 import anthropic
+import re
 
 # Database imports (using async SQLAlchemy)
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
@@ -30,8 +31,10 @@ from io import BytesIO
 # Document generation (install: pip install python-docx openpyxl)
 try:
     from docx import Document
-    from docx.shared import Inches, Pt
+    from docx.shared import Inches, Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
     DOCX_AVAILABLE = True
 except ImportError:
     DOCX_AVAILABLE = False
@@ -49,7 +52,7 @@ except ImportError:
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/lawtasksai")
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-API_BASE_URL = os.getenv("API_BASE_URL", "https://lawtasksai-api-431860735682.us-central1.run.app")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://lawtasksai-api-10437713249.us-central1.run.app")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://lawtasksai.com")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
@@ -109,6 +112,7 @@ class Skill(Base):
     execution_type: Mapped[str] = mapped_column(String(20), default="server")
     is_published: Mapped[bool] = mapped_column(Boolean, default=False)
     is_deprecated: Mapped[bool] = mapped_column(Boolean, default=False)
+    triggers: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class SkillVersion(Base):
@@ -412,7 +416,7 @@ def check_profile_requirements(skill_id: str, profile: dict) -> List[str]:
 
 
 def generate_docx_with_letterhead(content: str, profile: dict, title: str = None) -> bytes:
-    """Generate a Word document with firm letterhead."""
+    """Generate a Word document with firm letterhead, supporting markdown formatting."""
     if not DOCX_AVAILABLE:
         return None
     
@@ -458,16 +462,141 @@ def generate_docx_with_letterhead(content: str, profile: dict, title: str = None
         run.font.size = Pt(14)
         doc.add_paragraph()  # Spacing
     
-    # Add content - handle markdown-style formatting
-    for paragraph in content.split("\n\n"):
-        if paragraph.strip():
+    # Check if content contains headings (for TOC)
+    has_headings = bool(re.search(r'^#{1,4}\s+.+', content, re.MULTILINE))
+    
+    # Add Table of Contents if headings exist
+    if has_headings:
+        # Create TOC using Word field codes
+        toc_para = doc.add_paragraph()
+        toc_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        
+        # Add TOC field
+        run = toc_para.add_run()
+        fldChar = OxmlElement('w:fldChar')
+        fldChar.set(qn('w:fldCharType'), 'begin')
+        run._r.append(fldChar)
+        
+        instrText = OxmlElement('w:instrText')
+        instrText.set(qn('xml:space'), 'preserve')
+        instrText.text = 'TOC \\o "1-4" \\h \\z \\u'
+        run._r.append(instrText)
+        
+        fldChar2 = OxmlElement('w:fldChar')
+        fldChar2.set(qn('w:fldCharType'), 'separate')
+        run._r.append(fldChar2)
+        
+        # Placeholder text shown before TOC is updated
+        run2 = toc_para.add_run('[Table of Contents - right-click and select "Update Field" to populate]')
+        run2.font.color.rgb = RGBColor(128, 128, 128)
+        run2.font.italic = True
+        
+        fldChar3 = OxmlElement('w:fldChar')
+        fldChar3.set(qn('w:fldCharType'), 'end')
+        run3 = toc_para.add_run()
+        run3._r.append(fldChar3)
+        
+        # Add spacing after TOC
+        doc.add_paragraph()
+        doc.add_paragraph()
+    
+    # Helper function to add text with inline bold formatting
+    def add_text_with_formatting(paragraph, text):
+        """Add text to paragraph with inline **bold** support."""
+        # Pattern to match **bold text**
+        pattern = r'\*\*(.+?)\*\*'
+        last_end = 0
+        
+        for match in re.finditer(pattern, text):
+            # Add text before the bold part
+            if match.start() > last_end:
+                paragraph.add_run(text[last_end:match.start()])
+            
+            # Add bold text
+            bold_run = paragraph.add_run(match.group(1))
+            bold_run.bold = True
+            
+            last_end = match.end()
+        
+        # Add remaining text after last bold part
+        if last_end < len(text):
+            paragraph.add_run(text[last_end:])
+    
+    # Process content line by line for better structure detection
+    lines = content.split('\n')
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        
+        # Skip empty lines
+        if not stripped:
+            i += 1
+            continue
+        
+        # Detect markdown headings
+        heading_match = re.match(r'^(#{1,4})\s+(.+)$', stripped)
+        if heading_match:
+            level = len(heading_match.group(1))
+            heading_text = heading_match.group(2)
+            
+            # Add heading with appropriate style
+            heading_para = doc.add_heading(level=level)
+            heading_para.text = heading_text
+            i += 1
+            continue
+        
+        # Detect horizontal rule
+        if stripped in ['---', '___', '***']:
+            # Add a paragraph with bottom border to simulate HR
+            hr_para = doc.add_paragraph()
+            hr_para.paragraph_format.space_after = Pt(12)
+            hr_para.paragraph_format.space_before = Pt(12)
+            i += 1
+            continue
+        
+        # Detect bullet points (- or *)
+        bullet_match = re.match(r'^[-*]\s+(.+)$', stripped)
+        if bullet_match:
+            bullet_text = bullet_match.group(1)
+            bullet_para = doc.add_paragraph(style='List Bullet')
+            add_text_with_formatting(bullet_para, bullet_text)
+            i += 1
+            continue
+        
+        # Detect numbered lists
+        numbered_match = re.match(r'^(\d+)\.\s+(.+)$', stripped)
+        if numbered_match:
+            numbered_text = numbered_match.group(2)
+            numbered_para = doc.add_paragraph(style='List Number')
+            add_text_with_formatting(numbered_para, numbered_text)
+            i += 1
+            continue
+        
+        # Regular paragraph - collect until next empty line or special formatting
+        para_lines = [line]
+        i += 1
+        
+        while i < len(lines):
+            next_line = lines[i].strip()
+            
+            # Stop if empty line or special formatting detected
+            if not next_line or \
+               re.match(r'^#{1,4}\s+', next_line) or \
+               next_line in ['---', '___', '***'] or \
+               re.match(r'^[-*]\s+', next_line) or \
+               re.match(r'^\d+\.\s+', next_line):
+                break
+            
+            para_lines.append(lines[i])
+            i += 1
+        
+        # Add paragraph with inline formatting
+        para_text = ' '.join(line.strip() for line in para_lines if line.strip())
+        if para_text:
             p = doc.add_paragraph()
-            # Handle basic markdown bold
-            if paragraph.startswith("**") and paragraph.endswith("**"):
-                run = p.add_run(paragraph[2:-2])
-                run.bold = True
-            else:
-                p.add_run(paragraph.strip())
+            add_text_with_formatting(p, para_text)
     
     # Add footer with attorney info
     if profile.get("attorney_name"):
@@ -783,87 +912,30 @@ async def list_skills(
         for s in skills
     ]
 
-# Trigger phrases for local skill matching
-# This is loaded from a YAML file or could be stored in DB
-SKILL_TRIGGERS = {
-    "sol-alert-system": {
-        "triggers": ["statute of limitations", "limitations period", "SOL", "time-barred", 
-                     "how long do I have to file", "how long do I have to sue", "is it too late to sue",
-                     "am I too late", "deadline to file suit", "deadline to sue", "can I still sue",
-                     "is my case too old", "claim expired", "when does my claim expire"],
-        "exclude": ["meeting", "appointment", "court date"]
-    },
-    "deadline-calculator": {
-        "triggers": ["FRCP deadline", "federal deadline", "response deadline", "reply deadline",
-                     "when is the response due", "when do I have to respond", "how long to answer",
-                     "days to respond", "motion deadline", "served with complaint", "got served",
-                     "just got sued", "received summons"],
-        "exclude": ["statute of limitations", "SOL"]
-    },
-    "case-law-research": {
-        "triggers": ["find cases", "case law", "research cases", "look up cases", "find precedent",
-                     "legal research", "cases about", "cases involving", "what do courts say",
-                     "how have courts ruled", "binding authority", "controlling authority"],
-        "exclude": ["my case", "this case", "our case"]
-    },
-    "precedent-finder": {
-        "triggers": ["similar case", "similar facts", "analogous case", "case like mine",
-                     "comparable case", "on point", "persuasive authority", "other jurisdictions",
-                     "how does this judge rule", "judge's prior rulings"],
-        "exclude": []
-    },
-    "local-rule-lookup": {
-        "triggers": ["local rule", "local rules", "court rules", "district rules", "standing order",
-                     "page limit", "word limit", "formatting requirement", "e-filing", "ECF",
-                     "meet and confer", "this court requires"],
-        "exclude": []
-    },
-    "demand-letter-drafter": {
-        "triggers": ["demand letter", "write a demand", "draft a demand", "settlement demand",
-                     "pre-suit demand", "before I sue", "notice of claim", "cease and desist"],
-        "exclude": ["received a demand", "respond to demand"]
-    },
-    "discovery-request-generator": {
-        "triggers": ["interrogatories", "requests for production", "RFPs", "requests for admission",
-                     "document requests", "draft discovery", "prepare discovery", "propound discovery",
-                     "what to ask in discovery", "standard interrogatories"],
-        "exclude": ["respond to discovery", "answer interrogatories", "objections"]
-    },
-    "deposition-summarizer": {
-        "triggers": ["summarize deposition", "deposition summary", "digest deposition", "depo summary",
-                     "deposition transcript", "review transcript", "key testimony", "deposition highlights"],
-        "exclude": []
-    },
-    "deposition-outline-generator": {
-        "triggers": ["deposition outline", "depo outline", "prepare for deposition", "deposition prep",
-                     "deposition questions", "taking a deposition", "what to ask", "30(b)(6)", "PMK deposition"],
-        "exclude": ["my deposition", "being deposed"]
-    },
-    "intake-triage": {
-        "triggers": ["new client", "potential client", "intake", "case evaluation", "evaluate case",
-                     "should I take this case", "is this a good case", "case worth taking", "viable claim"],
-        "exclude": []
-    },
-    "conflict-check-bot": {
-        "triggers": ["conflict check", "conflicts check", "run conflicts", "conflict of interest",
-                     "can I represent", "adverse to", "former client", "ethical wall"],
-        "exclude": []
-    },
-    "subpoena-generator": {
-        "triggers": ["subpoena", "subpoena duces tecum", "trial subpoena", "deposition subpoena",
-                     "draft subpoena", "third party records", "subpoena records", "custodian of records"],
-        "exclude": ["received subpoena", "respond to subpoena", "quash subpoena"]
-    }
-}
-
 @app.get("/skills/triggers")
 @app.get("/v1/skills/triggers")
-async def get_skill_triggers():
+async def get_skill_triggers(db: AsyncSession = Depends(get_db)):
     """
     Get trigger phrases for local skill matching.
     This enables privacy-preserving skill discovery without sending queries to the server.
+    Reads from database - skills with non-empty triggers arrays.
     """
-    return SKILL_TRIGGERS
+    result = await db.execute(
+        select(Skill.id, Skill.triggers).where(
+            Skill.is_published == True,
+            Skill.triggers != None,
+            func.array_length(Skill.triggers, 1) > 0
+        )
+    )
+    rows = result.all()
+    
+    # Build response in expected format
+    triggers_dict = {}
+    for skill_id, triggers in rows:
+        if triggers:
+            triggers_dict[skill_id] = {"triggers": triggers}
+    
+    return triggers_dict
 
 
 @app.get("/skills/{skill_id}", response_model=SkillResponse)
@@ -1624,7 +1696,7 @@ If no valid license key is found, ask the user:
 
 **If user provides an email:**
 ```
-POST https://lawtasksai-api-431860735682.us-central1.run.app/auth/recover-license
+POST https://lawtasksai-api-10437713249.us-central1.run.app/auth/recover-license
 Content-Type: application/json
 
 {"email": "[user's email]"}
@@ -1639,7 +1711,7 @@ mkdir -p ~/.lawtasksai
 cat > ~/.lawtasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
-  "api_base_url": "https://lawtasksai-api-431860735682.us-central1.run.app"
+  "api_base_url": "https://lawtasksai-api-10437713249.us-central1.run.app"
 }
 EOF
 ```
@@ -1809,7 +1881,7 @@ When the user declines a LawTasksAI skill, **answer using general knowledge**:
 
 ## API Endpoints
 
-**Base URL:** `https://lawtasksai-api-431860735682.us-central1.run.app`
+**Base URL:** `https://lawtasksai-api-10437713249.us-central1.run.app`
 
 ### Execute a Skill
 ```
@@ -2465,6 +2537,66 @@ async def batch_update_skills(
     }
 
 
+@app.patch("/admin/skills/{skill_id}/triggers", include_in_schema=False)
+async def update_skill_triggers(
+    skill_id: str,
+    trigger_data: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update triggers for a single skill (admin only).
+    Body: {"triggers": ["phrase 1", "phrase 2", ...]}
+    """
+    result = await db.execute(select(Skill).where(Skill.id == skill_id))
+    skill = result.scalar_one_or_none()
+    
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_id}' not found")
+    
+    triggers = trigger_data.get("triggers", [])
+    skill.triggers = triggers
+    await db.commit()
+    
+    return {"success": True, "skill_id": skill_id, "trigger_count": len(triggers)}
+
+
+@app.post("/admin/triggers/batch", include_in_schema=False)
+async def batch_update_triggers(
+    batch: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Batch update triggers for multiple skills (admin only).
+    Body: {
+        "skill_id_1": {"triggers": ["phrase 1", ...]},
+        "skill_id_2": {"triggers": ["phrase 2", ...]},
+        ...
+    }
+    """
+    updated = []
+    not_found = []
+    
+    for skill_id, data in batch.items():
+        result = await db.execute(select(Skill).where(Skill.id == skill_id))
+        skill = result.scalar_one_or_none()
+        
+        if skill:
+            triggers = data.get("triggers", [])
+            skill.triggers = triggers
+            updated.append(skill_id)
+        else:
+            not_found.append(skill_id)
+    
+    await db.commit()
+    
+    return {
+        "success": True,
+        "updated_count": len(updated),
+        "updated_skills": updated,
+        "not_found": not_found
+    }
+
+
 @app.post("/admin/skills/{skill_id}/versions", include_in_schema=False)
 async def create_skill_version(
     skill_id: str,
@@ -2533,6 +2665,76 @@ async def list_users(db: AsyncSession = Depends(get_db)):
         })
     
     return {"users": users, "count": len(users)}
+
+
+@app.post("/admin/credits/add", include_in_schema=False)
+async def add_credits(
+    license_key: str,
+    credits: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Add credits to a license (admin only - protect in production!)."""
+    if credits <= 0:
+        raise HTTPException(status_code=400, detail="Credits must be positive")
+    
+    # Find license
+    result = await db.execute(
+        select(License).where(License.license_key == license_key)
+    )
+    license = result.scalar_one_or_none()
+    
+    if not license:
+        raise HTTPException(status_code=404, detail="License not found")
+    
+    # Add credits
+    old_balance = license.credits_remaining
+    license.credits_remaining += credits
+    license.credits_purchased += credits
+    license.updated_at = datetime.utcnow()
+    
+    await db.commit()
+    
+    return {
+        "success": True,
+        "license_key": license_key,
+        "credits_added": credits,
+        "old_balance": old_balance,
+        "new_balance": license.credits_remaining
+    }
+
+
+@app.post("/admin/migrate/add-triggers-column", include_in_schema=False)
+async def migrate_add_triggers_column(db: AsyncSession = Depends(get_db)):
+    """
+    One-time migration to add triggers column to skills table.
+    Safe to run multiple times - checks if column exists first.
+    """
+    from sqlalchemy import text
+    
+    try:
+        # Check if column exists
+        check_query = text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'skills' AND column_name = 'triggers'
+        """)
+        result = await db.execute(check_query)
+        exists = result.scalar_one_or_none()
+        
+        if exists:
+            return {"success": True, "message": "Column 'triggers' already exists"}
+        
+        # Add the column
+        alter_query = text("""
+            ALTER TABLE skills 
+            ADD COLUMN triggers TEXT[] DEFAULT '{}'
+        """)
+        await db.execute(alter_query)
+        await db.commit()
+        
+        return {"success": True, "message": "Column 'triggers' added successfully"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 if __name__ == "__main__":
