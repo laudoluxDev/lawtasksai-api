@@ -707,6 +707,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Auto-create tables on startup
+@app.on_event("startup")
+async def startup():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -2665,6 +2671,25 @@ async def list_users(db: AsyncSession = Depends(get_db)):
         })
     
     return {"users": users, "count": len(users)}
+
+
+@app.delete("/admin/users/{user_id}", include_in_schema=False)
+async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
+    """Delete a user and all associated data (admin only)."""
+    uid = uuid.UUID(user_id)
+    # Delete in FK order
+    await db.execute(select(License).where(License.user_id == uid))
+    licenses = (await db.execute(select(License).where(License.user_id == uid))).scalars().all()
+    for lic in licenses:
+        await db.execute(select(CreditTransaction).where(CreditTransaction.license_id == lic.id))
+        await db.execute(select(UsageLog).where(UsageLog.license_id == lic.id))
+    from sqlalchemy import delete as sql_delete
+    await db.execute(sql_delete(CreditTransaction).where(CreditTransaction.user_id == uid))
+    await db.execute(sql_delete(UsageLog).where(UsageLog.user_id == uid))
+    await db.execute(sql_delete(License).where(License.user_id == uid))
+    await db.execute(sql_delete(User).where(User.id == uid))
+    await db.commit()
+    return {"success": True, "deleted_user_id": user_id}
 
 
 @app.post("/admin/credits/add", include_in_schema=False)
