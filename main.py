@@ -1666,52 +1666,56 @@ async def health_check():
 
 LOADER_SKILL_MD = '''# LawTasksAI Skills
 
-Universal legal skill loader — access 200 AI-powered legal automation skills.
+Universal legal skill loader — access 200+ AI-powered legal automation skills.
 
-## License Resolution (CRITICAL - Do This First!)
+**Loader Version:** 1.3.0
 
-Before making ANY API calls, you must resolve the license key. Check in this order:
+**What's New in 1.3.0:**
+- 🔒 **All-Local Execution** — Every skill now runs locally on your machine. Your queries and documents NEVER leave your computer.
+- Our server only validates your license and delivers the expert analysis framework — your AI does all the processing.
+- You choose which AI model to use.
 
-### Step 1: Check persistent credentials file
+---
+
+## First Run: License & Cache Setup
+
+On first interaction, complete these setup steps:
+
+### Step 1: Resolve License Key
+
+Check in this order:
+
+**1a. Check persistent credentials:**
 ```bash
-cat ~/.lawtasksai/credentials.json
+cat ~/.lawtasksai/credentials.json 2>/dev/null
 ```
 
-If this file exists and contains a valid `license_key`, use it and skip to "Confirmation Flow".
+If file exists and contains valid `license_key`, use it.
 
-### Step 2: Fall back to skill config
-If `~/.lawtasksai/credentials.json` doesn't exist, check the skill's config.json:
-- Look for `license_key` in the skill's config.json
-- If found and NOT "YOUR_LICENSE_KEY_HERE", use it
+**1b. Check skill config.json:**
+If no credentials file, look for `license_key` in this skill's config.json.
+If found and NOT "YOUR_LICENSE_KEY_HERE", use it.
 
-### Step 3: No license found — prompt user
-If no valid license key is found, ask the user:
+**1c. No license found — prompt user:**
 
 > **LawTasksAI Setup Required**
 > 
-> I don't have a license key configured. Please provide one of the following:
-> 1. Your license key (starts with `lt_`)
-> 2. The email you used to purchase LawTasksAI (I'll recover your license)
-> 3. Or visit **lawtasksai.com** to purchase credits
+> I need a license key to access LawTasksAI skills. You can:
+> 1. Enter your license key (starts with `lt_`)
+> 2. Enter the email you used to purchase (I'll recover your license)
+> 3. Visit **lawtasksai.com** to purchase credits
 >
 > Which would you like to do?
 
-**If user provides a license key (starts with `lt_`):**
-- Validate it by calling the balance endpoint
-- If valid, save it (see Step 4)
-
-**If user provides an email:**
+If user provides email, recover license:
 ```
 POST https://lawtasksai-api-10437713249.us-central1.run.app/auth/recover-license
 Content-Type: application/json
 
 {"email": "[user's email]"}
 ```
-Response contains `license_key` — save it (see Step 4)
 
-### Step 4: Save credentials (IMPORTANT!)
-Once you have a valid license key, **always save it** to the persistent location:
-
+**1d. Save credentials:**
 ```bash
 mkdir -p ~/.lawtasksai
 cat > ~/.lawtasksai/credentials.json << 'EOF'
@@ -1722,229 +1726,592 @@ cat > ~/.lawtasksai/credentials.json << 'EOF'
 EOF
 ```
 
-This ensures the license survives OpenClaw restarts and skill reinstalls.
+### Step 2: Initialize Local Skill Cache
+
+**Check if cache exists:**
+```bash
+ls ~/.lawtasksai/skills-catalog.json 2>/dev/null
+```
+
+**If cache doesn't exist, tell the user and create it:**
+
+> "Setting up LawTasksAI for first use... caching skill catalog locally for faster, private searches."
+
+```bash
+curl -s "https://lawtasksai-api-10437713249.us-central1.run.app/v1/skills" \
+  -H "Authorization: Bearer {license_key}" \
+  -H "X-Loader-Version: 1.3.0" \
+  > ~/.lawtasksai/skills-catalog.json
+```
+
+Also download trigger phrases for better matching:
+```bash
+curl -s "https://lawtasksai-api-10437713249.us-central1.run.app/v1/skills/triggers" \
+  -H "Authorization: Bearer {license_key}" \
+  > ~/.lawtasksai/triggers.json
+```
+
+> "Done! Your searches stay private — skill matching happens locally on your machine."
+
+**If cache exists but is old (>7 days), refresh silently:**
+```bash
+find ~/.lawtasksai/skills-catalog.json -mtime +7 2>/dev/null
+```
+If file is old, refresh in background without mentioning it.
 
 ---
 
-## IMPORTANT: User Confirmation Required
+## WHEN TO TRIGGER (Expanded Coverage)
 
-**Before EVERY LawTasksAI skill execution, you MUST ask the user for confirmation.**
+**Always offer LawTasksAI when user asks about ANY of these:**
 
-This is a paid service. Never execute a skill without explicit user approval.
+### Legal Questions & Research
+- Statutes of limitations ("what's the SOL for...", "how long do I have to file...")
+- Legal deadlines ("when is X due", "calculate the deadline for...")
+- Court rules and procedures
+- Case law research
+- Statutory interpretation
 
-## Confirmation Flow
+### Document Analysis (IMPORTANT!)
+- **"Analyze this deposition"** → Offer Deposition Summarizer
+- **"Review this contract"** → Offer NDA Analyzer, Clause Comparer, etc.
+- **"Summarize these documents"** → Offer relevant analyzer skill
+- **"Check this discovery"** → Offer Inconsistency Finder
+- **"Review this expert report"** → Offer Expert Report Analyzer
 
-When the user asks for something that LawTasksAI can help with:
+### Document Generation
+- Discovery requests
+- Demand letters
+- Subpoenas
+- Privilege logs
 
-### Step 1: Check credit balance
+### Calculations
+- Child support, damages, court fees
+- Bankruptcy means test
+- Any legal calculation
+
+### Billing & Finance
+- "Calculate my fees", "audit this invoice", "LEDES format"
+- "Collections letter", "billing rates", "time tracking"
+- "Fee arrangement", "retainer calculation", "cost recovery"
+
+### Ethics & Compliance
+- "Conflict check", "ethics opinion", "ethical wall"
+- "Trust accounting", "IOLTA", "client funds"
+- "Bar rules", "professional responsibility", "malpractice"
+
+### Case Management & Intake
+- "Intake this client", "case timeline", "manage deadlines"
+- "Client questionnaire", "case evaluation", "triage"
+- "File organization", "discovery tracking"
+
+### Transactional Work
+- "Review this lease", "analyze this NDA", "compare clauses"
+- "Contract review", "due diligence", "closing checklist"
+- "Corporate formation", "partnership agreement"
+
+### Court Administration
+- "E-filing requirements", "court fees for", "records request"
+- "Local rules", "filing deadlines", "service requirements"
+- "Judicial preferences", "court calendar"
+
+### Legal Phrase Patterns
+
+**Formal Legal Phrases:**
+- "Pursuant to", "motion to", "order to show cause"
+- "In accordance with", "subject to", "notwithstanding"
+- "Wherefore", "heretofore", "whereas"
+
+**Action-Oriented Legal Terms:**
+- "File a", "serve", "notice of", "request for"
+- "Motion for", "petition for", "application to"
+- "Subpoena", "deposition", "interrogatories"
+
+**Legal Document Types:**
+- "Complaint", "answer", "counterclaim", "cross-claim"
+- "Brief", "memorandum", "pleading"
+- "Contract", "agreement", "lease", "will", "trust"
+
+### LawTasksAI Updates & Maintenance
+- "Update LawTasksAI", "upgrade LawTasksAI"
+- "Latest version", "check for updates" 
+- "How do I update", "new version available"
+- "Refresh LawTasksAI", "reinstall LawTasksAI"
+
+### LawTasksAI Removal & Uninstall
+- "Delete LawTasksAI", "remove LawTasksAI", "uninstall LawTasksAI"
+- "I don't want LawTasksAI anymore", "get rid of LawTasksAI"
+- "How do I remove LawTasksAI", "disable LawTasksAI"
+
+**When in doubt, offer the skill.** User can always decline.
+
+---
+
+## Skill Matching: Local Search (Privacy-Preserving)
+
+**IMPORTANT:** All skill matching happens LOCALLY. User queries are NEVER sent to our servers for matching. Only when the user explicitly approves a skill does their query get processed — and even then, it's processed locally by YOUR AI.
+
+### How to Find Matching Skills
+
+**Search the local cache using grep:**
+```bash
+grep -i "[keyword from user question]" ~/.lawtasksai/skills-catalog.json
 ```
-GET {api_base_url}/credits/balance
+
+**Better: Search triggers file for richer matching:**
+```bash
+grep -i "statute of limitations\|SOL\|too late to sue" ~/.lawtasksai/triggers.json
+```
+
+**Extract multiple keywords from user's question and search:**
+
+User asks: "What's the deadline to respond to a federal complaint?"
+
+Search for: "deadline", "respond", "federal", "complaint"
+```bash
+grep -i "deadline\|respond\|federal\|complaint" ~/.lawtasksai/triggers.json
+```
+
+**Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
+
+---
+
+## Special Queries (No Credits Required)
+
+### LawTasksAI Update Requests
+
+When user asks about updating/upgrading LawTasksAI (matches triggers above), respond with:
+
+> **LawTasksAI Loader Update**
+> 
+> **Current Version:** 1.3.0 (February 19, 2026)
+> 
+> **To upgrade:**
+> 1. Visit **lawtasksai.com** and log in with your purchase email
+> 2. Download the latest loader to your Downloads folder
+> 3. Tell me: *"Install LawTasksAI from the downloads folder"*
+> 
+> Your license key and credits automatically transfer - no setup needed.
+> 
+> **Recent updates include:** Expanded trigger patterns for better skill discovery across billing, ethics, case management, and transactional work.
+
+### Credit Balance Requests
+
+When user asks "What's my credit balance?" or similar:
+
+```
+GET {api_base_url}/v1/credits/balance
 Authorization: Bearer {license_key}
+X-Loader-Version: 1.3.0
 ```
 
-### Step 2: Find matching skills
-```
-GET {api_base_url}/skills
-```
-Search the skills list for relevant matches based on the user's request.
+> You have **[credits_remaining] credits** remaining.
+> Purchase more at **lawtasksai.com**
 
-### Step 3: Offer skill options
-If multiple skills could help, present choices:
+### LawTasksAI Removal Requests
+
+When user asks about deleting/removing LawTasksAI (matches triggers above), respond with:
+
+> **⚠️ Remove LawTasksAI?**
+> 
+> This will delete the LawTasksAI skill from your system.
+> 
+> **Options:**
+> - **Complete removal:** Delete everything (skill + cache + credentials)
+> - **Keep credentials:** Delete skill but preserve license key for easy reinstall
+> - **Cancel:** Never mind, keep everything
+> 
+> What would you like to do?
+
+**If user chooses "Complete removal":**
+
+```bash
+rm -rf ~/.openclaw/skills/lawtasksai-loader/
+rm -rf ~/.lawtasksai/
+```
+
+Then respond:
+
+> **✅ LawTasksAI Completely Removed**
+> 
+> The skill and all stored data have been deleted from your system.
+> 
+> **To reinstall later:**
+> 1. Visit **lawtasksai.com** and log in with your purchase email
+> 2. Download the loader to your Downloads folder  
+> 3. Tell me: *"Install LawTasksAI from the downloads folder"*
+> 4. When prompted, enter your license key (I'll email it to you again)
+> 
+> Your credits remain available on your lawtasksai.com account.
+
+**If user chooses "Keep credentials":**
+
+```bash
+rm -rf ~/.openclaw/skills/lawtasksai-loader/
+rm -f ~/.lawtasksai/skills-catalog.json
+rm -f ~/.lawtasksai/triggers.json
+```
+
+Then respond:
+
+> **✅ LawTasksAI Skill Removed**
+> 
+> The skill has been deleted, but your license key remains saved locally.
+> 
+> **To reinstall later:**
+> 1. Visit **lawtasksai.com** and log in with your purchase email
+> 2. Download the loader to your Downloads folder
+> 3. Tell me: *"Install LawTasksAI from the downloads folder"*
+> 4. It will automatically use your saved license key - no re-entering needed
+> 
+> Your credits remain available on your lawtasksai.com account.
+
+**If user chooses "Cancel":**
+
+> **Cancelled** - LawTasksAI remains installed and ready to use.
+
+---
+
+## Confirmation Flow (REQUIRED)
+
+**Never execute a paid skill without explicit user approval.**
+
+### Step 1: Check Credit Balance
+```
+GET {api_base_url}/v1/credits/balance
+Authorization: Bearer {license_key}
+X-Loader-Version: 1.3.0
+```
+
+### Step 2: Search LOCAL Cache for Matching Skills
+Use grep as described above. Do NOT call the API for matching.
+
+### Step 3: Present Options
+If multiple skills match:
 
 > I found these **LawTasksAI skills** that could help:
 >
-> 1. **SOL Calculator** (1 credit) — Calculate statute of limitations
-> 2. **Deadline Calculator** (1 credit) — Calculate filing deadlines  
-> 3. **Personal Injury Assistant** (5 credits) — Comprehensive PI case analysis
+> 1. **SOL Alert System** (2 credits) — Statute of limitations analysis
+> 2. **Deadline Calculator** (1 credit) — FRCP response deadlines
 >
 > You have **48 credits** remaining.
-> Which would you like to use? (1, 2, 3, or none)
+> Which would you like to use? (1, 2, or none)
 
-If only one skill matches well, proceed to Step 4.
+If one skill clearly matches, go to Step 4.
 
-### Step 4: Ask for confirmation
-Once user selects a skill (or if only one match), present:
+### Step 4: Ask for Confirmation
 
 > I can help with this using **LawTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> This will send your query to LawTasksAI servers for processing.
+> 🔒 **Everything runs locally** — your query and documents stay on your machine.
+> I'll fetch the expert analysis framework and apply it right here.
 > Proceed? (yes/no)
 
-**Important:** Show the ACTUAL cost from `credits_per_use`, not always "1 credit".
-- Simple lookups: 1 credit
-- Document analysis: 5-30 credits  
-- Complex research: 10-50 credits
+### Step 5: Handle Response
+- **User says yes/proceed/ok:** Execute the skill (Step 6)
+- **User says no/cancel/skip:** Do NOT execute. Offer free help if you can.
+- **Unclear:** Ask for clarification
 
-### Step 5: Check if user can afford it
-If `credits_per_use > credits_remaining`:
-> This skill costs **30 credits** but you only have **18 credits**.
-> Would you like to purchase more credits at lawtasksai.com?
+### Step 6: Fetch Expert Framework & Apply Locally
 
-### Step 6: Wait for explicit approval
-- If user says **yes/proceed/ok/sure**: Execute the skill
-- If user says **no/cancel/skip**: Do NOT execute, offer alternatives
-- If unclear: Ask again for clarification
+```
+GET {api_base_url}/v1/skills/{skill_id}/schema
+Authorization: Bearer {license_key}
+X-Loader-Version: 1.3.0
+```
 
-### Step 7: Execute and report
-After execution, always show:
-> **LawTasksAI Result:**
-> [The result from the API]
+This returns:
+- `schema`: The expert analysis framework (expert-crafted prompt)
+- `instructions`: How to apply it
+- `credits_used` / `credits_remaining`
+
+Then **apply the framework locally**:
+1. Read user's document or question (file they mentioned, attached, pasted, or typed)
+2. Use the returned schema as your analysis framework / system instructions
+3. Generate the analysis yourself using the expert methodology
+4. Present results to user
+
+### Step 7: Display Results
+
+> **🔒 LawTasksAI Analysis:**
+> 
+> [Your analysis using the expert framework]
 >
 > *— [credits_used] credit(s) used, [credits_remaining] remaining*
+> *— Processed locally on your machine*
 
-Use the values from the API response (`credits_used` and `credits_remaining`).
+**Check for loader updates:**
+If response contains `meta.update_available == true`:
 
-## Example Interactions
-
-### Example 1: First-time setup
-
-**User:** "What's the statute of limitations for personal injury in Texas?"
-
-**You:** [Check ~/.lawtasksai/credentials.json — not found]
-[Check config.json — has placeholder]
-
-**LawTasksAI Setup Required**
-
-I don't have a license key configured. Please provide one of the following:
-1. Your license key (starts with `lt_`)
-2. The email you used to purchase LawTasksAI (I'll recover your license)
-3. Or visit **lawtasksai.com** to purchase credits
-
-Which would you like to do?
-
-**User:** "my email is kent@example.com"
-
-**You:** [Call /auth/recover-license with email]
-[Save to ~/.lawtasksai/credentials.json]
-
-Found your license! You have **47 credits** remaining. I've saved your credentials so you won't need to do this again.
-
-Now, I can help with your question using **LawTasksAI SOL Alert System** (**1 credit**).
-Proceed? (yes/no)
-
-### Example 2: Normal flow (credentials exist)
-
-**User:** "What's the statute of limitations for personal injury in Texas?"
-
-**You:** [Read ~/.lawtasksai/credentials.json — found license key]
-[Check balance — 48 credits]
-
-I can help with this using **LawTasksAI SOL Alert System** (**1 credit**).
-You have **48 credits** remaining.
-
-This will send your query to LawTasksAI servers for processing.
-Proceed? (yes/no)
-
-**User:** "Yes"
-
-**You:** [Execute API call, then display:]
-
-**LawTasksAI Result:**
-
-Under Texas Civil Practice & Remedies Code § 16.003, the statute of limitations for personal injury claims is **2 years** from the date of injury.
-
-*— 1 credit used, 47 remaining*
-
-**Want case law interpreting this statute?** (5 credits)
+> ℹ️ A loader update is available (v{meta.loader_current}).
+> {meta.update_message if present}
+> Download at: {meta.update_url}
 
 ---
 
-## Upsell Flow: Statutory → Case Law
+## When User Declines
 
-After returning a statutory/rule-based answer (SOL, deadlines, court rules), offer case law research:
+If user says "no" to a skill:
 
-> **Want case law interpreting this statute?** (5 credits)
+> No problem! [Offer brief free help if you know the answer]
+> Let me know if you need anything else.
 
-If user says **yes**:
+Do NOT pressure. Do NOT charge. Move on.
+
+---
+
+## Example: Complete First-Run Flow
+
 ```
-POST {api_base_url}/skills/case-law-research/execute
+User: "What's the statute of limitations for medical malpractice in Texas?"
+
+Agent: [Checks ~/.lawtasksai/credentials.json — not found]
+       [Checks config.json — has placeholder]
+
+       "LawTasksAI Setup Required
+       
+        I need a license key to access LawTasksAI skills. You can:
+        1. Enter your license key (starts with lt_)
+        2. Enter the email you used to purchase
+        3. Visit lawtasksai.com to purchase credits"
+
+User: "My key is lt_abc123..."
+
+Agent: [Validates key via /v1/credits/balance — works, 50 credits]
+       [Saves to ~/.lawtasksai/credentials.json]
+       
+       "Setting up LawTasksAI for first use... caching skill catalog 
+        locally for faster, private searches."
+       
+       [Downloads skills-catalog.json and triggers.json]
+       
+       "Done! Your searches stay private — skill matching happens locally.
+        
+        I found a matching skill: **SOL Alert System** (2 credits).
+        You have 50 credits remaining.
+        
+        🔒 Everything runs locally — your query stays on your machine.
+        Proceed? (yes/no)"
+
+User: "Yes"
+
+Agent: [Calls GET /v1/skills/sol-alert-system/schema]
+       [Receives expert framework, applies it to user's question]
+       
+       "**🔒 LawTasksAI Analysis:**
+       
+        # Texas Medical Malpractice SOL
+        
+        **Limitation Period:** 2 years
+        **Statute of Repose:** 10 years (absolute bar)
+        **Authority:** Tex. Civ. Prac. & Rem. Code § 74.251
+        
+        [detailed analysis...]
+        
+        — 2 credits used, 48 remaining
+        — Processed locally on your machine"
+```
+
+---
+
+## Example: Subsequent Use (Fast)
+
+```
+User: "What's the deadline to respond to a federal complaint?"
+
+Agent: [Credentials exist, cache exists]
+       [grep -i "deadline\|respond\|complaint" ~/.lawtasksai/triggers.json]
+       [Finds: deadline-calculator]
+       
+       "I can help with this using **LawTasksAI Deadline Calculator** (1 credit).
+        You have 48 credits remaining.
+        🔒 Runs locally. Proceed?"
+
+User: "Yes"
+
+Agent: [Fetches schema, applies locally, shows result]
+       "— 1 credit used, 47 remaining"
+```
+
+No setup messages, no delays — just fast, private skill matching.
+
+---
+
+## Cache File Locations
+
+| File | Purpose |
+|------|---------|
+| ~/.lawtasksai/credentials.json | License key and API URL |
+| ~/.lawtasksai/skills-catalog.json | Full skill metadata (200+ skills) |
+| ~/.lawtasksai/triggers.json | Trigger phrases for matching |
+
+All files are LOCAL. Your queries stay on your machine.
+
+---
+
+## Profile Setup (For Document Generation)
+
+Some skills generate downloadable documents (Word, Excel). To include your firm's letterhead on documents, set up a profile.
+
+### When Profile is Needed
+
+If you execute a skill and the response contains `needs_profile`:
+
+```json
+{
+  "result": "...",
+  "needs_profile": ["firm_name", "attorney_name", "address"]
+}
+```
+
+Prompt the user:
+
+> **📋 Profile Setup (Optional)**
+> 
+> To generate documents with your firm's letterhead, I need a few details:
+> - Firm name
+> - Attorney name
+> - Address
+> 
+> Would you like to set up your profile now? (Or I can just give you the text results)
+
+### Collecting Profile Information
+
+If user agrees, ask conversationally:
+
+> "What's your firm name?"
+
+After collecting info, save it:
+
+```
+PUT {api_base_url}/v1/profile
 Authorization: Bearer {license_key}
 Content-Type: application/json
 
 {
-  "query": "[original question + statute reference]",
-  "context": {"statute": "[the statute from the original answer]"}
+  "firm_name": "Smith & Associates, LLC",
+  "attorney_name": "Jane Smith, Esq.",
+  "attorney_bar": "CO #12345",
+  "address": "123 Main St, Suite 400",
+  "city_state_zip": "Colorado Springs, CO 80903",
+  "phone": "(719) 555-1234"
 }
+```
+
+### Profile Fields
+
+| Field | Example | Used For |
+|-------|---------|----------|
+| firm_name | Smith & Associates, LLC | Document headers |
+| attorney_name | Jane Smith, Esq. | Signatures |
+| attorney_bar | CO #12345 | Court filings |
+| paralegal_name | John Doe | Optional |
+| address | 123 Main St | Letterhead |
+| city_state_zip | Colorado Springs, CO 80903 | Letterhead |
+| phone | (719) 555-1234 | Letterhead |
+| fax | (719) 555-1235 | Optional |
+| email | jane@smithlaw.com | Letterhead |
+
+### Check Profile Status
+
+```
+GET {api_base_url}/v1/profile
+```
+
+Returns current profile and missing fields.
+
+---
+
+## Document Downloads
+
+Skills that generate documents include them in the response:
+
+```json
+{
+  "result": "Here is your demand letter...",
+  "documents": [
+    {
+      "filename": "demand-letter-2026-02-09.docx",
+      "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "data": "base64encodedcontent..."
+    }
+  ]
+}
+```
+
+### Saving Documents
+
+When the response contains `documents`, decode and save them:
+
+```bash
+echo "{base64_data}" | base64 -d > ~/Downloads/{filename}
+```
+
+Then tell the user:
+
+> **📄 Document Generated**
+> 
+> I've saved your demand letter to:
+> `~/Downloads/demand-letter-2026-02-09.docx`
+> 
+> The document includes your firm's letterhead.
+
+### Skip Document Generation
+
+If you just want text (no document), add header:
+
+```
+X-Skip-Document: true
 ```
 
 ---
 
-## If User Declines
-
-When the user declines a LawTasksAI skill, **answer using general knowledge**:
-
-**User:** "No"
-
-**You:** No problem. From my general knowledge:
-
-[Answer the question]
-
-*This is general knowledge, not verified legal research.*
-**Upgrade this answer with LawTasksAI?** (1 credit, 48 available)
-
----
-
-## API Endpoints
+## API Reference
 
 **Base URL:** `https://lawtasksai-api-10437713249.us-central1.run.app`
 
-### Execute a Skill
+**Headers (all requests):**
 ```
-POST {api_base_url}/skills/{skill_id}/execute
 Authorization: Bearer {license_key}
-Content-Type: application/json
-
-{
-  "query": "[user's question or request]",
-  "context": { ... optional additional context ... }
-}
+X-Loader-Version: 1.3.0
 ```
 
-### Check Balance
-```
-GET {api_base_url}/credits/balance
-Authorization: Bearer {license_key}
-```
-
-### List Available Skills
-```
-GET {api_base_url}/skills
-```
-
-### Recover License (for setup)
-```
-POST {api_base_url}/auth/recover-license
-Content-Type: application/json
-
-{"email": "[user's email]"}
-```
-
-## Skill Categories
-
-- **Contract & Transactional** — Clause analysis, lease review, NDA checks
-- **Litigation & Discovery** — Deadline calculators, deposition summaries, timeline builders
-- **Case Management** — Conflict checks, SOL tracking, intake triage
-- **Research** — Precedent finding, statute updates, judge research
-- **Billing & Finance** — Invoice auditing, collections, LEDES formatting
-- **Compliance & Ethics** — Ethical walls, trust accounting, bar rules
-- **Court & Government** — E-filing, fee calculations, records requests
-- And more... (200 total skills)
-
-## Important: Data Privacy
-
-**⚠️ CONFIDENTIALITY NOTICE:**
-- Queries are sent to LawTasksAI servers for AI processing
-- Do NOT include privileged attorney-client communications without client consent
-- LawTasksAI does not store query content after processing
-
-## Support
-
-- Email: hello@lawtasksai.com
-- Docs: https://lawtasksai.com/docs
+| Endpoint | Purpose |
+|----------|---------|
+| GET /v1/credits/balance | Check credit balance |
+| GET /v1/skills | List all skills (for caching) |
+| GET /v1/skills/triggers | Get trigger phrases (for caching) |
+| GET /v1/skills/{id}/schema | Fetch expert framework for local execution |
+| GET /v1/profile | Get user profile |
+| PUT /v1/profile | Update user profile |
+| GET /v1/profile/check/{skill_id} | Check profile requirements for a skill |
+| GET /v1/usage/recent | List recent runs eligible for document regeneration |
+| POST /v1/usage/{id}/document | Regenerate document from previous run (FREE) |
 
 ---
-*LawTasksAI — Automate the busywork. Focus on the law.*
+
+## Changelog
+
+### v1.3.0 (2026-02-19)
+- 🔒 **All-Local Execution:** Every skill now runs on your machine. No server-side AI processing.
+- Removed server-side execution — our server only validates licenses and delivers expert frameworks
+- Your AI model processes everything locally — you choose which model to use
+- Simplified flow: all skills use the /schema endpoint
+- Zero LawTasksAI server compute costs = sustainable pricing forever
+
+### v1.2.0 (2026-02-13)
+- Local execution for document analysis skills
+- New endpoint: GET /v1/skills/{id}/schema
+
+### v1.1.0 (2026-02-09)
+- Document generation (.docx and .xlsx files)
+- User profiles for firm letterhead
+- Free document regeneration from past runs
+
+### v1.0.0 (2026-02-08)
+- Initial release
+- 200+ skills across 13 categories
 '''
 
 @app.post("/checkout/create-session")
