@@ -128,6 +128,28 @@ class SkillVersion(Base):
     is_beta: Mapped[bool] = mapped_column(Boolean, default=False)
     published_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+class ContentPage(Base):
+    """Editable content pages (security guide, etc.) with version control."""
+    __tablename__ = "content_pages"
+    
+    slug: Mapped[str] = mapped_column(String(100), primary_key=True)  # e.g. "openclaw-security-guide"
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    current_version: Mapped[int] = mapped_column(Integer, default=1)
+    content: Mapped[str] = mapped_column(Text, nullable=False)  # Current HTML content
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class ContentPageVersion(Base):
+    """Version history for content pages."""
+    __tablename__ = "content_page_versions"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    page_slug: Mapped[str] = mapped_column(String(100), ForeignKey("content_pages.slug", ondelete="CASCADE"))
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    changelog: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 class License(Base):
     __tablename__ = "licenses"
     
@@ -2804,6 +2826,43 @@ hello@lawtasksai.com
 # Admin Routes (protected in production)
 # ============================================
 
+@app.get("/admin/skills/{skill_id}", include_in_schema=False)
+async def get_admin_skill(
+    skill_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a single skill with current version content (admin only)."""
+    result = await db.execute(select(Skill).where(Skill.id == skill_id))
+    skill = result.scalar_one_or_none()
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_id}' not found")
+
+    # Get latest version content
+    ver_result = await db.execute(
+        select(SkillVersion)
+        .where(SkillVersion.skill_id == skill_id)
+        .order_by(SkillVersion.published_at.desc())
+        .limit(1)
+    )
+    version = ver_result.scalar_one_or_none()
+
+    return {
+        "id": skill.id,
+        "category_id": skill.category_id,
+        "name": skill.name,
+        "description": skill.description,
+        "current_version": skill.current_version,
+        "stable_version": skill.stable_version,
+        "credits_per_use": skill.credits_per_use,
+        "requires_upload": skill.requires_upload,
+        "execution_type": skill.execution_type,
+        "is_published": skill.is_published,
+        "is_deprecated": skill.is_deprecated,
+        "created_at": skill.created_at.isoformat() if skill.created_at else None,
+        "current_version_content": version.content if version else None,
+        "current_version_changelog": version.changelog if version else None,
+    }
+
 @app.post("/admin/skills", include_in_schema=False)
 async def create_skill(
     skill_data: dict,
@@ -3127,6 +3186,307 @@ async def migrate_add_triggers_column(db: AsyncSession = Depends(get_db)):
         return {"success": True, "message": "Column 'triggers' added successfully"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+# ============================================
+# Content Pages (version-controlled editable pages)
+# ============================================
+
+@app.get("/pages/{slug}")
+async def get_page(slug: str, db: AsyncSession = Depends(get_db)):
+    """Public endpoint: get current content of a page by slug."""
+    result = await db.execute(select(ContentPage).where(ContentPage.slug == slug))
+    page = result.scalar_one_or_none()
+    if not page:
+        raise HTTPException(status_code=404, detail=f"Page '{slug}' not found")
+    return {
+        "slug": page.slug,
+        "title": page.title,
+        "content": page.content,
+        "current_version": page.current_version,
+        "updated_at": page.updated_at.isoformat() if page.updated_at else None
+    }
+
+@app.get("/admin/pages", include_in_schema=False)
+async def list_pages(db: AsyncSession = Depends(get_db)):
+    """Admin: list all content pages."""
+    result = await db.execute(select(ContentPage).order_by(ContentPage.title))
+    pages = result.scalars().all()
+    return [
+        {
+            "slug": p.slug,
+            "title": p.title,
+            "current_version": p.current_version,
+            "updated_at": p.updated_at.isoformat() if p.updated_at else None
+        }
+        for p in pages
+    ]
+
+@app.get("/admin/pages/{slug}", include_in_schema=False)
+async def get_page_admin(slug: str, db: AsyncSession = Depends(get_db)):
+    """Admin: get page with full content for editing."""
+    result = await db.execute(select(ContentPage).where(ContentPage.slug == slug))
+    page = result.scalar_one_or_none()
+    if not page:
+        raise HTTPException(status_code=404, detail=f"Page '{slug}' not found")
+    return {
+        "slug": page.slug,
+        "title": page.title,
+        "content": page.content,
+        "current_version": page.current_version,
+        "updated_at": page.updated_at.isoformat() if page.updated_at else None,
+        "created_at": page.created_at.isoformat() if page.created_at else None
+    }
+
+@app.put("/admin/pages/{slug}", include_in_schema=False)
+async def save_page(slug: str, data: dict, db: AsyncSession = Depends(get_db)):
+    """Admin: save page content. Creates a new version automatically."""
+    from sqlalchemy import text
+    
+    result = await db.execute(select(ContentPage).where(ContentPage.slug == slug))
+    page = result.scalar_one_or_none()
+    
+    content = data.get("content", "")
+    title = data.get("title", "")
+    changelog = data.get("changelog", "")
+    
+    if page:
+        # Update existing page
+        new_version = page.current_version + 1
+        
+        # Save current version to history before overwriting
+        version_entry = ContentPageVersion(
+            page_slug=slug,
+            version=page.current_version,
+            content=page.content,
+            changelog=changelog or f"Version {page.current_version}",
+            created_at=page.updated_at or page.created_at
+        )
+        db.add(version_entry)
+        
+        # Update the page
+        page.content = content
+        page.title = title or page.title
+        page.current_version = new_version
+        page.updated_at = datetime.utcnow()
+    else:
+        # Create new page
+        page = ContentPage(
+            slug=slug,
+            title=title or slug,
+            content=content,
+            current_version=1,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        db.add(page)
+    
+    await db.commit()
+    
+    return {
+        "success": True,
+        "slug": slug,
+        "version": page.current_version,
+        "updated_at": page.updated_at.isoformat()
+    }
+
+@app.get("/admin/pages/{slug}/versions", include_in_schema=False)
+async def get_page_versions(slug: str, db: AsyncSession = Depends(get_db)):
+    """Admin: list all versions of a page."""
+    # Check page exists
+    result = await db.execute(select(ContentPage).where(ContentPage.slug == slug))
+    page = result.scalar_one_or_none()
+    if not page:
+        raise HTTPException(status_code=404, detail=f"Page '{slug}' not found")
+    
+    # Get version history
+    result = await db.execute(
+        select(ContentPageVersion)
+        .where(ContentPageVersion.page_slug == slug)
+        .order_by(ContentPageVersion.version.desc())
+    )
+    versions = result.scalars().all()
+    
+    # Include current version at the top
+    all_versions = [
+        {
+            "version": page.current_version,
+            "changelog": "Current version",
+            "created_at": page.updated_at.isoformat() if page.updated_at else None,
+            "is_current": True
+        }
+    ]
+    
+    for v in versions:
+        all_versions.append({
+            "version": v.version,
+            "changelog": v.changelog,
+            "created_at": v.created_at.isoformat() if v.created_at else None,
+            "is_current": False
+        })
+    
+    return all_versions
+
+@app.get("/admin/pages/{slug}/versions/{version}", include_in_schema=False)
+async def get_page_version(slug: str, version: int, db: AsyncSession = Depends(get_db)):
+    """Admin: get a specific version's content (for viewing/restoring)."""
+    # Check if requesting current version
+    result = await db.execute(select(ContentPage).where(ContentPage.slug == slug))
+    page = result.scalar_one_or_none()
+    if not page:
+        raise HTTPException(status_code=404, detail=f"Page '{slug}' not found")
+    
+    if version == page.current_version:
+        return {"version": version, "content": page.content, "is_current": True}
+    
+    # Get historical version
+    result = await db.execute(
+        select(ContentPageVersion)
+        .where(ContentPageVersion.page_slug == slug, ContentPageVersion.version == version)
+    )
+    ver = result.scalar_one_or_none()
+    if not ver:
+        raise HTTPException(status_code=404, detail=f"Version {version} not found")
+    
+    return {"version": ver.version, "content": ver.content, "is_current": False}
+
+@app.post("/admin/pages/{slug}/restore/{version}", include_in_schema=False)
+async def restore_page_version(slug: str, version: int, db: AsyncSession = Depends(get_db)):
+    """Admin: restore a previous version (saves current as new version first)."""
+    result = await db.execute(select(ContentPage).where(ContentPage.slug == slug))
+    page = result.scalar_one_or_none()
+    if not page:
+        raise HTTPException(status_code=404, detail=f"Page '{slug}' not found")
+    
+    if version == page.current_version:
+        return {"success": True, "message": "Already on this version"}
+    
+    # Get the version to restore
+    result = await db.execute(
+        select(ContentPageVersion)
+        .where(ContentPageVersion.page_slug == slug, ContentPageVersion.version == version)
+    )
+    ver = result.scalar_one_or_none()
+    if not ver:
+        raise HTTPException(status_code=404, detail=f"Version {version} not found")
+    
+    # Save current to history
+    version_entry = ContentPageVersion(
+        page_slug=slug,
+        version=page.current_version,
+        content=page.content,
+        changelog=f"Before restoring v{version}",
+        created_at=page.updated_at or page.created_at
+    )
+    db.add(version_entry)
+    
+    # Restore
+    new_version = page.current_version + 1
+    page.content = ver.content
+    page.current_version = new_version
+    page.updated_at = datetime.utcnow()
+    
+    await db.commit()
+    
+    return {
+        "success": True,
+        "restored_from": version,
+        "new_version": new_version
+    }
+
+@app.post("/admin/migrate/add-content-pages", include_in_schema=False)
+async def migrate_add_content_pages(db: AsyncSession = Depends(get_db)):
+    """One-time migration to create content_pages and content_page_versions tables."""
+    from sqlalchemy import text
+    
+    try:
+        await db.execute(text("""
+            CREATE TABLE IF NOT EXISTS content_pages (
+                slug VARCHAR(100) PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                current_version INTEGER DEFAULT 1,
+                content TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT NOW(),
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """))
+        
+        await db.execute(text("""
+            CREATE TABLE IF NOT EXISTS content_page_versions (
+                id SERIAL PRIMARY KEY,
+                page_slug VARCHAR(100) REFERENCES content_pages(slug) ON DELETE CASCADE,
+                version INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                changelog TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """))
+        
+        await db.commit()
+        return {"success": True, "message": "Content pages tables created successfully"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ============================================
+# Admin File Management (GCS-backed)
+# ============================================
+
+WORKSPACE_BUCKET = os.getenv("WORKSPACE_BUCKET", "lawtasksai-workspace")
+
+def _get_gcs_client():
+    from google.cloud import storage
+    return storage.Client()
+
+@app.get("/admin/files/list", include_in_schema=False)
+async def list_files(prefix: str = ""):
+    """List files in the workspace bucket under a prefix."""
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(WORKSPACE_BUCKET)
+        blobs = bucket.list_blobs(prefix=prefix)
+        files = []
+        for blob in blobs:
+            files.append({
+                "path": blob.name,
+                "size": blob.size,
+                "updated": blob.updated.isoformat() if blob.updated else None,
+            })
+        return files
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/files/read", include_in_schema=False)
+async def read_file(path: str):
+    """Read a file from the workspace bucket."""
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(WORKSPACE_BUCKET)
+        blob = bucket.blob(path)
+        if not blob.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+        content = blob.download_as_text()
+        return {"path": path, "content": content, "size": blob.size, "updated": blob.updated.isoformat() if blob.updated else None}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/admin/files/write", include_in_schema=False)
+async def write_file(data: dict):
+    """Write/update a file in the workspace bucket."""
+    path = data.get("path", "")
+    content = data.get("content", "")
+    if not path:
+        raise HTTPException(status_code=400, detail="path is required")
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(WORKSPACE_BUCKET)
+        blob = bucket.blob(path)
+        blob.upload_from_string(content, content_type="text/plain")
+        return {"success": True, "path": path, "size": len(content.encode('utf-8'))}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
