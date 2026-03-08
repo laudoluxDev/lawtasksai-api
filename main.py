@@ -3489,6 +3489,114 @@ async def write_file(data: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================
+# Template Management & Rendering
+# ============================================
+
+@app.get("/admin/templates", include_in_schema=False)
+async def list_templates():
+    """List available output templates with metadata from manifest."""
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(WORKSPACE_BUCKET)
+        manifest_blob = bucket.blob("templates/manifest.json")
+        if manifest_blob.exists():
+            import json as _json
+            manifest = _json.loads(manifest_blob.download_as_text())
+            return manifest
+        # Fallback: list HTML files
+        blobs = bucket.list_blobs(prefix="templates/")
+        templates = []
+        for blob in blobs:
+            if blob.name.endswith('.html'):
+                tid = blob.name.replace('templates/', '').replace('.html', '')
+                templates.append({"id": tid, "name": tid.replace('-', ' ').title(), "file": f"{tid}.html"})
+        return templates
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/templates/{template_id}", include_in_schema=False)
+async def get_template(template_id: str):
+    """Get template HTML content."""
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(WORKSPACE_BUCKET)
+        blob = bucket.blob(f"templates/{template_id}.html")
+        if not blob.exists():
+            raise HTTPException(status_code=404, detail="Template not found")
+        content = blob.download_as_text()
+        return {"id": template_id, "content": content, "size": blob.size}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/admin/templates/{template_id}", include_in_schema=False)
+async def save_template(template_id: str, data: dict):
+    """Save/update a template."""
+    content = data.get("content", "")
+    metadata = data.get("metadata", {})
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(WORKSPACE_BUCKET)
+        # Save template HTML
+        blob = bucket.blob(f"templates/{template_id}.html")
+        blob.upload_from_string(content, content_type="text/html")
+        # Update manifest if metadata provided
+        if metadata:
+            import json as _json
+            manifest_blob = bucket.blob("templates/manifest.json")
+            manifest = []
+            if manifest_blob.exists():
+                manifest = _json.loads(manifest_blob.download_as_text())
+            # Update or add entry
+            found = False
+            for entry in manifest:
+                if entry.get("id") == template_id:
+                    entry.update(metadata)
+                    found = True
+                    break
+            if not found:
+                metadata["id"] = template_id
+                metadata["file"] = f"{template_id}.html"
+                manifest.append(metadata)
+            manifest_blob.upload_from_string(_json.dumps(manifest, indent=2), content_type="application/json")
+        return {"success": True, "id": template_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/templates/preview", include_in_schema=False)
+async def preview_template(data: dict):
+    """Render a template with provided data. Returns HTML string."""
+    template_id = data.get("template_id", "")
+    title = data.get("title", "Untitled")
+    subtitle = data.get("subtitle", "")
+    eyebrow = data.get("eyebrow", "LawTasksAI")
+    content_html = data.get("content", "<p>No content provided.</p>")
+    nav_items = data.get("nav_items", "")
+
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(WORKSPACE_BUCKET)
+        blob = bucket.blob(f"templates/{template_id}.html")
+        if not blob.exists():
+            raise HTTPException(status_code=404, detail="Template not found")
+        template = blob.download_as_text()
+
+        # Simple placeholder replacement
+        rendered = template.replace("{{title}}", title)
+        rendered = rendered.replace("{{subtitle}}", subtitle)
+        rendered = rendered.replace("{{eyebrow}}", eyebrow)
+        rendered = rendered.replace("{{content}}", content_html)
+        rendered = rendered.replace("{{nav_items}}", nav_items)
+
+        return {"html": rendered}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
