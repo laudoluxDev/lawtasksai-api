@@ -3,4 +3,6 @@ venv/
 __pycache__/
 *.pyc
 .git/
-*.md
+# Ignore markdown except loader SKILL.md
+README.md
+CHANGELOG.md
