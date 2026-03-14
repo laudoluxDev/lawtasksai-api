@@ -291,6 +291,11 @@ class CreditBalanceResponse(BaseModel):
 class PurchaseCreditsRequest(BaseModel):
     pack: str  # 'trial', 'essentials', 'accelerator', 'efficient', 'unstoppable', 'apex'
     email: Optional[str] = None  # Required for trial pack (one-time offer)
+    attorney_name: Optional[str] = None
+    bar_jurisdiction: Optional[str] = None   # e.g. "Colorado", "TX", "Federal"
+    bar_number: Optional[str] = None
+    firm_name: Optional[str] = None
+    attestation: Optional[bool] = False      # True = user checked "I am a licensed attorney"
 
 class UsageResponse(BaseModel):
     skill_id: str
@@ -1743,6 +1748,11 @@ async def create_checkout_session(
             'metadata': {
                 'pack': request.pack,
                 'credits': str(pack['credits']),
+                'attorney_name': request.attorney_name or '',
+                'bar_jurisdiction': request.bar_jurisdiction or '',
+                'bar_number': request.bar_number or '',
+                'firm_name': request.firm_name or '',
+                'attestation': 'true' if request.attestation else 'false',
             },
         }
         
@@ -1784,11 +1794,21 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             return {"status": "skipped", "reason": "no email"}
         
         # Get credits and pack name from metadata
-        credits = int(session.get('metadata', {}).get('credits', 0))
-        pack_name = session.get('metadata', {}).get('pack', 'unknown')
+        meta = session.get('metadata', {})
+        credits = int(meta.get('credits', 0))
+        pack_name = meta.get('pack', 'unknown')
         if credits == 0:
             return {"status": "skipped", "reason": "no credits"}
-        
+
+        # Bar / attorney info from metadata
+        bar_profile = {
+            "attorney_name": meta.get('attorney_name', ''),
+            "bar_jurisdiction": meta.get('bar_jurisdiction', ''),
+            "bar_number": meta.get('bar_number', ''),
+            "firm_name": meta.get('firm_name', ''),
+            "attestation": meta.get('attestation', 'false') == 'true',
+        }
+
         # Find or create user
         result = await db.execute(select(User).where(User.email == customer_email))
         user = result.scalar_one_or_none()
@@ -1797,8 +1817,11 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             # Create new user
             user = User(
                 email=customer_email,
+                name=bar_profile.get('attorney_name') or None,
+                firm_name=bar_profile.get('firm_name') or None,
                 password_hash=hash_password(secrets.token_hex(16)),  # Random password
-                credits_balance=credits
+                credits_balance=credits,
+                profile=bar_profile,
             )
             db.add(user)
             await db.flush()
@@ -1837,7 +1860,17 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                 db.add(license)
             
             user.credits_balance += credits
-        
+            # Merge bar profile info (update if provided, don't overwrite with empty)
+            existing_profile = user.profile or {}
+            for k, v in bar_profile.items():
+                if v:  # only overwrite if new value is non-empty
+                    existing_profile[k] = v
+            user.profile = existing_profile
+            if bar_profile.get('attorney_name') and not user.name:
+                user.name = bar_profile['attorney_name']
+            if bar_profile.get('firm_name') and not user.firm_name:
+                user.firm_name = bar_profile['firm_name']
+
         # Log transaction
         tx = CreditTransaction(
             user_id=user.id,
@@ -2446,11 +2479,13 @@ async def list_users(db: AsyncSession = Depends(get_db)):
             "id": str(user.id),
             "email": user.email,
             "name": user.name,
+            "firm_name": user.firm_name,
             "credits_balance": user.credits_balance,
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "license_key": license.license_key if license else None,
             "license_type": license.type if license else None,
             "license_credits": license.credits_remaining if license else None,
+            "profile": user.profile or {},
         })
     
     return {"users": users, "count": len(users)}
