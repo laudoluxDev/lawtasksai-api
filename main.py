@@ -247,6 +247,24 @@ class SkillResponse(BaseModel):
     execution_type: str
     confidentiality_note: Optional[str] = None  # Warning for sensitive data handling
 
+# ============================================
+# FastAPI App
+# ============================================
+
+app = FastAPI(
+    title="LawTasksAI API",
+    description="Skill delivery, licensing, and usage tracking for LawTasksAI.",
+    version="2.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.get("/skills/{skill_id}/schema", response_model=SkillSchemaResponse)
 @app.get("/v1/skills/{skill_id}/schema", response_model=SkillSchemaResponse)
 async def get_skill_schema(
