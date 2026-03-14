@@ -210,6 +210,50 @@ async def get_db():
         yield session
 
 # ============================================
+# Utility Functions
+# ============================================
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    pw_hash = hashlib.sha256((password + salt).encode()).hexdigest()
+    return f"{salt}:{pw_hash}"
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    try:
+        salt, pw_hash = stored_hash.split(":")
+        return hashlib.sha256((password + salt).encode()).hexdigest() == pw_hash
+    except:
+        return False
+
+def generate_license_key() -> str:
+    return f"lt_{secrets.token_hex(16)}"
+
+# ============================================
+# Auth Dependency
+# ============================================
+
+async def get_current_license(
+    authorization: str = Header(...),
+    db: AsyncSession = Depends(get_db)
+) -> License:
+    """Validate license key from Authorization header."""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
+    license_key = authorization.replace("Bearer ", "")
+    result = await db.execute(
+        select(License).where(
+            License.license_key == license_key,
+            License.status == "active"
+        )
+    )
+    license = result.scalar_one_or_none()
+    if not license:
+        raise HTTPException(status_code=401, detail="Invalid or inactive license")
+    if license.valid_until and license.valid_until < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="License expired")
+    return license
+
+# ============================================
 # Pydantic Schemas
 # ============================================
 
