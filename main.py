@@ -16,6 +16,7 @@ import io
 import zipfile
 import json
 import stripe
+import anthropic
 import re
 
 # Database imports (using async SQLAlchemy)
@@ -64,6 +65,7 @@ LOADER_UPDATE_MESSAGE = None  # Set to a string when there's an important update
 stripe.api_key = STRIPE_SECRET_KEY
 
 # Initialize Anthropic client
+anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 
 # ============================================
 # Database Models
@@ -184,6 +186,7 @@ class UsageLog(Base):
     tokens_input: Mapped[Optional[int]] = mapped_column(Integer)
     tokens_output: Mapped[Optional[int]] = mapped_column(Integer)
     # Store result for document regeneration (no extra credit charge)
+    result_text: Mapped[Optional[str]] = mapped_column(Text)
 
 class CreditTransaction(Base):
     __tablename__ = "credit_transactions"
@@ -208,50 +211,6 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 async def get_db():
     async with async_session() as session:
         yield session
-
-# ============================================
-# Utility Functions
-# ============================================
-
-def hash_password(password: str) -> str:
-    salt = secrets.token_hex(16)
-    pw_hash = hashlib.sha256((password + salt).encode()).hexdigest()
-    return f"{salt}:{pw_hash}"
-
-def verify_password(password: str, stored_hash: str) -> bool:
-    try:
-        salt, pw_hash = stored_hash.split(":")
-        return hashlib.sha256((password + salt).encode()).hexdigest() == pw_hash
-    except:
-        return False
-
-def generate_license_key() -> str:
-    return f"lt_{secrets.token_hex(16)}"
-
-# ============================================
-# Auth Dependency
-# ============================================
-
-async def get_current_license(
-    authorization: str = Header(...),
-    db: AsyncSession = Depends(get_db)
-) -> License:
-    """Validate license key from Authorization header."""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid authorization header")
-    license_key = authorization.replace("Bearer ", "")
-    result = await db.execute(
-        select(License).where(
-            License.license_key == license_key,
-            License.status == "active"
-        )
-    )
-    license = result.scalar_one_or_none()
-    if not license:
-        raise HTTPException(status_code=401, detail="Invalid or inactive license")
-    if license.valid_until and license.valid_until < datetime.utcnow():
-        raise HTTPException(status_code=401, detail="License expired")
-    return license
 
 # ============================================
 # Pydantic Schemas
@@ -291,16 +250,37 @@ class SkillResponse(BaseModel):
     execution_type: str
     confidentiality_note: Optional[str] = None  # Warning for sensitive data handling
 
+class SkillExecuteRequest(BaseModel):
+    query: str  # User's input/question
+    context: Optional[dict] = None  # Additional context (optional)
+    version: Optional[str] = None  # None = use policy (latest/stable)
+
+class LoaderMeta(BaseModel):
+    """Metadata about loader updates - included in responses when relevant."""
+    loader_current: str  # Current available loader version
+    update_available: bool
+    update_message: Optional[str] = None
+    update_url: str
+
+class SkillExecuteResponse(BaseModel):
+    skill_id: str
+    version: str
+    result: str  # AI-generated result (not the prompt!)
+    credits_remaining: int
+    credits_used: int
+    meta: Optional[LoaderMeta] = None  # Loader update hints
+
 class SkillSchemaResponse(BaseModel):
+    """Response for local execution skills - returns schema instead of executing."""
     skill_id: str
     skill_name: str
     version: str
-    schema: str
-    required_inputs: Optional[List[str]]
+    schema: str  # The expert prompt/framework for local AI to apply
+    required_inputs: Optional[dict] = None  # Expected inputs (from YAML if available)
     credits_remaining: int
     credits_used: int
-    instructions: str
-    meta: Optional[dict] = None
+    instructions: str  # How to apply the schema locally
+    meta: Optional[LoaderMeta] = None
 
 class CreditBalanceResponse(BaseModel):
     credits_balance: int
@@ -308,9 +288,14 @@ class CreditBalanceResponse(BaseModel):
     license_type: str
     valid_until: Optional[datetime]
 
-class ProfileResponse(BaseModel):
-    profile: dict
-    missing_fields: List[str]
+class PurchaseCreditsRequest(BaseModel):
+    pack: str  # 'trial', 'essentials', 'accelerator', 'efficient', 'unstoppable', 'apex'
+    email: Optional[str] = None  # Required for trial pack (one-time offer)
+    attorney_name: Optional[str] = None
+    bar_jurisdiction: Optional[str] = None   # e.g. "Colorado", "TX", "Federal"
+    bar_number: Optional[str] = None
+    firm_name: Optional[str] = None
+    attestation: Optional[bool] = False      # True = user checked "I am a licensed attorney"
 
 class UsageResponse(BaseModel):
     skill_id: str
@@ -319,11 +304,425 @@ class UsageResponse(BaseModel):
     success: bool
     credits_used: int
 
-class CategoryResponse(BaseModel):
-    id: str
-    name: str
-    description: Optional[str]
-    skill_count: Optional[int] = 0
+# ============================================
+# Profile & Document Schemas
+# ============================================
+
+class UserProfile(BaseModel):
+    """User profile for document generation."""
+    firm_name: Optional[str] = None
+    attorney_name: Optional[str] = None
+    attorney_bar: Optional[str] = None
+    paralegal_name: Optional[str] = None
+    address: Optional[str] = None
+    city_state_zip: Optional[str] = None
+    phone: Optional[str] = None
+    fax: Optional[str] = None
+    email: Optional[str] = None
+    logo_url: Optional[str] = None
+
+class ProfileResponse(BaseModel):
+    profile: UserProfile
+    missing_fields: List[str] = []
+
+class ProfileUpdateRequest(BaseModel):
+    """Update profile (merges with existing)."""
+    firm_name: Optional[str] = None
+    attorney_name: Optional[str] = None
+    attorney_bar: Optional[str] = None
+    paralegal_name: Optional[str] = None
+    address: Optional[str] = None
+    city_state_zip: Optional[str] = None
+    phone: Optional[str] = None
+    fax: Optional[str] = None
+    email: Optional[str] = None
+    logo_url: Optional[str] = None
+
+class DocumentAttachment(BaseModel):
+    """A generated document attachment."""
+    filename: str
+    content_type: str
+    data: str  # Base64-encoded document content
+
+class SkillExecuteResponseWithDocs(BaseModel):
+    """Extended response with optional document attachments."""
+    skill_id: str
+    version: str
+    result: str
+    credits_remaining: int
+    credits_used: int
+    documents: Optional[List[DocumentAttachment]] = None
+    needs_profile: Optional[List[str]] = None  # Profile fields needed before execution
+    meta: Optional[LoaderMeta] = None
+
+# ============================================
+# Helper Functions
+# ============================================
+
+def hash_password(password: str) -> str:
+    """Hash password with salt."""
+    salt = secrets.token_hex(16)
+    pw_hash = hashlib.sha256((password + salt).encode()).hexdigest()
+    return f"{salt}:{pw_hash}"
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    """Verify password against stored hash."""
+    try:
+        salt, pw_hash = stored_hash.split(":")
+        return hashlib.sha256((password + salt).encode()).hexdigest() == pw_hash
+    except:
+        return False
+
+def generate_license_key() -> str:
+    """Generate a unique license key."""
+    return f"lt_{secrets.token_hex(16)}"
+
+def generate_token(user_id: str, license_key: str) -> str:
+    """Generate a simple token (in production, use JWT)."""
+    data = f"{user_id}:{license_key}:{secrets.token_hex(8)}"
+    return hashlib.sha256(data.encode()).hexdigest()[:32]
+
+# Credit pack pricing
+CREDIT_PACKS = {
+    "trial": {"credits": 10, "price_cents": 2000, "one_time": False, "name": "Trial"},
+    "starter": {"credits": 10, "price_cents": 2000, "one_time": False, "name": "Trial"},  # Deprecated, use 'trial'
+    "essentials": {"credits": 50, "price_cents": 7500, "one_time": False, "name": "Essentials"},
+    "accelerator": {"credits": 100, "price_cents": 12500, "one_time": False, "name": "Accelerator"},
+    "efficient": {"credits": 250, "price_cents": 25000, "one_time": False, "name": "Efficient"},
+    "unstoppable": {"credits": 625, "price_cents": 50000, "one_time": False, "name": "Unstoppable"},
+    "apex": {"credits": 1500, "price_cents": 100000, "one_time": False, "name": "Apex"},
+}
+
+# ============================================
+# Document Generation Helpers
+# ============================================
+
+# Skills that should generate documents and their required profile fields
+DOCUMENT_SKILLS = {
+    "demand-letter-drafter": {
+        "format": "docx",
+        "required_profile": ["firm_name", "attorney_name", "address", "city_state_zip", "phone"],
+        "filename_template": "demand-letter-{date}.docx"
+    },
+    "discovery-request-generator": {
+        "format": "docx",
+        "required_profile": ["firm_name", "attorney_name", "attorney_bar"],
+        "filename_template": "discovery-requests-{date}.docx"
+    },
+    "subpoena-generator": {
+        "format": "docx",
+        "required_profile": ["firm_name", "attorney_name", "attorney_bar", "address", "city_state_zip", "phone"],
+        "filename_template": "subpoena-{date}.docx"
+    },
+    "deposition-summarizer": {
+        "format": "docx",
+        "required_profile": [],  # No letterhead needed for internal summaries
+        "filename_template": "deposition-summary-{date}.docx"
+    },
+    "sol-alert-system": {
+        "format": "xlsx",
+        "required_profile": [],
+        "filename_template": "sol-tracker-{date}.xlsx"
+    },
+    "deadline-calculator": {
+        "format": "xlsx",
+        "required_profile": [],
+        "filename_template": "deadline-calendar-{date}.xlsx"
+    }
+}
+
+
+def check_profile_requirements(skill_id: str, profile: dict) -> List[str]:
+    """Check if user profile has all required fields for a skill."""
+    if skill_id not in DOCUMENT_SKILLS:
+        return []
+    
+    required = DOCUMENT_SKILLS[skill_id].get("required_profile", [])
+    missing = [field for field in required if not profile.get(field)]
+    return missing
+
+
+def generate_docx_with_letterhead(content: str, profile: dict, title: str = None) -> bytes:
+    """Generate a Word document with firm letterhead, supporting markdown formatting."""
+    if not DOCX_AVAILABLE:
+        return None
+    
+    doc = Document()
+    
+    # Add letterhead if profile has firm info
+    if profile.get("firm_name"):
+        header = doc.sections[0].header
+        header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+        header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Firm name (bold, larger)
+        run = header_para.add_run(profile.get("firm_name", ""))
+        run.bold = True
+        run.font.size = Pt(14)
+        header_para.add_run("\n")
+        
+        # Address
+        if profile.get("address"):
+            header_para.add_run(profile["address"]).font.size = Pt(10)
+            header_para.add_run("\n")
+        if profile.get("city_state_zip"):
+            header_para.add_run(profile["city_state_zip"]).font.size = Pt(10)
+            header_para.add_run("\n")
+        
+        # Contact info
+        contact_parts = []
+        if profile.get("phone"):
+            contact_parts.append(f"Tel: {profile['phone']}")
+        if profile.get("fax"):
+            contact_parts.append(f"Fax: {profile['fax']}")
+        if profile.get("email"):
+            contact_parts.append(profile["email"])
+        if contact_parts:
+            header_para.add_run(" | ".join(contact_parts)).font.size = Pt(9)
+    
+    # Add title if provided
+    if title:
+        title_para = doc.add_paragraph()
+        title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = title_para.add_run(title)
+        run.bold = True
+        run.font.size = Pt(14)
+        doc.add_paragraph()  # Spacing
+    
+    # Check if content contains headings (for TOC)
+    has_headings = bool(re.search(r'^#{1,4}\s+.+', content, re.MULTILINE))
+    
+    # Add Table of Contents if headings exist
+    if has_headings:
+        # Create TOC using Word field codes
+        toc_para = doc.add_paragraph()
+        toc_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        
+        # Add TOC field
+        run = toc_para.add_run()
+        fldChar = OxmlElement('w:fldChar')
+        fldChar.set(qn('w:fldCharType'), 'begin')
+        run._r.append(fldChar)
+        
+        instrText = OxmlElement('w:instrText')
+        instrText.set(qn('xml:space'), 'preserve')
+        instrText.text = 'TOC \\o "1-4" \\h \\z \\u'
+        run._r.append(instrText)
+        
+        fldChar2 = OxmlElement('w:fldChar')
+        fldChar2.set(qn('w:fldCharType'), 'separate')
+        run._r.append(fldChar2)
+        
+        # Placeholder text shown before TOC is updated
+        run2 = toc_para.add_run('[Table of Contents - right-click and select "Update Field" to populate]')
+        run2.font.color.rgb = RGBColor(128, 128, 128)
+        run2.font.italic = True
+        
+        fldChar3 = OxmlElement('w:fldChar')
+        fldChar3.set(qn('w:fldCharType'), 'end')
+        run3 = toc_para.add_run()
+        run3._r.append(fldChar3)
+        
+        # Add spacing after TOC
+        doc.add_paragraph()
+        doc.add_paragraph()
+    
+    # Helper function to add text with inline bold formatting
+    def add_text_with_formatting(paragraph, text):
+        """Add text to paragraph with inline **bold** support."""
+        # Pattern to match **bold text**
+        pattern = r'\*\*(.+?)\*\*'
+        last_end = 0
+        
+        for match in re.finditer(pattern, text):
+            # Add text before the bold part
+            if match.start() > last_end:
+                paragraph.add_run(text[last_end:match.start()])
+            
+            # Add bold text
+            bold_run = paragraph.add_run(match.group(1))
+            bold_run.bold = True
+            
+            last_end = match.end()
+        
+        # Add remaining text after last bold part
+        if last_end < len(text):
+            paragraph.add_run(text[last_end:])
+    
+    # Process content line by line for better structure detection
+    lines = content.split('\n')
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        
+        # Skip empty lines
+        if not stripped:
+            i += 1
+            continue
+        
+        # Detect markdown headings
+        heading_match = re.match(r'^(#{1,4})\s+(.+)$', stripped)
+        if heading_match:
+            level = len(heading_match.group(1))
+            heading_text = heading_match.group(2)
+            
+            # Add heading with appropriate style
+            heading_para = doc.add_heading(level=level)
+            heading_para.text = heading_text
+            i += 1
+            continue
+        
+        # Detect horizontal rule
+        if stripped in ['---', '___', '***']:
+            # Add a paragraph with bottom border to simulate HR
+            hr_para = doc.add_paragraph()
+            hr_para.paragraph_format.space_after = Pt(12)
+            hr_para.paragraph_format.space_before = Pt(12)
+            i += 1
+            continue
+        
+        # Detect bullet points (- or *)
+        bullet_match = re.match(r'^[-*]\s+(.+)$', stripped)
+        if bullet_match:
+            bullet_text = bullet_match.group(1)
+            bullet_para = doc.add_paragraph(style='List Bullet')
+            add_text_with_formatting(bullet_para, bullet_text)
+            i += 1
+            continue
+        
+        # Detect numbered lists
+        numbered_match = re.match(r'^(\d+)\.\s+(.+)$', stripped)
+        if numbered_match:
+            numbered_text = numbered_match.group(2)
+            numbered_para = doc.add_paragraph(style='List Number')
+            add_text_with_formatting(numbered_para, numbered_text)
+            i += 1
+            continue
+        
+        # Regular paragraph - collect until next empty line or special formatting
+        para_lines = [line]
+        i += 1
+        
+        while i < len(lines):
+            next_line = lines[i].strip()
+            
+            # Stop if empty line or special formatting detected
+            if not next_line or \
+               re.match(r'^#{1,4}\s+', next_line) or \
+               next_line in ['---', '___', '***'] or \
+               re.match(r'^[-*]\s+', next_line) or \
+               re.match(r'^\d+\.\s+', next_line):
+                break
+            
+            para_lines.append(lines[i])
+            i += 1
+        
+        # Add paragraph with inline formatting
+        para_text = ' '.join(line.strip() for line in para_lines if line.strip())
+        if para_text:
+            p = doc.add_paragraph()
+            add_text_with_formatting(p, para_text)
+    
+    # Add footer with attorney info
+    if profile.get("attorney_name"):
+        doc.add_paragraph()  # Spacing
+        footer_para = doc.add_paragraph()
+        footer_para.add_run(profile["attorney_name"])
+        if profile.get("attorney_bar"):
+            footer_para.add_run(f"\n{profile['attorney_bar']}")
+    
+    # Save to bytes
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer.read()
+
+
+def generate_xlsx_from_content(content: str, title: str = None) -> bytes:
+    """Generate an Excel spreadsheet from structured content."""
+    if not XLSX_AVAILABLE:
+        return None
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = title or "Data"
+    
+    # Try to parse structured data from the content
+    # Look for lines that look like table rows (contain | or tabs)
+    lines = content.strip().split("\n")
+    row_num = 1
+    
+    for line in lines:
+        if "|" in line:
+            # Markdown table format
+            cells = [cell.strip() for cell in line.split("|") if cell.strip() and cell.strip() != "---"]
+            if cells:
+                for col_num, cell in enumerate(cells, 1):
+                    ws.cell(row=row_num, column=col_num, value=cell)
+                row_num += 1
+        elif "\t" in line:
+            # Tab-separated
+            cells = line.split("\t")
+            for col_num, cell in enumerate(cells, 1):
+                ws.cell(row=row_num, column=col_num, value=cell.strip())
+            row_num += 1
+        elif line.strip():
+            # Plain text - put in first column
+            ws.cell(row=row_num, column=1, value=line.strip())
+            row_num += 1
+    
+    # Auto-adjust column widths
+    for column in ws.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        ws.column_dimensions[column_letter].width = min(max_length + 2, 50)
+    
+    # Save to bytes
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer.read()
+
+
+def generate_document(skill_id: str, content: str, profile: dict) -> Optional[DocumentAttachment]:
+    """Generate appropriate document for a skill result."""
+    if skill_id not in DOCUMENT_SKILLS:
+        return None
+    
+    skill_doc_config = DOCUMENT_SKILLS[skill_id]
+    doc_format = skill_doc_config["format"]
+    
+    # Generate filename with today's date
+    from datetime import date
+    filename = skill_doc_config["filename_template"].format(date=date.today().isoformat())
+    
+    if doc_format == "docx":
+        doc_bytes = generate_docx_with_letterhead(content, profile, title=None)
+        if doc_bytes:
+            return DocumentAttachment(
+                filename=filename,
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                data=base64.b64encode(doc_bytes).decode("utf-8")
+            )
+    
+    elif doc_format == "xlsx":
+        doc_bytes = generate_xlsx_from_content(content, title=skill_id.replace("-", " ").title())
+        if doc_bytes:
+            return DocumentAttachment(
+                filename=filename,
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                data=base64.b64encode(doc_bytes).decode("utf-8")
+            )
+    
+    return None
 
 # ============================================
 # FastAPI App
@@ -331,17 +730,308 @@ class CategoryResponse(BaseModel):
 
 app = FastAPI(
     title="LawTasksAI API",
-    description="Skill delivery, licensing, and usage tracking for LawTasksAI.",
-    version="2.0.0"
+    description="Skill delivery, licensing, and usage tracking for legal AI automation",
+    version="1.0.0"
 )
 
+# Auto-create tables on startup
+@app.on_event("startup")
+async def startup():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Configure for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ============================================
+# Auth Dependency
+# ============================================
+
+async def get_current_license(
+    authorization: str = Header(...),
+    db: AsyncSession = Depends(get_db)
+) -> License:
+    """Validate license key from Authorization header."""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
+    
+    license_key = authorization.replace("Bearer ", "")
+    
+    result = await db.execute(
+        select(License).where(
+            License.license_key == license_key,
+            License.status == "active"
+        )
+    )
+    license = result.scalar_one_or_none()
+    
+    if not license:
+        raise HTTPException(status_code=401, detail="Invalid or inactive license")
+    
+    # Check expiry
+    if license.valid_until and license.valid_until < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="License expired")
+    
+    return license
+
+# ============================================
+# Routes: Auth
+# ============================================
+
+@app.post("/auth/register", response_model=UserResponse)
+async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+    """Create a new user account."""
+    # Check if email exists
+    result = await db.execute(select(User).where(User.email == user_data.email))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create user
+    user = User(
+        email=user_data.email,
+        password_hash=hash_password(user_data.password),
+        name=user_data.name,
+        firm_name=user_data.firm_name,
+        credits_balance=50  # Free trial credits
+    )
+    db.add(user)
+    
+    # Create trial license
+    license = License(
+        license_key=generate_license_key(),
+        user_id=user.id,
+        type="trial",
+        valid_until=datetime.utcnow() + timedelta(days=14),
+        credits_purchased=50,
+        credits_remaining=50
+    )
+    db.add(license)
+    
+    await db.commit()
+    await db.refresh(user)
+    
+    return UserResponse(
+        id=str(user.id),
+        email=user.email,
+        name=user.name,
+        firm_name=user.firm_name,
+        credits_balance=user.credits_balance,
+        created_at=user.created_at
+    )
+
+@app.post("/auth/login", response_model=TokenResponse)
+async def login(credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
+    """Login and get access token."""
+    result = await db.execute(select(User).where(User.email == credentials.email))
+    user = result.scalar_one_or_none()
+    
+    if not user or not verify_password(credentials.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Get active license
+    result = await db.execute(
+        select(License).where(
+            License.user_id == user.id,
+            License.status == "active"
+        ).order_by(License.created_at.desc())
+    )
+    license = result.scalar_one_or_none()
+    
+    if not license:
+        raise HTTPException(status_code=401, detail="No active license found")
+    
+    # Update last login
+    user.last_login = datetime.utcnow()
+    await db.commit()
+    
+    return TokenResponse(
+        access_token=generate_token(str(user.id), license.license_key),
+        license_key=license.license_key
+    )
+
+class RecoverLicenseRequest(BaseModel):
+    email: EmailStr
+
+class RecoverLicenseResponse(BaseModel):
+    email: str
+    license_key: str
+    credits_remaining: int
+    license_type: str
+    message: str
+
+@app.post("/auth/recover-license", response_model=RecoverLicenseResponse)
+async def recover_license(request: RecoverLicenseRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Recover license key by email.
+    For customers who lost their config or reinstalled.
+    """
+    # Find user by email
+    result = await db.execute(select(User).where(User.email == request.email))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="No account found with this email")
+    
+    # Get active license
+    result = await db.execute(
+        select(License).where(
+            License.user_id == user.id,
+            License.status == "active"
+        ).order_by(License.created_at.desc())
+    )
+    license = result.scalar_one_or_none()
+    
+    if not license:
+        raise HTTPException(status_code=404, detail="No active license found for this account")
+    
+    return RecoverLicenseResponse(
+        email=user.email,
+        license_key=license.license_key,
+        credits_remaining=license.credits_remaining,
+        license_type=license.type,
+        message="Your license key has been recovered. Update your config.json with this key."
+    )
+
+# ============================================
+# Routes: Skills
+# ============================================
+
+@app.get("/skills", response_model=List[SkillResponse])
+@app.get("/v1/skills", response_model=List[SkillResponse])
+async def list_skills(
+    category: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """List all available skills."""
+    query = select(Skill).where(Skill.is_published == True)
+    if category:
+        query = query.where(Skill.category_id == category)
+    
+    result = await db.execute(query.order_by(Skill.category_id, Skill.name))
+    skills = result.scalars().all()
+    
+    # Keywords that suggest document/data processing
+    sensitive_keywords = ['analyzer', 'summarizer', 'reviewer', 'examiner', 'auditor', 
+                          'parser', 'extractor', 'scanner', 'checker', 'drafter']
+    
+    def get_confidentiality_note(skill):
+        name_lower = skill.name.lower()
+        if skill.requires_upload:
+            return "⚠️ Uploads document content to server for processing"
+        if any(kw in name_lower for kw in sensitive_keywords):
+            return "⚠️ May process sensitive text on server"
+        if skill.execution_type == 'local':
+            return "🔒 Runs locally — data stays on your machine"
+        return None
+    
+    return [
+        SkillResponse(
+            id=s.id,
+            name=s.name,
+            description=s.description,
+            category_id=s.category_id,
+            current_version=s.current_version,
+            credits_per_use=s.credits_per_use,
+            requires_upload=s.requires_upload,
+            execution_type=s.execution_type,
+            confidentiality_note=get_confidentiality_note(s)
+        )
+        for s in skills
+    ]
+
+@app.get("/skills/triggers")
+@app.get("/v1/skills/triggers")
+async def get_skill_triggers(db: AsyncSession = Depends(get_db)):
+    """
+    Get trigger phrases for local skill matching.
+    This enables privacy-preserving skill discovery without sending queries to the server.
+    Reads from database - skills with non-empty triggers arrays.
+    """
+    result = await db.execute(
+        select(Skill.id, Skill.triggers).where(
+            Skill.is_published == True,
+            Skill.triggers != None,
+            func.array_length(Skill.triggers, 1) > 0
+        )
+    )
+    rows = result.all()
+    
+    # Build response in expected format
+    triggers_dict = {}
+    for skill_id, triggers in rows:
+        if triggers:
+            triggers_dict[skill_id] = {"triggers": triggers}
+    
+    return triggers_dict
+
+
+@app.get("/skills/{skill_id}", response_model=SkillResponse)
+@app.get("/v1/skills/{skill_id}", response_model=SkillResponse)
+async def get_skill(skill_id: str, db: AsyncSession = Depends(get_db)):
+    """Get skill details."""
+    result = await db.execute(select(Skill).where(Skill.id == skill_id))
+    skill = result.scalar_one_or_none()
+    
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    
+    # Get confidentiality note
+    sensitive_keywords = ['analyzer', 'summarizer', 'reviewer', 'examiner', 'auditor', 
+                          'parser', 'extractor', 'scanner', 'checker', 'drafter']
+    name_lower = skill.name.lower()
+    
+    if skill.requires_upload:
+        conf_note = "⚠️ Uploads document content to server for processing"
+    elif any(kw in name_lower for kw in sensitive_keywords):
+        conf_note = "⚠️ May process sensitive text on server"
+    elif skill.execution_type == 'local':
+        conf_note = "🔒 Runs locally — data stays on your machine"
+    else:
+        conf_note = None
+    
+    return SkillResponse(
+        id=skill.id,
+        name=skill.name,
+        description=skill.description,
+        category_id=skill.category_id,
+        current_version=skill.current_version,
+        credits_per_use=skill.credits_per_use,
+        requires_upload=skill.requires_upload,
+        execution_type=skill.execution_type,
+        confidentiality_note=conf_note
+    )
+
+def check_loader_update(loader_version: Optional[str]) -> Optional[LoaderMeta]:
+    """Check if loader needs update and return metadata if so."""
+    if not loader_version:
+        return None
+    
+    # Simple version comparison (assumes semver: x.y.z)
+    try:
+        current_parts = [int(x) for x in CURRENT_LOADER_VERSION.split('.')]
+        client_parts = [int(x) for x in loader_version.split('.')]
+        
+        update_available = current_parts > client_parts
+        
+        # Only include meta if update is available or there's an important message
+        if update_available or LOADER_UPDATE_MESSAGE:
+            return LoaderMeta(
+                loader_current=CURRENT_LOADER_VERSION,
+                update_available=update_available,
+                update_message=LOADER_UPDATE_MESSAGE,
+                update_url=LOADER_UPDATE_URL
+            )
+    except (ValueError, AttributeError):
+        pass  # Invalid version format, skip
+    
+    return None
+
 
 @app.get("/skills/{skill_id}/schema", response_model=SkillSchemaResponse)
 @app.get("/v1/skills/{skill_id}/schema", response_model=SkillSchemaResponse)
@@ -617,8 +1307,34 @@ async def update_profile(
     )
 
 
-
-
+@app.get("/profile/check/{skill_id}")
+@app.get("/v1/profile/check/{skill_id}")
+async def check_profile_for_skill(
+    skill_id: str,
+    license: License = Depends(get_current_license),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Check if user profile has required fields for a specific skill's document generation.
+    Returns missing fields if any.
+    """
+    # Get user
+    result = await db.execute(select(User).where(User.id == license.user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    profile_data = user.profile or {}
+    missing = check_profile_requirements(skill_id, profile_data)
+    
+    return {
+        "skill_id": skill_id,
+        "generates_document": skill_id in DOCUMENT_SKILLS,
+        "document_format": DOCUMENT_SKILLS.get(skill_id, {}).get("format"),
+        "profile_complete": len(missing) == 0,
+        "missing_fields": missing
+    }
 
 # ============================================
 # Routes: Account (Dashboard)
@@ -682,6 +1398,13 @@ async def get_purchase_history(
 # ============================================
 # Routes: Document Regeneration
 # ============================================
+
+class RegenerateDocumentResponse(BaseModel):
+    """Response for document regeneration."""
+    usage_id: int
+    skill_id: str
+    document: DocumentAttachment
+    message: str
 
 # ============================================
 # Routes: Categories
