@@ -247,6 +247,40 @@ class SkillResponse(BaseModel):
     execution_type: str
     confidentiality_note: Optional[str] = None  # Warning for sensitive data handling
 
+class SkillSchemaResponse(BaseModel):
+    skill_id: str
+    skill_name: str
+    version: str
+    schema: str
+    required_inputs: Optional[List[str]]
+    credits_remaining: int
+    credits_used: int
+    instructions: str
+    meta: Optional[dict] = None
+
+class CreditBalanceResponse(BaseModel):
+    credits_balance: int
+    license_key: str
+    license_type: str
+    valid_until: Optional[datetime]
+
+class ProfileResponse(BaseModel):
+    profile: dict
+    missing_fields: List[str]
+
+class UsageResponse(BaseModel):
+    skill_id: str
+    skill_name: str
+    executed_at: datetime
+    success: bool
+    credits_used: int
+
+class CategoryResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str]
+    skill_count: Optional[int] = 0
+
 # ============================================
 # FastAPI App
 # ============================================
