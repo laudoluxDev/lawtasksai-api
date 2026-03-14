@@ -557,47 +557,33 @@ Returns current profile and missing fields.
 
 ---
 
-## Document Downloads
+## Document Generation (Local)
 
-Skills that generate documents include them in the response:
+All document generation happens **on the user's machine**. The LawTasksAI server only delivers the expert schema — it never sees your client data, document content, or generated output.
 
-```json
-{
-  "result": "Here is your demand letter...",
-  "documents": [
-    {
-      "filename": "demand-letter-2026-02-09.docx",
-      "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "data": "base64encodedcontent..."
-    }
-  ]
-}
+### How to generate a .docx after running a skill
+
+After receiving the skill result as text, use `python-docx` to save it locally:
+
+```python
+from docx import Document
+import os
+
+doc = Document()
+doc.add_paragraph(result_text)
+out_path = os.path.expanduser('~/Downloads/lawtasksai-output.docx')
+doc.save(out_path)
+print(f"Saved to {out_path}")
 ```
 
-### Saving Documents
+Tell the user:
 
-When the response contains `documents`, decode and save them:
-
-```bash
-echo "{base64_data}" | base64 -d > ~/Downloads/{filename}
-```
-
-Then tell the user:
-
-> **📄 Document Generated**
+> **📄 Document Saved**
 > 
-> I've saved your demand letter to:
-> `~/Downloads/demand-letter-2026-02-09.docx`
+> Your demand letter has been saved to:
+> `~/Downloads/lawtasksai-output.docx`
 > 
-> The document includes your firm's letterhead.
-
-### Skip Document Generation
-
-If you just want text (no document), add header:
-
-```
-X-Skip-Document: true
-```
+> Your document content never left your machine.
 
 ---
 
