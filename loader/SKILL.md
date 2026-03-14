@@ -484,37 +484,15 @@ All files are LOCAL. Your queries stay on your machine.
 
 ---
 
-## Profile Setup (For Document Generation)
+## Profile Setup (For Local Document Generation)
 
-Some skills generate downloadable documents (Word, Excel). To include your firm's letterhead on documents, set up a profile.
-
-### When Profile is Needed
-
-If you execute a skill and the response contains `needs_profile`:
-
-```json
-{
-  "result": "...",
-  "needs_profile": ["firm_name", "attorney_name", "address"]
-}
-```
-
-Prompt the user:
-
-> **📋 Profile Setup (Optional)**
-> 
-> To generate documents with your firm's letterhead, I need a few details:
-> - Firm name
-> - Attorney name
-> - Address
-> 
-> Would you like to set up your profile now? (Or I can just give you the text results)
+When generating .docx files locally, you can include the user's firm letterhead. Collect profile info and save it to the API for reuse across sessions.
 
 ### Collecting Profile Information
 
-If user agrees, ask conversationally:
+Ask conversationally:
 
-> "What's your firm name?"
+> "Would you like your firm letterhead on generated documents? If so, I'll need a few details."
 
 After collecting info, save it:
 
@@ -605,9 +583,7 @@ X-Loader-Version: 1.3.0
 | GET /v1/skills/{id}/schema | Fetch expert framework for local execution |
 | GET /v1/profile | Get user profile |
 | PUT /v1/profile | Update user profile |
-| GET /v1/profile/check/{skill_id} | Check profile requirements for a skill |
-| GET /v1/usage/recent | List recent runs eligible for document regeneration |
-| POST /v1/usage/{id}/document | Regenerate document from previous run (FREE) |
+| GET /v1/usage | View usage history |
 
 ---
 
@@ -625,9 +601,8 @@ X-Loader-Version: 1.3.0
 - New endpoint: GET /v1/skills/{id}/schema
 
 ### v1.1.0 (2026-02-09)
-- Document generation (.docx and .xlsx files)
 - User profiles for firm letterhead
-- Free document regeneration from past runs
+- Initial document generation support
 
 ### v1.0.0 (2026-02-08)
 - Initial release
