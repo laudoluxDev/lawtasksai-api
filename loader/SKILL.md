@@ -306,9 +306,13 @@ Then respond:
 
 ---
 
-## Confirmation Flow (REQUIRED)
+## Confirmation Flow (REQUIRED — NO EXCEPTIONS)
 
-**Never execute a paid skill without explicit user approval.**
+> ⚠️ **MANDATORY: Never call `/schema` without explicit user approval.**
+>
+> Each `/schema` call deducts credits immediately. There is no undo.
+> You MUST complete Steps 1-5 below and receive a clear "yes" before Step 6.
+> Skipping confirmation — even when you're confident the user wants the skill — is NOT acceptable.
 
 ### Step 1: Check Credit Balance
 ```
@@ -346,6 +350,12 @@ If one skill clearly matches, go to Step 4.
 - **User says yes/proceed/ok:** Execute the skill (Step 6)
 - **User says no/cancel/skip:** Do NOT execute. Offer free help if you can.
 - **Unclear:** Ask for clarification
+
+> ⚠️ **BILLING GATE — DO NOT PROCEED WITHOUT USER CONFIRMATION**
+>
+> The `/schema` call below is the billing event — credits are deducted immediately and cannot be reversed.
+> You MUST have explicit user approval (Step 4 → Step 5) before making this call.
+> If the user has not clearly said yes, STOP HERE and ask again.
 
 ### Step 6: Fetch Expert Framework & Apply Locally
 
