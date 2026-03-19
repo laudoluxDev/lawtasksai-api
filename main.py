@@ -3,7 +3,7 @@ LawTasksAI API
 FastAPI backend for skill delivery, licensing, and usage tracking.
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Header, BackgroundTasks, Request
+from fastapi import FastAPI, HTTPException, Depends, Header, BackgroundTasks, Request, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr
@@ -22,7 +22,7 @@ import re
 # Database imports (using async SQLAlchemy)
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, select, update, func, or_
+from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, select, update, func, or_, text
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 import uuid
 import base64
@@ -56,10 +56,23 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://lawtasksai-api-10437713249.us-
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://lawtasksai.com")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
+# Admin authentication
+ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")  # Set via Cloud Run env var — never hardcode
+
+def verify_admin(x_admin_secret: Optional[str] = Header(None, alias="X-Admin-Secret")):
+    """Dependency that enforces admin secret on all /admin/* routes."""
+    if not ADMIN_SECRET:
+        raise HTTPException(status_code=500, detail="Admin secret not configured on server")
+    if x_admin_secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
 # Loader versioning
-CURRENT_LOADER_VERSION = "1.3.0"
+CURRENT_LOADER_VERSION = "1.6.0"
 LOADER_UPDATE_URL = "https://lawtasksai.com/download"
 LOADER_UPDATE_MESSAGE = None  # Set to a string when there's an important update
+
+# Path to the loader SKILL.md (served for auto-update)
+LOADER_SKILL_PATH = os.path.join(os.path.dirname(__file__), "loader", "SKILL.md")
 
 # Initialize Stripe
 stripe.api_key = STRIPE_SECRET_KEY
@@ -201,6 +214,20 @@ class CreditTransaction(Base):
     description: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+
+class SkillGap(Base):
+    """
+    Anonymous gap reports submitted when a user's legal question matches no skill.
+    No user identity, no query content — only the search terms that failed to match.
+    Submitted only with explicit per-request user consent.
+    """
+    __tablename__ = "skill_gaps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    search_terms: Mapped[str] = mapped_column(Text, nullable=False)       # space-separated keywords
+    loader_version: Mapped[Optional[str]] = mapped_column(String(20))     # which loader version reported
+    reported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 # ============================================
 # Database Session
 # ============================================
@@ -313,6 +340,8 @@ class UserProfile(BaseModel):
     firm_name: Optional[str] = None
     attorney_name: Optional[str] = None
     attorney_bar: Optional[str] = None
+    bar_jurisdiction: Optional[str] = None   # e.g. "Colorado", "TX", "Federal"
+    bar_number: Optional[str] = None
     paralegal_name: Optional[str] = None
     address: Optional[str] = None
     city_state_zip: Optional[str] = None
@@ -330,6 +359,8 @@ class ProfileUpdateRequest(BaseModel):
     firm_name: Optional[str] = None
     attorney_name: Optional[str] = None
     attorney_bar: Optional[str] = None
+    bar_jurisdiction: Optional[str] = None   # e.g. "Colorado", "TX", "Federal"
+    bar_number: Optional[str] = None
     paralegal_name: Optional[str] = None
     address: Optional[str] = None
     city_state_zip: Optional[str] = None
@@ -732,6 +763,13 @@ app = FastAPI(
     title="LawTasksAI API",
     description="Skill delivery, licensing, and usage tracking for legal AI automation",
     version="1.0.0"
+)
+
+# Admin router — all routes require X-Admin-Secret header
+admin_router = APIRouter(
+    prefix="/admin",
+    include_in_schema=False,
+    dependencies=[Depends(verify_admin)]
 )
 
 # Auto-create tables on startup
@@ -1431,6 +1469,71 @@ async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "lawtasksai-api", "version": "1.0.0"}
 
+
+@app.get("/v1/loader/latest")
+async def get_loader_latest(
+    license: License = Depends(get_current_license),
+    x_loader_version: Optional[str] = Header(None, alias="X-Loader-Version")
+):
+    """
+    Return the current loader version and full SKILL.md content for auto-update.
+
+    The loader calls this on startup when its local version is behind.
+    Returns the full SKILL.md so the loader can replace itself in one round-trip.
+    """
+    already_current = (x_loader_version == CURRENT_LOADER_VERSION)
+
+    try:
+        with open(LOADER_SKILL_PATH, "r") as f:
+            skill_content = f.read()
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Loader file not found on server")
+
+    return {
+        "version": CURRENT_LOADER_VERSION,
+        "already_current": already_current,
+        "skill_md": skill_content,
+        "update_message": LOADER_UPDATE_MESSAGE,
+    }
+
+
+# ============================================
+# Routes: Gap Reporting (anonymous, user-consented)
+# ============================================
+
+class GapReportRequest(BaseModel):
+    search_terms: List[str]           # keywords that failed to match any skill
+    loader_version: Optional[str] = None
+
+@app.post("/v1/feedback/gap", status_code=204)
+async def report_skill_gap(
+    report: GapReportRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Accept an anonymous gap report from the loader.
+    Called only when the user explicitly consents to share per-request.
+    No user identity, no query content — only the search terms.
+    Returns 204 No Content on success.
+    """
+    # Sanitize: strip empties, lowercase, limit to 20 terms, 50 chars each
+    clean_terms = [
+        t.strip().lower()[:50]
+        for t in report.search_terms
+        if t.strip()
+    ][:20]
+
+    if not clean_terms:
+        return  # Nothing to record
+
+    gap = SkillGap(
+        search_terms=" ".join(clean_terms),
+        loader_version=report.loader_version,
+    )
+    db.add(gap)
+    await db.commit()
+
+
 # ============================================
 # Routes: Checkout & Purchase
 # ============================================
@@ -1519,6 +1622,44 @@ async def create_checkout_session(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+async def get_zoho_access_token() -> str:
+    """Exchange Zoho refresh token for a fresh access token."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            "https://accounts.zoho.com/oauth/v2/token",
+            data={
+                "refresh_token": os.getenv("ZOHO_REFRESH_TOKEN", ""),
+                "client_id": os.getenv("ZOHO_CLIENT_ID", ""),
+                "client_secret": os.getenv("ZOHO_CLIENT_SECRET", ""),
+                "grant_type": "refresh_token"
+            }
+        )
+        data = resp.json()
+        return data.get("access_token", "")
+
+
+async def add_to_zoho_list(email: str, name: str) -> None:
+    """Add a contact to Zoho Campaigns LawTasksAI Subscribers list. Fails silently."""
+    list_key = os.getenv("ZOHO_LIST_KEY", "")
+    if not list_key or not os.getenv("ZOHO_REFRESH_TOKEN"):
+        return
+    try:
+        access_token = await get_zoho_access_token()
+        if not access_token:
+            print(f"[Zoho] could not get access token")
+            return
+        contact_info = json.dumps({"Contact Email": email, "First Name": name or ""})
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                "https://campaigns.zoho.com/api/v1.1/json/listsubscribe",
+                params={"resfmt": "JSON", "listkey": list_key, "contactinfo": contact_info},
+                headers={"Authorization": f"Zoho-authtoken {access_token}"}
+            )
+            print(f"[Zoho] add subscriber {email}: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        print(f"[Zoho] failed to add subscriber {email}: {e}")
+
 
 @app.post("/webhooks/stripe")
 async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
@@ -1635,6 +1776,9 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         db.add(tx)
         
         await db.commit()
+
+        # Add buyer to Zoho Campaigns subscriber list
+        await add_to_zoho_list(customer_email, user.name or "")
         
         return {"status": "success", "credits_added": credits}
     
@@ -1797,8 +1941,6 @@ Instead of exposing 200+ tools (token bloat), we expose 4 clean tools:
 Skill prompts never leave the LawTasksAI server.
 """
 
-import os
-import httpx
 from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import run_server
@@ -1967,7 +2109,7 @@ hello@lawtasksai.com
 # Admin Routes (protected in production)
 # ============================================
 
-@app.get("/admin/skills/{skill_id}", include_in_schema=False)
+@admin_router.get("/skills/{skill_id}")
 async def get_admin_skill(
     skill_id: str,
     db: AsyncSession = Depends(get_db)
@@ -2004,7 +2146,7 @@ async def get_admin_skill(
         "current_version_changelog": version.changelog if version else None,
     }
 
-@app.post("/admin/skills", include_in_schema=False)
+@admin_router.post("/skills")
 async def create_skill(
     skill_data: dict,
     db: AsyncSession = Depends(get_db)
@@ -2026,7 +2168,7 @@ async def create_skill(
     
     return {"success": True, "skill_id": skill.id}
 
-@app.patch("/admin/skills/{skill_id}", include_in_schema=False)
+@admin_router.patch("/skills/{skill_id}")
 async def update_skill(
     skill_id: str,
     updates: dict,
@@ -2056,7 +2198,7 @@ async def update_skill(
     }
 
 
-@app.post("/admin/skills/batch-update", include_in_schema=False)
+@admin_router.post("/skills/batch-update")
 async def batch_update_skills(
     batch: dict,
     db: AsyncSession = Depends(get_db)
@@ -2110,7 +2252,7 @@ async def batch_update_skills(
     }
 
 
-@app.patch("/admin/skills/{skill_id}/triggers", include_in_schema=False)
+@admin_router.patch("/skills/{skill_id}/triggers")
 async def update_skill_triggers(
     skill_id: str,
     trigger_data: dict,
@@ -2133,7 +2275,7 @@ async def update_skill_triggers(
     return {"success": True, "skill_id": skill_id, "trigger_count": len(triggers)}
 
 
-@app.post("/admin/triggers/batch", include_in_schema=False)
+@admin_router.post("/triggers/batch")
 async def batch_update_triggers(
     batch: dict,
     db: AsyncSession = Depends(get_db)
@@ -2170,7 +2312,7 @@ async def batch_update_triggers(
     }
 
 
-@app.post("/admin/skills/{skill_id}/versions", include_in_schema=False)
+@admin_router.post("/skills/{skill_id}/versions")
 async def create_skill_version(
     skill_id: str,
     version_data: dict,
@@ -2215,7 +2357,7 @@ async def create_skill_version(
     
     return {"success": True, "skill_id": skill_id, "version": version_data["version"], "updated": existing is not None}
 
-@app.get("/admin/users", include_in_schema=False)
+@admin_router.get("/users")
 async def list_users(db: AsyncSession = Depends(get_db)):
     """List all users with their licenses (admin only - protect in production!)."""
     result = await db.execute(
@@ -2242,7 +2384,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
     return {"users": users, "count": len(users)}
 
 
-@app.delete("/admin/users/{user_id}", include_in_schema=False)
+@admin_router.delete("/users/{user_id}")
 async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a user and all associated data (admin only)."""
     uid = uuid.UUID(user_id)
@@ -2261,7 +2403,7 @@ async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
     return {"success": True, "deleted_user_id": user_id}
 
 
-@app.post("/admin/credits/add", include_in_schema=False)
+@admin_router.post("/credits/add")
 async def add_credits(
     license_key: str,
     credits: int,
@@ -2297,7 +2439,66 @@ async def add_credits(
     }
 
 
-@app.post("/admin/migrate/add-triggers-column", include_in_schema=False)
+@admin_router.get("/gaps")
+async def list_skill_gaps(
+    db: AsyncSession = Depends(get_db),
+    limit: int = 200
+):
+    """
+    Admin view of anonymous gap reports.
+    Returns raw reports plus a frequency-ranked summary of search terms
+    — use this to prioritize new skill development.
+    """
+    result = await db.execute(
+        select(SkillGap).order_by(SkillGap.reported_at.desc()).limit(limit)
+    )
+    rows = result.scalars().all()
+
+    # Build frequency map across all reported terms
+    from collections import Counter
+    term_counter: Counter = Counter()
+    raw = []
+    for row in rows:
+        terms = row.search_terms.split()
+        term_counter.update(terms)
+        raw.append({
+            "id": row.id,
+            "search_terms": row.search_terms,
+            "loader_version": row.loader_version,
+            "reported_at": row.reported_at.isoformat(),
+        })
+
+    ranked = [
+        {"term": term, "count": count}
+        for term, count in term_counter.most_common(50)
+    ]
+
+    return {
+        "total_reports": len(raw),
+        "top_terms": ranked,
+        "recent_reports": raw,
+    }
+
+
+@admin_router.post("/migrate/add-skill-gaps-table")
+async def migrate_add_skill_gaps_table(db: AsyncSession = Depends(get_db)):
+    """
+    One-time migration to create the skill_gaps table.
+    Safe to run multiple times.
+    """
+    await db.execute(text("""
+        CREATE TABLE IF NOT EXISTS skill_gaps (
+            id SERIAL PRIMARY KEY,
+            search_terms TEXT NOT NULL,
+            loader_version VARCHAR(20),
+            reported_at TIMESTAMP DEFAULT NOW()
+        )
+    """))
+    await db.commit()
+    return {"status": "ok", "message": "skill_gaps table ready"}
+
+
+@admin_router.post("/migrate/add-triggers-column")
 async def migrate_add_triggers_column(db: AsyncSession = Depends(get_db)):
     """
     One-time migration to add triggers column to skills table.
@@ -2350,7 +2551,7 @@ async def get_page(slug: str, db: AsyncSession = Depends(get_db)):
         "updated_at": page.updated_at.isoformat() if page.updated_at else None
     }
 
-@app.get("/admin/pages", include_in_schema=False)
+@admin_router.get("/pages")
 async def list_pages(db: AsyncSession = Depends(get_db)):
     """Admin: list all content pages."""
     result = await db.execute(select(ContentPage).order_by(ContentPage.title))
@@ -2365,7 +2566,7 @@ async def list_pages(db: AsyncSession = Depends(get_db)):
         for p in pages
     ]
 
-@app.get("/admin/pages/{slug}", include_in_schema=False)
+@admin_router.get("/pages/{slug}")
 async def get_page_admin(slug: str, db: AsyncSession = Depends(get_db)):
     """Admin: get page with full content for editing."""
     result = await db.execute(select(ContentPage).where(ContentPage.slug == slug))
@@ -2381,7 +2582,7 @@ async def get_page_admin(slug: str, db: AsyncSession = Depends(get_db)):
         "created_at": page.created_at.isoformat() if page.created_at else None
     }
 
-@app.put("/admin/pages/{slug}", include_in_schema=False)
+@admin_router.put("/pages/{slug}")
 async def save_page(slug: str, data: dict, db: AsyncSession = Depends(get_db)):
     """Admin: save page content. Creates a new version automatically."""
     from sqlalchemy import text
@@ -2433,7 +2634,7 @@ async def save_page(slug: str, data: dict, db: AsyncSession = Depends(get_db)):
         "updated_at": page.updated_at.isoformat()
     }
 
-@app.get("/admin/pages/{slug}/versions", include_in_schema=False)
+@admin_router.get("/pages/{slug}/versions")
 async def get_page_versions(slug: str, db: AsyncSession = Depends(get_db)):
     """Admin: list all versions of a page."""
     # Check page exists
@@ -2470,7 +2671,7 @@ async def get_page_versions(slug: str, db: AsyncSession = Depends(get_db)):
     
     return all_versions
 
-@app.get("/admin/pages/{slug}/versions/{version}", include_in_schema=False)
+@admin_router.get("/pages/{slug}/versions/{version}")
 async def get_page_version(slug: str, version: int, db: AsyncSession = Depends(get_db)):
     """Admin: get a specific version's content (for viewing/restoring)."""
     # Check if requesting current version
@@ -2493,7 +2694,7 @@ async def get_page_version(slug: str, version: int, db: AsyncSession = Depends(g
     
     return {"version": ver.version, "content": ver.content, "is_current": False}
 
-@app.post("/admin/pages/{slug}/restore/{version}", include_in_schema=False)
+@admin_router.post("/pages/{slug}/restore/{version}")
 async def restore_page_version(slug: str, version: int, db: AsyncSession = Depends(get_db)):
     """Admin: restore a previous version (saves current as new version first)."""
     result = await db.execute(select(ContentPage).where(ContentPage.slug == slug))
@@ -2537,7 +2738,7 @@ async def restore_page_version(slug: str, version: int, db: AsyncSession = Depen
         "new_version": new_version
     }
 
-@app.post("/admin/migrate/add-content-pages", include_in_schema=False)
+@admin_router.post("/migrate/add-content-pages")
 async def migrate_add_content_pages(db: AsyncSession = Depends(get_db)):
     """One-time migration to create content_pages and content_page_versions tables."""
     from sqlalchemy import text
@@ -2581,7 +2782,7 @@ def _get_gcs_client():
     from google.cloud import storage
     return storage.Client()
 
-@app.get("/admin/files/list", include_in_schema=False)
+@admin_router.get("/files/list")
 async def list_files(prefix: str = ""):
     """List files in the workspace bucket under a prefix."""
     try:
@@ -2599,7 +2800,7 @@ async def list_files(prefix: str = ""):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/admin/files/read", include_in_schema=False)
+@admin_router.get("/files/read")
 async def read_file(path: str):
     """Read a file from the workspace bucket."""
     try:
@@ -2615,7 +2816,7 @@ async def read_file(path: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/admin/files/write", include_in_schema=False)
+@admin_router.put("/files/write")
 async def write_file(data: dict):
     """Write/update a file in the workspace bucket."""
     path = data.get("path", "")
@@ -2636,7 +2837,7 @@ async def write_file(data: dict):
 # Template Management & Rendering
 # ============================================
 
-@app.get("/admin/templates", include_in_schema=False)
+@admin_router.get("/templates")
 async def list_templates():
     """List available output templates with metadata from manifest."""
     try:
@@ -2658,7 +2859,7 @@ async def list_templates():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/admin/templates/{template_id}", include_in_schema=False)
+@admin_router.get("/templates/{template_id}")
 async def get_template(template_id: str):
     """Get template HTML content."""
     try:
@@ -2674,7 +2875,7 @@ async def get_template(template_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/admin/templates/{template_id}", include_in_schema=False)
+@admin_router.put("/templates/{template_id}")
 async def save_template(template_id: str, data: dict):
     """Save/update a template."""
     content = data.get("content", "")
@@ -2708,7 +2909,7 @@ async def save_template(template_id: str, data: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/admin/templates/preview", include_in_schema=False)
+@admin_router.post("/templates/preview")
 async def preview_template(data: dict):
     """Render a template with provided data. Returns HTML string."""
     template_id = data.get("template_id", "")
@@ -2739,6 +2940,9 @@ async def preview_template(data: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# Register admin router (all routes protected by X-Admin-Secret)
+app.include_router(admin_router)
 
 if __name__ == "__main__":
     import uvicorn
