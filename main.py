@@ -1871,33 +1871,21 @@ You should see a folder called `lawtasksai-skills` containing:
 - SKILL.md
 - README.md (this file)
 
-### Step 2: Copy to OpenClaw skills folder
+### Step 2: Tell OpenClaw to install it
 
-Copy the entire `lawtasksai-skills` folder to your OpenClaw skills directory:
+Open your OpenClaw chat and type:
 
-**macOS:**
-```
-/Users/YOUR_USERNAME/.openclaw/skills/
-```
-Example: /Users/john/.openclaw/skills/lawtasksai-skills/
+"I just downloaded the LawTasksAI skill file to my Downloads folder.
+Please find it, unzip it if needed, and install it so I can use it.
+My license key is {license_key}"
 
-**Linux:**
-```
-/home/YOUR_USERNAME/.openclaw/skills/
-```
-Example: /home/john/.openclaw/skills/lawtasksai-skills/
+OpenClaw will find the file, install it, configure your license, and
+confirm when everything is ready.
 
-**Windows:**
-```
-C:\\Users\\YOUR_USERNAME\\.openclaw\\skills\\
-```
-Example: C:\\Users\\John\\.openclaw\\skills\\lawtasksai-skills\\
+(If you prefer to install manually, copy the lawtasksai-skills folder
+to ~/.openclaw/skills/ and restart OpenClaw.)
 
-### Step 3: Restart OpenClaw
-
-Restart OpenClaw or run `/reload` to load the new skill.
-
-### Step 4: Start using!
+### Step 3: Start using!
 
 Just ask for any legal task:
 - "Calculate the statute of limitations for a personal injury case in Colorado"
@@ -2052,48 +2040,181 @@ LAWTASKSAI_API_BASE=https://lawtasksai-api-10437713249.us-central1.run.app
         mcp_readme = f'''# LawTasksAI MCP Server
 
 For Claude Desktop, Cursor, and other MCP-compatible AI clients.
+Requires Python 3.8 or later.
 
 ## Quick Setup (Claude Desktop)
 
-### 1. Install dependencies
+### 1. Run the installer
+
+Open a terminal (Mac: Terminal app, Windows: Command Prompt) and run:
+
 ```bash
 cd lawtasksai-mcp
-pip install -r requirements.txt
+python install.py
 ```
 
-### 2. Configure Claude Desktop
+The installer will:
+- Install the required Python packages
+- Safely add LawTasksAI to your Claude Desktop settings
+- Back up your existing Claude config first (nothing is lost)
+- Configure your license key automatically
 
-**Mac:** Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows:** Edit `%APPDATA%\\Claude\\claude_desktop_config.json`
+### 2. Restart Claude Desktop
 
-Add:
-```json
-{{
-  "mcpServers": {{
-    "lawtasksai": {{
-      "command": "python",
-      "args": ["/FULL/PATH/TO/lawtasksai-mcp/server.py"],
-      "env": {{
-        "LAWTASKSAI_LICENSE_KEY": "{license_key}"
-      }}
-    }}
-  }}
-}}
-```
-
-### 3. Restart Claude Desktop
-
-### 4. Test it!
+### 3. Ask a legal question!
 - "What's the statute of limitations for negligence in Colorado?"
+- "Draft a motion to compel discovery in a breach of contract case."
 - Attach a document: "Analyze this NDA for unfavorable terms"
 
 ## Your License Key
-`{license_key}`
+`{license_key}` (already configured — no need to enter it again)
+
+## Don't have Python?
+
+If you don't have Python installed, use LawTasksAI with OpenClaw instead —
+no Python, no terminal, no config files required. See the lawtasksai-skills
+folder in this download, or visit https://lawtasksai.com/getting-started.html
 
 ## Support
-hello@lawtasksai.com
+hello@lawtasksai.com | https://lawtasksai.com
 '''
         zf.writestr('lawtasksai-mcp/README.md', mcp_readme)
+        
+        mcp_installer = f'''#!/usr/bin/env python3
+"""
+LawTasksAI Installer for Claude Desktop
+
+This script adds LawTasksAI to your Claude Desktop configuration.
+It backs up your existing config before making any changes.
+
+Usage:
+    python install.py
+"""
+
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from datetime import datetime
+
+
+def get_config_path():
+    system = platform.system()
+    if system == "Darwin":
+        return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+    elif system == "Windows":
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            return Path(appdata) / "Claude" / "claude_desktop_config.json"
+    print(f"Unsupported operating system: {{system}}")
+    print("   Please see https://lawtasksai.com/getting-started.html for manual setup.")
+    sys.exit(1)
+
+
+def get_server_path():
+    return str(Path(__file__).parent.resolve() / "server.py")
+
+
+def get_license_key():
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                if line.startswith("LAWTASKSAI_LICENSE_KEY="):
+                    key = line.split("=", 1)[1].strip()
+                    if key and key != "YOUR_KEY_HERE":
+                        return key
+    print("\\n  Enter your LawTasksAI license key (starts with lt_):")
+    key = input("   > ").strip()
+    if not key:
+        print("  No license key provided. Check your purchase confirmation email.")
+        sys.exit(1)
+    return key
+
+
+def install_dependencies():
+    req_path = Path(__file__).parent / "requirements.txt"
+    if req_path.exists():
+        print("\\n  Installing required packages...")
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-q", "-r", str(req_path)],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            print(f"  Warning: {{result.stderr[:200]}}")
+        else:
+            print("  Done.")
+
+
+def update_config(config_path, server_path, license_key):
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config = {{}}
+    if config_path.exists():
+        backup_path = config_path.with_suffix(f".backup-{{datetime.now().strftime(\\"%Y%m%d-%H%M%S\\")}}.json")
+        shutil.copy2(config_path, backup_path)
+        print(f"\\n  Backed up existing config to:\\n   {{backup_path}}")
+        with open(config_path) as f:
+            try:
+                config = json.load(f)
+            except json.JSONDecodeError:
+                print("  Existing config was invalid. Starting fresh (backup saved).")
+                config = {{}}
+    if "mcpServers" not in config:
+        config["mcpServers"] = {{}}
+    config["mcpServers"]["lawtasksai"] = {{
+        "command": "python",
+        "args": [server_path],
+        "env": {{"LAWTASKSAI_LICENSE_KEY": license_key}}
+    }}
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+    return True
+
+
+def main():
+    print()
+    print("  =" * 25)
+    print("  LawTasksAI Installer for Claude Desktop")
+    print("  =" * 25)
+    print()
+    print("  This installer will:")
+    print("    1. Install required Python packages")
+    print("    2. Add LawTasksAI to your Claude Desktop config")
+    print("       (your existing config is backed up first)")
+    print()
+    print("  After installation, restart Claude Desktop to")
+    print("  start using 200+ legal research and drafting skills.")
+    print()
+    input("  Press Enter to continue (or Ctrl+C to cancel)... ")
+    config_path = get_config_path()
+    server_path = get_server_path()
+    license_key = get_license_key()
+    install_dependencies()
+    print("\\n  Adding LawTasksAI to Claude Desktop config...")
+    update_config(config_path, server_path, license_key)
+    print("  Config updated.")
+    print()
+    print("  =" * 25)
+    print("  Installation complete!")
+    print("  =" * 25)
+    print()
+    print("  Next steps:")
+    print("    1. Restart Claude Desktop")
+    print("    2. Ask a legal question, like:")
+    print("       \\"What is the statute of limitations for")
+    print("        breach of contract in Texas?\\"")
+    print()
+    print("  Support: hello@lawtasksai.com")
+    print("  Website: https://lawtasksai.com")
+
+
+if __name__ == "__main__":
+    main()
+'''
+        zf.writestr('lawtasksai-mcp/install.py', mcp_installer)
     
     zip_buffer.seek(0)
     
