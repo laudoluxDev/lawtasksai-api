@@ -2080,7 +2080,7 @@ hello@lawtasksai.com | https://lawtasksai.com
 '''
         zf.writestr('lawtasksai-mcp/README.md', mcp_readme)
         
-        mcp_installer = f'''#!/usr/bin/env python3
+        mcp_installer = '''#!/usr/bin/env python3
 """
 LawTasksAI Installer for Claude Desktop
 
@@ -2109,7 +2109,7 @@ def get_config_path():
         appdata = os.environ.get("APPDATA", "")
         if appdata:
             return Path(appdata) / "Claude" / "claude_desktop_config.json"
-    print(f"Unsupported operating system: {{system}}")
+    print(f"Unsupported operating system: {system}")
     print("   Please see https://lawtasksai.com/getting-started.html for manual setup.")
     sys.exit(1)
 
@@ -2144,31 +2144,33 @@ def install_dependencies():
             capture_output=True, text=True
         )
         if result.returncode != 0:
-            print(f"  Warning: {{result.stderr[:200]}}")
+            print(f"  Warning: {result.stderr[:200]}")
         else:
             print("  Done.")
 
 
 def update_config(config_path, server_path, license_key):
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config = {{}}
+    config = {}
     if config_path.exists():
-        backup_path = config_path.with_suffix(f".backup-{{datetime.now().strftime(\\"%Y%m%d-%H%M%S\\")}}.json")
+        backup_path = config_path.with_suffix(
+            f".backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+        )
         shutil.copy2(config_path, backup_path)
-        print(f"\\n  Backed up existing config to:\\n   {{backup_path}}")
+        print(f"\\n  Backed up existing config to:\\n   {backup_path}")
         with open(config_path) as f:
             try:
                 config = json.load(f)
             except json.JSONDecodeError:
                 print("  Existing config was invalid. Starting fresh (backup saved).")
-                config = {{}}
+                config = {}
     if "mcpServers" not in config:
-        config["mcpServers"] = {{}}
-    config["mcpServers"]["lawtasksai"] = {{
+        config["mcpServers"] = {}
+    config["mcpServers"]["lawtasksai"] = {
         "command": "python",
         "args": [server_path],
-        "env": {{"LAWTASKSAI_LICENSE_KEY": license_key}}
-    }}
+        "env": {"LAWTASKSAI_LICENSE_KEY": license_key}
+    }
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
     return True
@@ -2176,9 +2178,9 @@ def update_config(config_path, server_path, license_key):
 
 def main():
     print()
-    print("  =" * 25)
+    print("  " + "=" * 45)
     print("  LawTasksAI Installer for Claude Desktop")
-    print("  =" * 25)
+    print("  " + "=" * 45)
     print()
     print("  This installer will:")
     print("    1. Install required Python packages")
@@ -2197,15 +2199,15 @@ def main():
     update_config(config_path, server_path, license_key)
     print("  Config updated.")
     print()
-    print("  =" * 25)
+    print("  " + "=" * 45)
     print("  Installation complete!")
-    print("  =" * 25)
+    print("  " + "=" * 45)
     print()
     print("  Next steps:")
     print("    1. Restart Claude Desktop")
-    print("    2. Ask a legal question, like:")
-    print("       \\"What is the statute of limitations for")
-    print("        breach of contract in Texas?\\"")
+    print('    2. Ask a legal question, like:')
+    print('       "What is the statute of limitations for')
+    print('        breach of contract in Texas?"')
     print()
     print("  Support: hello@lawtasksai.com")
     print("  Website: https://lawtasksai.com")
