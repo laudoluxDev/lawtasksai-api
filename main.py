@@ -1851,10 +1851,10 @@ async def download_loader(license_key: str, db: AsyncSession = Depends(get_db)):
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
         # Add config.json
-        zf.writestr('lawtasksai-skills/config.json', json.dumps(config, indent=2))
+        zf.writestr('openclaw/config.json', json.dumps(config, indent=2))
         
         # Add SKILL.md
-        zf.writestr('lawtasksai-skills/SKILL.md', LOADER_SKILL_MD)
+        zf.writestr('openclaw/SKILL.md', LOADER_SKILL_MD)
         
         # Add README
         readme = f'''# LawTasksAI Skills
@@ -1865,8 +1865,8 @@ Your personalized legal AI skills are ready to use!
 
 ### Step 1: Extract the ZIP file
 
-Double-click the downloaded `lawtasksai-skills.zip` to extract it.
-You should see a folder called `lawtasksai-skills` containing:
+Double-click the downloaded `lawtasksai.zip` to extract it.
+You should see a folder called `openclaw` containing:
 - config.json (your license is already configured!)
 - SKILL.md
 - README.md (this file)
@@ -1882,8 +1882,8 @@ My license key is {license_key}"
 OpenClaw will find the file, install it, configure your license, and
 confirm when everything is ready.
 
-(If you prefer to install manually, copy the lawtasksai-skills folder
-to ~/.openclaw/skills/ and restart OpenClaw.)
+(If you prefer to install manually, copy the openclaw folder
+to ~/.openclaw/skills/lawtasksai/ and restart OpenClaw.)
 
 ### Step 3: Start using!
 
@@ -1911,7 +1911,7 @@ marked with 🔒 run entirely locally for maximum confidentiality.
 - Email: hello@lawtasksai.com
 - Docs: https://lawtasksai.com/docs
 '''
-        zf.writestr('lawtasksai-skills/README.md', readme)
+        zf.writestr('openclaw/README.md', readme)
     
         # =========================================
         # Add MCP Server for Claude Desktop/Cursor
@@ -2063,18 +2063,18 @@ if __name__ == "__main__":
     import asyncio
     asyncio.run(run_server(server))
 '''
-        zf.writestr('lawtasksai-mcp/server.py', mcp_server_py)
+        zf.writestr('claude-desktop/server.py', mcp_server_py)
         
         mcp_requirements = '''mcp>=1.0.0
 httpx>=0.27.0
 python-dotenv>=1.0.0
 '''
-        zf.writestr('lawtasksai-mcp/requirements.txt', mcp_requirements)
+        zf.writestr('claude-desktop/requirements.txt', mcp_requirements)
         
         mcp_env = f'''LAWTASKSAI_LICENSE_KEY={license_key}
 LAWTASKSAI_API_BASE=https://lawtasksai-api-10437713249.us-central1.run.app
 '''
-        zf.writestr('lawtasksai-mcp/.env', mcp_env)
+        zf.writestr('claude-desktop/.env', mcp_env)
         
         mcp_readme = f'''# LawTasksAI MCP Server
 
@@ -2088,7 +2088,7 @@ Requires Python 3.8 or later.
 Open a terminal (Mac: Terminal app, Windows: Command Prompt) and run:
 
 ```bash
-cd lawtasksai-mcp
+cd claude-desktop
 python install.py
 ```
 
@@ -2117,7 +2117,7 @@ folder in this download, or visit https://lawtasksai.com/getting-started.html
 ## Support
 hello@lawtasksai.com | https://lawtasksai.com
 '''
-        zf.writestr('lawtasksai-mcp/README.md', mcp_readme)
+        zf.writestr('claude-desktop/README.md', mcp_readme)
         
         mcp_installer = '''#!/usr/bin/env python3
 """
@@ -2255,7 +2255,7 @@ def main():
 if __name__ == "__main__":
     main()
 '''
-        zf.writestr('lawtasksai-mcp/install.py', mcp_installer)
+        zf.writestr('claude-desktop/install.py', mcp_installer)
     
     zip_buffer.seek(0)
     
@@ -2263,7 +2263,7 @@ if __name__ == "__main__":
         zip_buffer,
         media_type='application/zip',
         headers={
-            'Content-Disposition': 'attachment; filename=lawtasksai-skills.zip'
+            'Content-Disposition': 'attachment; filename=lawtasksai.zip'
         }
     )
 
