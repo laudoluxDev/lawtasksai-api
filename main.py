@@ -1934,7 +1934,7 @@ import os
 import httpx
 from dotenv import load_dotenv
 from mcp.server import Server
-from mcp.server.stdio import run_server
+from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
 load_dotenv()
@@ -2061,7 +2061,16 @@ async def call_tool(name, arguments):
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(run_server(server))
+
+    async def main():
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(
+                read_stream,
+                write_stream,
+                server.create_initialization_options(),
+            )
+
+    asyncio.run(main())
 '''
         zf.writestr('claude-desktop/server.py', mcp_server_py)
         
