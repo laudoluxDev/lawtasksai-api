@@ -3,7 +3,7 @@ LawTasksAI API
 FastAPI backend for skill delivery, licensing, and usage tracking.
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Header, BackgroundTasks, Request, APIRouter
+from fastapi import FastAPI, HTTPException, Depends, Header, BackgroundTasks, Request, APIRouter, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr
@@ -52,7 +52,7 @@ except ImportError:
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/lawtasksai")
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-API_BASE_URL = os.getenv("API_BASE_URL", "https://lawtasksai-api-10437713249.us-central1.run.app")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.lawtasksai.com")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://lawtasksai.com")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
@@ -71,7 +71,7 @@ CURRENT_LOADER_VERSION = "1.6.0"
 LOADER_UPDATE_URL = "https://lawtasksai.com/download"
 LOADER_UPDATE_MESSAGE = None  # Set to a string when there's an important update
 
-# Path to the loader SKILL.md (served for auto-update)
+# Path to the loader SKILL.md  [rebuilt 20260322T163027Z] (served for auto-update)
 LOADER_SKILL_PATH = os.path.join(os.path.dirname(__file__), "loader", "SKILL.md")
 
 # Initialize Stripe
@@ -100,6 +100,8 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     last_login: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    # Multi-tenancy: which product this user belongs to
+    product_id: Mapped[Optional[str]] = mapped_column(String(50), default="law")
     # Profile for document generation (firm info, letterhead, etc.)
     profile: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
 
@@ -110,6 +112,7 @@ class Category(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
+    product_id: Mapped[str] = mapped_column(String(50), default="law")
 
 class Skill(Base):
     __tablename__ = "skills"
@@ -126,6 +129,7 @@ class Skill(Base):
     is_published: Mapped[bool] = mapped_column(Boolean, default=False)
     is_deprecated: Mapped[bool] = mapped_column(Boolean, default=False)
     triggers: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), default=list)
+    product_id: Mapped[str] = mapped_column(String(50), default="law")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class SkillVersion(Base):
@@ -239,6 +243,19 @@ async def get_db():
     async with async_session() as session:
         yield session
 
+
+def get_product_id(
+    x_product_id: Optional[str] = Header(None, alias="X-Product-ID"),
+    product: Optional[str] = Query(None, alias="product"),
+) -> str:
+    """
+    Resolve product_id from (in priority order):
+    1. X-Product-ID request header
+    2. ?product= query parameter
+    3. Fallback: 'law'
+    """
+    return x_product_id or product or "law"
+
 # ============================================
 # Pydantic Schemas
 # ============================================
@@ -248,6 +265,7 @@ class UserCreate(BaseModel):
     password: str
     name: Optional[str] = None
     firm_name: Optional[str] = None
+    product_id: Optional[str] = None  # Multi-tenancy: which product they registered from
 
 class UserResponse(BaseModel):
     id: str
@@ -265,6 +283,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     license_key: str
+    product_id: Optional[str] = "law"  # Multi-tenancy: which product this user belongs to
 
 class SkillResponse(BaseModel):
     id: str
@@ -823,20 +842,28 @@ async def get_current_license(
 # ============================================
 
 @app.post("/auth/register", response_model=UserResponse)
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(
+    user_data: UserCreate,
+    db: AsyncSession = Depends(get_db),
+    product_id: str = Depends(get_product_id),
+):
     """Create a new user account."""
     # Check if email exists
     result = await db.execute(select(User).where(User.email == user_data.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+
+    # Resolve product_id: body field takes priority (explicit), then dependency (header/query/default)
+    resolved_product_id = user_data.product_id or product_id
+
     # Create user
     user = User(
         email=user_data.email,
         password_hash=hash_password(user_data.password),
         name=user_data.name,
         firm_name=user_data.firm_name,
-        credits_balance=50  # Free trial credits
+        credits_balance=50,  # Free trial credits
+        product_id=resolved_product_id,
     )
     db.add(user)
     
@@ -890,7 +917,8 @@ async def login(credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
     
     return TokenResponse(
         access_token=generate_token(str(user.id), license.license_key),
-        license_key=license.license_key
+        license_key=license.license_key,
+        product_id=user.product_id or "law",
     )
 
 class RecoverLicenseRequest(BaseModel):
@@ -944,12 +972,15 @@ async def recover_license(request: RecoverLicenseRequest, db: AsyncSession = Dep
 @app.get("/v1/skills", response_model=List[SkillResponse])
 async def list_skills(
     category: Optional[str] = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    product_id: str = Depends(get_product_id),
 ):
-    """List all available skills."""
+    """List all available skills, optionally filtered by product."""
     query = select(Skill).where(Skill.is_published == True)
     if category:
         query = query.where(Skill.category_id == category)
+    # Always filter by product_id — defaults to 'law' for backward compat.
+    query = query.where(Skill.product_id == product_id)
     
     result = await db.execute(query.order_by(Skill.category_id, Skill.name))
     skills = result.scalars().all()
@@ -985,15 +1016,19 @@ async def list_skills(
 
 @app.get("/skills/triggers")
 @app.get("/v1/skills/triggers")
-async def get_skill_triggers(db: AsyncSession = Depends(get_db)):
+async def get_skill_triggers(
+    product_id: str = Depends(get_product_id),
+    db: AsyncSession = Depends(get_db)
+):
     """
     Get trigger phrases for local skill matching.
     This enables privacy-preserving skill discovery without sending queries to the server.
-    Reads from database - skills with non-empty triggers arrays.
+    Reads from database - skills with non-empty triggers arrays, filtered by product.
     """
     result = await db.execute(
         select(Skill.id, Skill.triggers).where(
             Skill.is_published == True,
+            Skill.product_id == product_id,
             Skill.triggers != None,
             func.array_length(Skill.triggers, 1) > 0
         )
@@ -1150,7 +1185,7 @@ async def get_skill_schema(
     instructions = """
 ## Local Execution Instructions
 
-This skill runs LOCALLY on your machine. Your documents never leave your computer.
+This skill runs LOCALLY on your machine. LawTasksAI.com never sees your prompts, your client files, or your client data. Your documents stay local if using OpenClaw, or go to your LLM provider if using a cloud AI.
 
 ### How to use this schema:
 
@@ -1555,14 +1590,45 @@ LOADER_SKILL_MD = _load_loader_skill_md()
 @app.post("/checkout/create-session")
 async def create_checkout_session(
     request: PurchaseCreditsRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    product_id: str = Depends(get_product_id),
 ):
     """Create a Stripe checkout session for credit purchase."""
-    if request.pack not in CREDIT_PACKS:
-        raise HTTPException(status_code=400, detail="Invalid credit pack")
-    
-    pack = CREDIT_PACKS[request.pack]
-    
+
+    # --- Resolve pack: prefer product-specific packs, fall back to CREDIT_PACKS ---
+    pack = None
+    resolved_product_id = product_id  # from header/query/default
+
+    # Try product_credit_packs table first
+    try:
+        pcp_result = await db.execute(
+            text(
+                "SELECT pack_key, name, credits, price_cents FROM product_credit_packs "
+                "WHERE product_id = :pid ORDER BY credits"
+            ),
+            {"pid": resolved_product_id},
+        )
+        product_packs_rows = pcp_result.fetchall()
+        if product_packs_rows:
+            product_packs = {
+                row.pack_key: {
+                    "credits": row.credits,
+                    "price_cents": row.price_cents,
+                    "name": row.name,
+                    "one_time": False,
+                }
+                for row in product_packs_rows
+            }
+            pack = product_packs.get(request.pack)
+    except Exception:
+        pass  # table may not exist in all environments — fall through to CREDIT_PACKS
+
+    # Fall back to hardcoded CREDIT_PACKS
+    if pack is None:
+        if request.pack not in CREDIT_PACKS:
+            raise HTTPException(status_code=400, detail="Invalid credit pack")
+        pack = CREDIT_PACKS[request.pack]
+
     # Enforce one-time trial/starter pack per email
     if pack.get("one_time"):
         if not request.email:
@@ -1581,6 +1647,23 @@ async def create_checkout_session(
         if existing:
             raise HTTPException(status_code=400, detail="The Trial package is only available once per customer. Check out our other packages for better value!")
     
+    # Resolve product domain for success/cancel URLs
+    product_domain = None
+    product_display_name = None
+    try:
+        prod_result = await db.execute(
+            text("SELECT domain, name FROM products WHERE id = :pid AND is_active = TRUE"),
+            {"pid": resolved_product_id},
+        )
+        prod_row = prod_result.fetchone()
+        if prod_row:
+            product_domain = f"https://{prod_row.domain}"
+            product_display_name = prod_row.name
+    except Exception:
+        pass
+    frontend_url = product_domain or FRONTEND_URL
+    product_name = product_display_name or "LawTasksAI"
+
     try:
         # Create Stripe checkout session
         checkout_kwargs = {
@@ -1589,19 +1672,20 @@ async def create_checkout_session(
                 'price_data': {
                     'currency': 'usd',
                     'product_data': {
-                        'name': f'LawTasksAI {pack["name"]}',
-                        'description': f'{pack["credits"]} tasks for legal AI automation',
+                        'name': f'{product_name} {pack["name"]}',
+                        'description': f'{pack["credits"]} AI task credits',
                     },
                     'unit_amount': pack['price_cents'],
                 },
                 'quantity': 1,
             }],
             'mode': 'payment',
-            'success_url': f'{FRONTEND_URL}/success?session_id={{CHECKOUT_SESSION_ID}}',
-            'cancel_url': f'{FRONTEND_URL}/#pricing',
+            'success_url': f'{frontend_url}/success?session_id={{CHECKOUT_SESSION_ID}}',
+            'cancel_url': f'{frontend_url}/#pricing',
             'metadata': {
                 'pack': request.pack,
                 'credits': str(pack['credits']),
+                'product_id': resolved_product_id,
                 'attorney_name': request.attorney_name or '',
                 'bar_jurisdiction': request.bar_jurisdiction or '',
                 'bar_number': request.bar_number or '',
@@ -1824,6 +1908,7 @@ async def get_checkout_session(session_id: str, db: AsyncSession = Depends(get_d
 async def download_loader(license_key: str, db: AsyncSession = Depends(get_db)):
     """
     Generate and download personalized loader skill with license key pre-configured.
+    Product-aware: uses the product tied to the user's license.
     """
     # Validate license key
     result = await db.execute(
@@ -1833,14 +1918,44 @@ async def download_loader(license_key: str, db: AsyncSession = Depends(get_db)):
         )
     )
     license = result.scalar_one_or_none()
-    
+
     if not license:
         raise HTTPException(status_code=404, detail="Invalid license key")
-    
+
+    # Resolve product info from the user's product_id
+    user_result = await db.execute(select(User).where(User.id == license.user_id))
+    user = user_result.scalar_one_or_none()
+    user_product_id = (user.product_id if user else None) or "law"
+
+    prod_name = "LawTasksAI"
+    prod_domain = "lawtasksai.com"
+    prod_support_email = "hello@lawtasksai.com"
+    loader_skill_md = LOADER_SKILL_MD  # default (law)
+    try:
+        prod_result = await db.execute(
+            text("SELECT name, domain FROM products WHERE id = :pid AND is_active = TRUE"),
+            {"pid": user_product_id},
+        )
+        prod_row = prod_result.fetchone()
+        if prod_row:
+            prod_name = prod_row.name
+            prod_domain = prod_row.domain
+            prod_support_email = f"hello@{prod_row.domain}"
+            # Load product-specific SKILL.md from loader/{product_id}/SKILL.md
+            import pathlib as _pl
+            skill_path = _pl.Path(__file__).parent / 'loader' / user_product_id / 'SKILL.md'
+            if skill_path.exists():
+                loader_skill_md = skill_path.read_text()
+    except Exception:
+        pass
+
+    zip_filename = f"{prod_domain.split('.')[0]}.zip"  # e.g. contractortasksai.zip
+
     # Create config.json with license key
     config = {
         "license_key": license_key,
         "api_base_url": API_BASE_URL,
+        "product_id": user_product_id,
         "version_policy": "latest",
         "cache_skills": False,
         "offline_mode": False
@@ -1854,18 +1969,18 @@ async def download_loader(license_key: str, db: AsyncSession = Depends(get_db)):
         zf.writestr('openclaw/config.json', json.dumps(config, indent=2))
         
         # Add SKILL.md
-        zf.writestr('openclaw/SKILL.md', LOADER_SKILL_MD)
-        
-        # Add README
-        readme = f'''# LawTasksAI Skills
+        zf.writestr('openclaw/SKILL.md', loader_skill_md)
 
-Your personalized legal AI skills are ready to use!
+        # Add README
+        readme = f'''# {prod_name} Skills
+
+Your personalized AI skills are ready to use!
 
 ## Installation (Step by Step)
 
 ### Step 1: Extract the ZIP file
 
-Double-click the downloaded `lawtasksai.zip` to extract it.
+Double-click the downloaded `{zip_filename}` to extract it.
 You should see a folder called `openclaw` containing:
 - config.json (your license is already configured!)
 - SKILL.md
@@ -1875,7 +1990,7 @@ You should see a folder called `openclaw` containing:
 
 Open your OpenClaw chat and type:
 
-"I just downloaded the LawTasksAI skill file to my Downloads folder.
+"I just downloaded the {prod_name} skill file to my Downloads folder.
 Please find it, unzip it if needed, and install it so I can use it.
 My license key is {license_key}"
 
@@ -1883,14 +1998,11 @@ OpenClaw will find the file, install it, configure your license, and
 confirm when everything is ready.
 
 (If you prefer to install manually, copy the openclaw folder
-to ~/.openclaw/skills/lawtasksai/ and restart OpenClaw.)
+to ~/.openclaw/skills/{prod_domain.split('.')[0]}/ and restart OpenClaw.)
 
 ### Step 3: Start using!
 
-Just ask for any legal task:
-- "Calculate the statute of limitations for a personal injury case in Colorado"
-- "What are the deadlines for responding to a federal complaint?"
-- "List available billing skills"
+Just ask for any task — your AI will know exactly what to do.
 
 ---
 
@@ -1926,8 +2038,8 @@ Instead of exposing 200+ tools (token bloat), we expose 4 clean tools:
   3. lawtasks_balance    — Check credit balance
   4. lawtasks_categories — Browse skill categories
 
-All skills run locally — your documents never leave your machine.
-LawTasksAI delivers the expert analysis framework; your AI applies it.
+LawTasksAI.com never sees your prompts, your client files, or your client data. Skills run entirely on your machine — your documents stay local if using OpenClaw, or go to your LLM provider if using a cloud AI.
+For full details see our Zero Data Retention & ABA Compliance guide: https://lawtasksai.com/zdr-aba-compliance-guide
 """
 
 import os
@@ -1935,11 +2047,12 @@ import httpx
 from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import Tool, TextContent, Prompt, PromptMessage, PromptArgument
+from mcp.types import GetPromptResult
 
 load_dotenv()
 
-API_BASE = os.getenv("LAWTASKSAI_API_BASE", "https://lawtasksai-api-10437713249.us-central1.run.app")
+API_BASE = os.getenv("LAWTASKSAI_API_BASE", "https://api.lawtasksai.com")
 LICENSE_KEY = os.getenv("LAWTASKSAI_LICENSE_KEY", "")
 
 if not LICENSE_KEY:
@@ -1949,7 +2062,7 @@ AUTH_HEADERS = {
     "Authorization": f"Bearer {LICENSE_KEY}",
     "Content-Type": "application/json",
     "X-Client-Type": "mcp-server",
-    "X-Client-Version": "1.3.0",
+    "X-Client-Version": "1.4.0",
 }
 
 async def api_get(path):
@@ -1961,13 +2074,42 @@ async def api_get(path):
 TOOLS = [
     Tool(
         name="lawtasks_search",
-        description="Search for legal skills by keyword. Use this FIRST to find the right skill before executing it. Returns skill IDs, names, and descriptions.",
-        inputSchema={"type": "object", "properties": {"query": {"type": "string", "description": "Legal topic to search for (e.g. 'statute of limitations', 'motion to compel', 'NDA review')"}}, "required": ["query"]},
+        description=(
+            "Search for legal skills by keyword. "
+            "After getting results, ALWAYS present the top matches to the user as a numbered list "
+            "with the skill name and a brief description of each. "
+            "Then ask the user: 'Which of these best fits your situation? (reply with a number, "
+            "or describe your task differently for a new search)' "
+            "NEVER call lawtasks_execute without explicit user confirmation of which skill to use."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Legal topic to search for (e.g. 'statute of limitations', 'motion to compel', 'NDA review')"
+                }
+            },
+            "required": ["query"]
+        },
     ),
     Tool(
         name="lawtasks_execute",
-        description="Get a skill's expert analysis framework by skill ID. Returns the full prompt/schema for your AI to apply locally. Costs 1 credit. Use lawtasks_search first to find the skill ID.",
-        inputSchema={"type": "object", "properties": {"skill_id": {"type": "string", "description": "Skill ID from lawtasks_search results"}}, "required": ["skill_id"]},
+        description=(
+            "Get a skill's expert analysis framework by skill ID. "
+            "Returns the full prompt/schema for your AI to apply locally. Costs 1 credit. "
+            "Only call this after the user has confirmed which skill they want from lawtasks_search results."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "skill_id": {
+                    "type": "string",
+                    "description": "Skill ID from lawtasks_search results, confirmed by the user"
+                }
+            },
+            "required": ["skill_id"]
+        },
     ),
     Tool(
         name="lawtasks_balance",
@@ -1979,6 +2121,47 @@ TOOLS = [
         description="List all available skill categories to browse by practice area.",
         inputSchema={"type": "object", "properties": {}},
     ),
+]
+
+# ─────────────────────────────────────────────
+# System prompt — injected at session start
+# Instructs Claude to always confirm skill
+# selection with the user before executing.
+# ─────────────────────────────────────────────
+
+SYSTEM_PROMPT_TEXT = """\
+You have access to LawTasksAI, a library of 206+ expert legal task skills for attorneys.
+
+## How to use LawTasksAI
+
+**Always follow this 3-step flow:**
+
+1. **Search** — Call lawtasks_search with the user's legal topic to find matching skills.
+
+2. **Confirm** — Present the top results to the user as a numbered list, like this:
+   > I found these skills that match your request:
+   > 1. **Motion to Compel Discovery** — Drafts a motion compelling an opposing party to respond to discovery requests.
+   > 2. **Discovery Deficiency Letter** — Drafts a letter identifying deficiencies in discovery responses.
+   > 3. **Request for Production** — Prepares a formal request for production of documents.
+   >
+   > Which of these best fits your situation? (Reply with a number, or describe your task differently and I'll search again.)
+
+3. **Execute** — Only after the user confirms their choice, call lawtasks_execute with that skill's ID.
+
+## Important rules
+- NEVER auto-execute a skill without explicit user confirmation.
+- If the user's reply is ambiguous, ask a clarifying question rather than guessing.
+- If no skills match, suggest the user try lawtasks_categories to browse by practice area.
+- After executing a skill, apply its framework to the user's specific facts and produce the full output.
+- Always remind the user that outputs require their professional review and judgment.
+"""
+
+PROMPTS = [
+    Prompt(
+        name="lawtasksai-workflow",
+        description="LawTasksAI skill selection workflow — always confirm skill choice with user before executing.",
+        arguments=[],
+    )
 ]
 
 _skills_cache = None
@@ -1994,6 +2177,24 @@ async def get_skills():
 
 server = Server("lawtasksai")
 
+@server.list_prompts()
+async def list_prompts():
+    return PROMPTS
+
+@server.get_prompt()
+async def get_prompt(name, arguments):
+    if name == "lawtasksai-workflow":
+        return GetPromptResult(
+            description="LawTasksAI skill selection workflow",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=SYSTEM_PROMPT_TEXT)
+                )
+            ]
+        )
+    raise ValueError(f"Unknown prompt: {name}")
+
 @server.list_tools()
 async def list_tools():
     return TOOLS
@@ -2004,22 +2205,29 @@ async def call_tool(name, arguments):
         if name == "lawtasks_search":
             skills = await get_skills()
             query = arguments.get("query", "").lower()
-            words = query.split()
+            STOP_WORDS = {"a","an","the","and","or","of","in","to","for","is","are",
+                          "with","at","by","on","from","as","it","its","be","was","can"}
+            words = [w for w in query.split() if w not in STOP_WORDS and len(w) > 2]
             scored = []
             for s in skills:
                 text = (s.get("name", "") + " " + s.get("description", "")).lower()
-                score = sum(1 for w in words if w in text)
+                # Weight name matches higher than description matches
+                name_text = s.get("name", "").lower()
+                score = sum(3 if w in name_text else 1 for w in words if w in text)
                 if score > 0:
                     scored.append((score, s))
             scored.sort(key=lambda x: -x[0])
-            matches = [s for _, s in scored[:10]]
+            matches = [s for _, s in scored[:5]]
             if not matches:
-                matches = skills[:10]
-            lines = ["**Matching skills:**\\n"]
-            for s in matches:
-                lines.append(f"- **{s['name']}** (`{s['id']}`) — {s.get('description', '')[:80]}")
-            lines.append(f"\\n*{len(skills)} total skills available. Use lawtasks_execute with a skill ID to get the full framework.*")
-            return [TextContent(type="text", text="\\n".join(lines))]
+                matches = skills[:5]
+
+            lines = [f"**Top {len(matches)} matching skills for '{arguments.get('query', '')}':**\n"]
+            for i, s in enumerate(matches, 1):
+                desc = s.get("description", "")[:100]
+                lines.append(f"{i}. **{s['name']}** (`{s['id']}`)\n   {desc}\n")
+            lines.append("---")
+            lines.append("*Present these options to the user and ask which one they'd like to use before calling lawtasks_execute.*")
+            return [TextContent(type="text", text="\n".join(lines))]
 
         if name == "lawtasks_execute":
             skill_id = arguments.get("skill_id", "")
@@ -2030,10 +2238,10 @@ async def call_tool(name, arguments):
             instructions = result.get("instructions", "")
             credits_used = result.get("credits_used", 1)
             credits_remaining = result.get("credits_remaining", "?")
-            text = f"# {result.get('skill_name', skill_id)}\\n\\n"
-            text += f"{instructions}\\n\\n"
-            text += f"## Expert Analysis Framework\\n\\n{schema}\\n\\n"
-            text += f"---\\n*Credits used: {credits_used} | Remaining: {credits_remaining}*"
+            text = f"# {result.get('skill_name', skill_id)}\n\n"
+            text += f"{instructions}\n\n"
+            text += f"## Expert Analysis Framework\n\n{schema}\n\n"
+            text += f"---\n*Credits used: {credits_used} | Remaining: {credits_remaining}*"
             return [TextContent(type="text", text=text)]
 
         if name == "lawtasks_balance":
@@ -2043,13 +2251,14 @@ async def call_tool(name, arguments):
         if name == "lawtasks_categories":
             cats = await api_get("/v1/categories")
             if isinstance(cats, list):
-                lines = ["**Skill Categories:**\\n"]
+                lines = ["**Skill Categories:**\n"]
                 for c in cats:
                     lines.append(f"- **{c.get('name', '?')}** (`{c.get('id', '?')}`)")
-                return [TextContent(type="text", text="\\n".join(lines))]
+                return [TextContent(type="text", text="\n".join(lines))]
             return [TextContent(type="text", text=str(cats))]
 
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
+
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 402:
             return [TextContent(type="text", text="Insufficient credits. Purchase more at https://lawtasksai.com/#pricing")]
@@ -2072,71 +2281,83 @@ if __name__ == "__main__":
 
     asyncio.run(main())
 '''
-        zf.writestr('claude-desktop/server.py', mcp_server_py)
+        zf.writestr('mcp/server.py', mcp_server_py)
         
         mcp_requirements = '''mcp>=1.0.0
 httpx>=0.27.0
 python-dotenv>=1.0.0
 '''
-        zf.writestr('claude-desktop/requirements.txt', mcp_requirements)
+        zf.writestr('mcp/requirements.txt', mcp_requirements)
         
         mcp_env = f'''LAWTASKSAI_LICENSE_KEY={license_key}
-LAWTASKSAI_API_BASE=https://lawtasksai-api-10437713249.us-central1.run.app
+LAWTASKSAI_API_BASE={API_BASE_URL}
 '''
-        zf.writestr('claude-desktop/.env', mcp_env)
+        zf.writestr('mcp/.env', mcp_env)
         
         mcp_readme = f'''# LawTasksAI MCP Server
 
-For Claude Desktop, Cursor, and other MCP-compatible AI clients.
+Works with Claude Desktop, Cursor, Windsurf, and any MCP-compatible AI client.
 Requires Python 3.8 or later.
 
-## Quick Setup (Claude Desktop)
+## Quick Setup
 
 ### 1. Run the installer
 
 Open a terminal (Mac: Terminal app, Windows: Command Prompt) and run:
 
 ```bash
-cd claude-desktop
-python install.py
+cd mcp
+python3 install.py
 ```
 
 The installer will:
 - Install the required Python packages
-- Safely add LawTasksAI to your Claude Desktop settings
-- Back up your existing Claude config first (nothing is lost)
+- Auto-detect your MCP client(s) and configure each one
+- Back up any existing config first (nothing is lost)
 - Configure your license key automatically
 
-### 2. Restart Claude Desktop
+**Mac users:** macOS may ask "python3 would like to access files in your Downloads folder" — click Allow.
+
+### 2. Restart your MCP client (Claude Desktop, Cursor, etc.)
 
 ### 3. Ask a legal question!
-- "What's the statute of limitations for negligence in Colorado?"
+- "What\'s the statute of limitations for negligence in Colorado?"
 - "Draft a motion to compel discovery in a breach of contract case."
 - Attach a document: "Analyze this NDA for unfavorable terms"
 
 ## Your License Key
 `{license_key}` (already configured — no need to enter it again)
 
-## Don't have Python?
+## Supported MCP Clients
+- Claude Desktop
+- Cursor
+- Windsurf
+- Any app that supports the MCP stdio protocol
 
-If you don't have Python installed, use LawTasksAI with OpenClaw instead —
-no Python, no terminal, no config files required. See the lawtasksai-skills
-folder in this download, or visit https://lawtasksai.com/getting-started.html
+## Don\'t have Python?
+
+Use LawTasksAI with OpenClaw instead —
+no Python, no terminal, no config files required. See the openclaw folder
+in this download, or visit https://lawtasksai.com/getting-started.html
 
 ## Support
 hello@lawtasksai.com | https://lawtasksai.com
 '''
-        zf.writestr('claude-desktop/README.md', mcp_readme)
+        zf.writestr('mcp/README.md', mcp_readme)
         
         mcp_installer = '''#!/usr/bin/env python3
 """
-LawTasksAI Installer for Claude Desktop
+LawTasksAI MCP Installer
 
-This script adds LawTasksAI to your Claude Desktop configuration.
-It backs up your existing config before making any changes.
+Detects and configures LawTasksAI for all supported MCP clients:
+  - Claude Desktop
+  - Cursor
+  - Windsurf
+
+Backs up existing configs before making any changes.
 
 Usage:
-    python install.py
+    python3 install.py
 """
 
 import json
@@ -2149,17 +2370,14 @@ from pathlib import Path
 from datetime import datetime
 
 
-def get_config_path():
-    system = platform.system()
-    if system == "Darwin":
-        return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
-    elif system == "Windows":
-        appdata = os.environ.get("APPDATA", "")
-        if appdata:
-            return Path(appdata) / "Claude" / "claude_desktop_config.json"
-    print(f"Unsupported operating system: {system}")
-    print("   Please see https://lawtasksai.com/getting-started.html for manual setup.")
-    sys.exit(1)
+def get_python_path():
+    """Return full path to python3 so MCP clients can find it regardless of PATH."""
+    for candidate in [sys.executable, shutil.which("python3"),
+                      "/opt/homebrew/bin/python3", "/usr/bin/python3",
+                      "/usr/local/bin/python3"]:
+        if candidate and Path(candidate).exists():
+            return candidate
+    return sys.executable
 
 
 def get_server_path():
@@ -2183,21 +2401,70 @@ def get_license_key():
     return key
 
 
+def get_mcp_clients():
+    """Return dict of {client_name: config_path} for all installed MCP clients."""
+    system = platform.system()
+    clients = {}
+
+    if system == "Darwin":
+        claude_path = Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+        cursor_path = Path.home() / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+        windsurf_path = Path.home() / "Library" / "Application Support" / "Windsurf" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+    elif system == "Windows":
+        appdata = os.environ.get("APPDATA", "")
+        local = os.environ.get("LOCALAPPDATA", "")
+        claude_path = Path(appdata) / "Claude" / "claude_desktop_config.json"
+        cursor_path = Path(appdata) / "Cursor" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+        windsurf_path = Path(local) / "Windsurf" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+    else:
+        claude_path = Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
+        cursor_path = Path.home() / ".config" / "Cursor" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+        windsurf_path = None
+
+    # Only include clients that are already installed (config dir exists or app exists)
+    if system == "Darwin":
+        if (Path.home() / "Applications" / "Claude.app").exists() or \\
+           (Path("/Applications/Claude.app")).exists() or \\
+           claude_path.parent.exists():
+            clients["Claude Desktop"] = claude_path
+        if (Path.home() / "Applications" / "Cursor.app").exists() or \\
+           Path("/Applications/Cursor.app").exists():
+            clients["Cursor"] = cursor_path
+        if (Path.home() / "Applications" / "Windsurf.app").exists() or \\
+           Path("/Applications/Windsurf.app").exists():
+            clients["Windsurf"] = windsurf_path
+    else:
+        # On Windows/Linux, check if config parent dirs exist
+        for name, path in [("Claude Desktop", claude_path), ("Cursor", cursor_path)]:
+            if path and path.parent.exists():
+                clients[name] = path
+
+    return clients
+
+
 def install_dependencies():
     req_path = Path(__file__).parent / "requirements.txt"
     if req_path.exists():
         print("\\n  Installing required packages...")
+        # Try normal install first, then fall back to --break-system-packages
+        # (needed on modern Macs with Homebrew-managed Python)
         result = subprocess.run(
             [sys.executable, "-m", "pip", "install", "-q", "-r", str(req_path)],
             capture_output=True, text=True
         )
+        if result.returncode != 0 and "externally-managed-environment" in result.stderr:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-q", "--break-system-packages", "-r", str(req_path)],
+                capture_output=True, text=True
+            )
         if result.returncode != 0:
-            print(f"  Warning: {result.stderr[:200]}")
+            print(f"  Warning: could not install packages automatically.")
+            print(f"  Run manually: pip3 install mcp httpx python-dotenv")
         else:
             print("  Done.")
 
 
-def update_config(config_path, server_path, license_key):
+def update_config(client_name, config_path, server_path, python_path, license_key):
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config = {}
     if config_path.exists():
@@ -2205,57 +2472,80 @@ def update_config(config_path, server_path, license_key):
             f".backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
         )
         shutil.copy2(config_path, backup_path)
-        print(f"\\n  Backed up existing config to:\\n   {backup_path}")
+        print(f"    Backed up existing config to: {backup_path.name}")
         with open(config_path) as f:
             try:
                 config = json.load(f)
             except json.JSONDecodeError:
-                print("  Existing config was invalid. Starting fresh (backup saved).")
+                print("    Existing config was invalid — starting fresh (backup saved).")
                 config = {}
     if "mcpServers" not in config:
         config["mcpServers"] = {}
     config["mcpServers"]["lawtasksai"] = {
-        "command": "python",
+        "command": python_path,
         "args": [server_path],
         "env": {"LAWTASKSAI_LICENSE_KEY": license_key}
     }
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
-    return True
+    print(f"    Config updated: {config_path}")
 
 
 def main():
     print()
-    print("  " + "=" * 45)
-    print("  LawTasksAI Installer for Claude Desktop")
-    print("  " + "=" * 45)
+    print("  " + "=" * 50)
+    print("  LawTasksAI MCP Installer")
+    print("  " + "=" * 50)
+    print()
+
+    clients = get_mcp_clients()
+    if not clients:
+        print("  No supported MCP clients detected.")
+        print("  Supported: Claude Desktop, Cursor, Windsurf")
+        print()
+        print("  If you have one installed, please configure manually:")
+        print("  https://lawtasksai.com/getting-started.html")
+        print()
+        sys.exit(0)
+
+    print(f"  Detected MCP client(s): {', '.join(clients.keys())}")
     print()
     print("  This installer will:")
     print("    1. Install required Python packages")
-    print("    2. Add LawTasksAI to your Claude Desktop config")
-    print("       (your existing config is backed up first)")
-    print()
-    print("  After installation, restart Claude Desktop to")
-    print("  start using 200+ legal research and drafting skills.")
+    print("    2. Configure LawTasksAI in each detected client")
+    print("       (existing configs are backed up first)")
     print()
     input("  Press Enter to continue (or Ctrl+C to cancel)... ")
-    config_path = get_config_path()
-    server_path = get_server_path()
+
     license_key = get_license_key()
+    server_path = get_server_path()
+    python_path = get_python_path()
+
     install_dependencies()
-    print("\\n  Adding LawTasksAI to Claude Desktop config...")
-    update_config(config_path, server_path, license_key)
-    print("  Config updated.")
+
     print()
-    print("  " + "=" * 45)
+    configured = []
+    for client_name, config_path in clients.items():
+        print(f"  Configuring {client_name}...")
+        try:
+            update_config(client_name, config_path, server_path, python_path, license_key)
+            configured.append(client_name)
+        except Exception as e:
+            print(f"    Warning: could not configure {client_name}: {e}")
+
+    print()
+    print("  " + "=" * 50)
     print("  Installation complete!")
-    print("  " + "=" * 45)
+    print("  " + "=" * 50)
     print()
-    print("  Next steps:")
-    print("    1. Restart Claude Desktop")
-    print('    2. Ask a legal question, like:')
-    print('       "What is the statute of limitations for')
-    print('        breach of contract in Texas?"')
+    if configured:
+        print(f"  Configured: {', '.join(configured)}")
+        print()
+        print("  Next steps:")
+        print("    1. Restart your MCP client(s)")
+        print("    2. Ask a legal question, like:")
+        print('       "What is the statute of limitations for')
+        print('        breach of contract in Texas?"')
     print()
     print("  Support: hello@lawtasksai.com")
     print("  Website: https://lawtasksai.com")
@@ -2264,7 +2554,7 @@ def main():
 if __name__ == "__main__":
     main()
 '''
-        zf.writestr('claude-desktop/install.py', mcp_installer)
+        zf.writestr('mcp/install.py', mcp_installer)
     
     zip_buffer.seek(0)
     
@@ -2272,9 +2562,43 @@ if __name__ == "__main__":
         zip_buffer,
         media_type='application/zip',
         headers={
-            'Content-Disposition': 'attachment; filename=lawtasksai.zip'
+            'Content-Disposition': f'attachment; filename={zip_filename}'
         }
     )
+
+# ============================================
+# Routes: Products (public branding endpoint)
+# ============================================
+
+@app.get("/v1/products/{product_id}")
+async def get_product(product_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Public endpoint: return branding info for a product.
+    Used by landing pages to fetch their colors, name, and domain dynamically.
+    """
+    result = await db.execute(
+        text(
+            "SELECT id, name, display_name, domain, primary_color, accent_color, background_color "
+            "FROM products WHERE id = :pid AND is_active = TRUE"
+        ),
+        {"pid": product_id},
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Product '{product_id}' not found")
+
+    return {
+        "id": row.id,
+        "name": row.name,
+        "display_name": row.display_name or row.name,
+        "domain": row.domain,
+        "colors": {
+            "primary": row.primary_color,
+            "accent": row.accent_color,
+            "background": row.background_color,
+        },
+    }
+
 
 # ============================================
 # Admin Routes (protected in production)
@@ -2316,6 +2640,83 @@ async def get_admin_skill(
         "current_version_content": version.content if version else None,
         "current_version_changelog": version.changelog if version else None,
     }
+
+@admin_router.post("/skills/bulk")
+async def bulk_create_skills(
+    payload: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """Bulk create skills with categories and triggers. Idempotent (upsert)."""
+    skills_data = payload.get("skills", [])
+    created = 0
+    updated = 0
+    errors = []
+
+    for s in skills_data:
+        try:
+            product_id = s.get("product_id", "law")
+            category_name = s.get("category", "General")
+            
+            # Upsert category
+            cat_slug = category_name.lower().replace(' ', '_').replace('&','and').replace(',','').replace('/','_')
+            cat_id = f"{product_id}_{cat_slug}"[:50]
+            result = await db.execute(select(Category).where(Category.id == cat_id))
+            cat = result.scalar_one_or_none()
+            if not cat:
+                cat = Category(id=cat_id, name=category_name, product_id=product_id, display_order=0)
+                db.add(cat)
+                await db.flush()
+
+            # Build skill id
+            skill_id = f"{product_id}_{s['name'].lower().replace(' ','_').replace('/','_')[:60]}"
+            skill_id = ''.join(c for c in skill_id if c.isalnum() or c == '_')
+
+            # Upsert skill
+            result = await db.execute(select(Skill).where(Skill.id == skill_id))
+            skill = result.scalar_one_or_none()
+            complexity = s.get("complexity", "medium")
+            credits = 1 if complexity == "simple" else (2 if complexity == "medium" else 3)
+            
+            if skill:
+                skill.name = s["name"]
+                skill.description = s.get("description", "")
+                skill.category_id = cat_id
+                skill.product_id = product_id
+                skill.credits_per_use = credits
+                skill.is_published = True
+                updated += 1
+            else:
+                skill = Skill(
+                    id=skill_id,
+                    name=s["name"],
+                    description=s.get("description", ""),
+                    category_id=cat_id,
+                    product_id=product_id,
+                    credits_per_use=credits,
+                    requires_upload=False,
+                    execution_type="server",
+                    is_published=True
+                )
+                db.add(skill)
+                created += 1
+
+            await db.flush()
+
+            # Skip skill_versions for bulk import — prompt templates stored separately
+
+            # Store triggers on the skill's triggers array column
+            if s.get("trigger_phrases"):
+                skill.triggers = [p.lower().strip() for p in s["trigger_phrases"]]
+
+            await db.flush()
+
+        except Exception as e:
+            errors.append({"skill": s.get("name","?"), "error": str(e)})
+            await db.rollback()
+
+    await db.commit()
+    return {"success": True, "created": created, "updated": updated, "errors": errors}
+
 
 @admin_router.post("/skills")
 async def create_skill(
@@ -2553,6 +2954,50 @@ async def list_users(db: AsyncSession = Depends(get_db)):
         })
     
     return {"users": users, "count": len(users)}
+
+
+@admin_router.get("/products")
+async def list_products(db: AsyncSession = Depends(get_db)):
+    """Admin: list all products with user counts and skill counts per product."""
+    result = await db.execute(
+        text("""
+            SELECT
+                p.id,
+                p.name,
+                p.display_name,
+                p.domain,
+                p.primary_color,
+                p.accent_color,
+                p.is_active,
+                p.created_at,
+                COUNT(DISTINCT u.id)::int AS user_count,
+                COUNT(DISTINCT s.id)::int AS skill_count
+            FROM products p
+            LEFT JOIN users u ON u.product_id = p.id
+            LEFT JOIN skills s ON s.product_id = p.id AND s.is_published = TRUE
+            GROUP BY p.id, p.name, p.display_name, p.domain,
+                     p.primary_color, p.accent_color, p.is_active, p.created_at
+            ORDER BY p.id
+        """)
+    )
+    rows = result.fetchall()
+    return [
+        {
+            "id": row.id,
+            "name": row.name,
+            "display_name": row.display_name or row.name,
+            "domain": row.domain,
+            "colors": {
+                "primary": row.primary_color,
+                "accent": row.accent_color,
+            },
+            "is_active": row.is_active,
+            "user_count": row.user_count,
+            "skill_count": row.skill_count,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]
 
 
 @admin_router.delete("/users/{user_id}")
@@ -3110,6 +3555,119 @@ async def preview_template(data: dict):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# Multi-tenant Migration Endpoint (one-time use)
+# ============================================
+
+@admin_router.post("/run-migration-001")
+async def run_migration_001(db: AsyncSession = Depends(get_db)):
+    """Run the multi-tenant migration 001. Safe to call multiple times (idempotent)."""
+    results = []
+
+    async def step(name: str, sql: str):
+        try:
+            await db.execute(text(sql))
+            results.append(f"✅ {name}")
+        except Exception as e:
+            results.append(f"⚠️ {name}: {str(e)[:120]}")
+
+    # Step 1: products table
+    await step("Create products table", """
+        CREATE TABLE IF NOT EXISTS products (
+            id VARCHAR(50) PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            display_name VARCHAR(100),
+            domain VARCHAR(100),
+            frontend_url VARCHAR(200),
+            primary_color VARCHAR(20) DEFAULT '#1a1a2e',
+            accent_color VARCHAR(20) DEFAULT '#2563eb',
+            background_color VARCHAR(20) DEFAULT '#fafbfc',
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
+    # Step 2: seed all 27 products
+    products = [
+        ("law", "LawTasksAI", "#1a1a2e", "#2563eb", "#fafbfc"),
+        ("contractor", "ContractorTasksAI", "#1a1a1a", "#F97316", "#FAFAFA"),
+        ("realtor", "RealtorTasksAI", "#1c2b3a", "#C8973A", "#FDF8F3"),
+        ("mortgage", "MortgageTasksAI", "#1a2e1a", "#16A34A", "#F0FDF4"),
+        ("insurance", "InsuranceTasksAI", "#1e293b", "#0EA5E9", "#F0F9FF"),
+        ("hr", "HRTasksAI", "#2d1b4e", "#7C3AED", "#FAF5FF"),
+        ("accounting", "AccountingTasksAI", "#14213d", "#1D4ED8", "#EFF6FF"),
+        ("chiropractor", "ChiropractorTasksAI", "#1a3a3a", "#0D9488", "#F0FDFA"),
+        ("vet", "VetTasksAI", "#1a3520", "#22C55E", "#F0FDF4"),
+        ("dentist", "DentistTasksAI", "#1e3a5f", "#38BDF8", "#F0F9FF"),
+        ("plumber", "PlumberTasksAI", "#1a2744", "#3B82F6", "#F8FAFF"),
+        ("landlord", "LandlordTasksAI", "#2c1a0e", "#B45309", "#FFFBF5"),
+        ("nutritionist", "NutritionistTasksAI", "#1a3320", "#65A30D", "#F7FEE7"),
+        ("personaltrainer", "PersonalTrainerTasksAI", "#1a1a1a", "#EF4444", "#FFF5F5"),
+        ("therapist", "TherapistTasksAI", "#2d2640", "#8B5CF6", "#F5F3FF"),
+        ("eventplanner", "EventPlannerTasksAI", "#3b0764", "#D946EF", "#FDF4FF"),
+        ("travelagent", "TravelAgentTasksAI", "#0f3460", "#F59E0B", "#FFFBEB"),
+        ("funeral", "FuneralTasksAI", "#1a1a2a", "#6B7280", "#F9FAFB"),
+        ("pastor", "PastorTasksAI", "#2d1b00", "#D97706", "#FFFBEB"),
+        ("principal", "PrincipalTasksAI", "#1e3a5f", "#2563EB", "#EFF6FF"),
+        ("farmer", "FarmerTasksAI", "#2d1f00", "#92400E", "#FEFCE8"),
+        ("restaurant", "RestaurantTasksAI", "#1a0a00", "#DC2626", "#FFF5F5"),
+        ("salon", "SalonTasksAI", "#2d0a2d", "#EC4899", "#FDF2F8"),
+        ("mortician", "MorticiaryTasksAI", "#1c1c1c", "#9CA3AF", "#F3F4F6"),
+        ("churchadmin", "ChurchAdminTasksAI", "#1e2d40", "#6366F1", "#EEF2FF"),
+        ("militaryspouse", "MilitarySpouseTasksAI", "#1a2340", "#1E40AF", "#EFF6FF"),
+        ("electrician", "ElectricianTasksAI", "#1a1a00", "#EAB308", "#FEFCE8"),
+        ("teacher", "TeacherTasksAI", "#1a2744", "#2563EB", "#EFF6FF"),
+        ("designer", "DesignerTasksAI", "#2d1a3a", "#C026D3", "#FDF4FF"),
+    ]
+    for p in products:
+        await step(f"Seed product: {p[0]}", f"""
+            INSERT INTO products (id, name, primary_color, accent_color, background_color)
+            VALUES ('{p[0]}', '{p[1]}', '{p[2]}', '{p[3]}', '{p[4]}')
+            ON CONFLICT (id) DO NOTHING
+        """)
+
+    # Step 3: add product_id to all tables
+    for table in ["users", "skills", "categories", "usage_logs", "licenses", "credit_transactions"]:
+        await step(f"Add product_id to {table}", f"""
+            ALTER TABLE {table} ADD COLUMN IF NOT EXISTS product_id VARCHAR(50) DEFAULT 'law'
+        """)
+
+    # Step 4: product_credit_packs table
+    await step("Create product_credit_packs table", """
+        CREATE TABLE IF NOT EXISTS product_credit_packs (
+            id SERIAL PRIMARY KEY,
+            product_id VARCHAR(50) REFERENCES products(id),
+            pack_key VARCHAR(50) NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            credits INTEGER NOT NULL,
+            price_cents INTEGER NOT NULL,
+            UNIQUE(product_id, pack_key)
+        )
+    """)
+
+    # Step 5: seed pricing tiers for all 27 products
+    tiers = [
+        ("starter", "Starter", 15, 2900),
+        ("pro", "Pro", 60, 9900),
+        ("business", "Business", 150, 19900),
+        ("power", "Power", 350, 34900),
+        ("unlimited", "Unlimited", 800, 59900),
+        ("enterprise", "Enterprise", 2000, 99900),
+    ]
+    # Include teacher and designer in pricing seed even if already in products list
+    product_ids = [p[0] for p in products]
+    for pid in product_ids:
+        for key, name, credits, price in tiers:
+            await step(f"Seed {pid}/{key}", f"""
+                INSERT INTO product_credit_packs (product_id, pack_key, name, credits, price_cents)
+                VALUES ('{pid}', '{key}', '{name}', {credits}, {price})
+                ON CONFLICT (product_id, pack_key) DO NOTHING
+            """)
+
+    await db.commit()
+    return {"migration": "001_add_multitenant", "steps": len(results), "results": results}
 
 
 # Register admin router (all routes protected by X-Admin-Secret)
