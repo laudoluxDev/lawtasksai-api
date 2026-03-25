@@ -27,6 +27,7 @@ from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 import uuid
 import base64
 from io import BytesIO
+import httpx
 
 # Document generation (install: pip install python-docx openpyxl)
 try:
@@ -1763,12 +1764,20 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     # Handle checkout.session.completed
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
-        
+        session_id = session.get('id', '')
+
+        # Idempotency: skip if this session was already processed
+        existing_tx = await db.execute(
+            select(CreditTransaction).where(CreditTransaction.reference_id == session_id)
+        )
+        if existing_tx.scalar_one_or_none():
+            return {"status": "skipped", "reason": "already_processed"}
+
         # Get customer email
         customer_email = session.get('customer_details', {}).get('email')
         if not customer_email:
             return {"status": "skipped", "reason": "no email"}
-        
+
         # Get credits and pack name from metadata
         meta = session.get('metadata', {})
         credits = int(meta.get('credits', 0))
@@ -1776,7 +1785,8 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         if credits == 0:
             return {"status": "skipped", "reason": "no credits"}
 
-        # Bar / attorney info from metadata
+        # Product ID and bar/attorney info from metadata
+        purchase_product_id = meta.get('product_id', 'law')
         bar_profile = {
             "attorney_name": meta.get('attorney_name', ''),
             "bar_jurisdiction": meta.get('bar_jurisdiction', ''),
@@ -1785,67 +1795,87 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             "attestation": meta.get('attestation', 'false') == 'true',
         }
 
-        # Find or create user
+        # Look up product domain for email/download links
+        purchase_product_domain = "lawtasksai.com"
+        purchase_product_name = "LawTasksAI"
+        try:
+            prod_result = await db.execute(
+                text("SELECT domain, name FROM products WHERE id = :pid AND is_active = TRUE"),
+                {"pid": purchase_product_id}
+            )
+            prod_row = prod_result.fetchone()
+            if prod_row and prod_row.domain:
+                purchase_product_domain = prod_row.domain
+                purchase_product_name = prod_row.name
+        except Exception:
+            pass
+
+        # Find or create user by email (one account per email, product tracked separately)
         result = await db.execute(select(User).where(User.email == customer_email))
         user = result.scalar_one_or_none()
-        
+
         if not user:
-            # Create new user
+            # New customer — create account tagged to this product
             user = User(
                 email=customer_email,
                 name=bar_profile.get('attorney_name') or None,
                 firm_name=bar_profile.get('firm_name') or None,
-                password_hash=hash_password(secrets.token_hex(16)),  # Random password
+                password_hash=hash_password(secrets.token_hex(16)),
                 credits_balance=credits,
                 profile=bar_profile,
+                product_id=purchase_product_id,
             )
             db.add(user)
-            await db.flush()
-            
-            # Create license
+            await db.flush()  # get user.id
+
             license = License(
                 license_key=generate_license_key(),
                 user_id=user.id,
                 type="credits",
                 credits_purchased=credits,
-                credits_remaining=credits
+                credits_remaining=credits,
             )
             db.add(license)
+            await db.flush()  # get license.id
         else:
-            # Add credits to existing license
-            result = await db.execute(
-                select(License).where(
-                    License.user_id == user.id,
-                    License.status == "active"
-                ).order_by(License.created_at.desc())
-            )
-            license = result.scalar_one_or_none()
-            
-            if license:
-                license.credits_remaining += credits
-                license.credits_purchased += credits
-            else:
-                # Create new license
-                license = License(
-                    license_key=generate_license_key(),
-                    user_id=user.id,
-                    type="credits",
-                    credits_purchased=credits,
-                    credits_remaining=credits
-                )
-                db.add(license)
-            
+            # Existing customer — add credits, update product_id if this is a new product for them
             user.credits_balance += credits
-            # Merge bar profile info (update if provided, don't overwrite with empty)
+            # Only update product_id if account has no product yet
+            if not user.product_id:
+                user.product_id = purchase_product_id
+            # Merge bar profile (don't overwrite with empty)
             existing_profile = user.profile or {}
             for k, v in bar_profile.items():
-                if v:  # only overwrite if new value is non-empty
+                if v:
                     existing_profile[k] = v
             user.profile = existing_profile
             if bar_profile.get('attorney_name') and not user.name:
                 user.name = bar_profile['attorney_name']
             if bar_profile.get('firm_name') and not user.firm_name:
                 user.firm_name = bar_profile['firm_name']
+
+            # Find or create license
+            lic_result = await db.execute(
+                select(License).where(
+                    License.user_id == user.id,
+                    License.status == "active",
+                ).order_by(License.created_at.desc())
+            )
+            license = lic_result.scalar_one_or_none()
+
+            if not license:
+                license = License(
+                    license_key=generate_license_key(),
+                    user_id=user.id,
+                    type="credits",
+                    credits_purchased=credits,
+                    credits_remaining=credits,
+                )
+                db.add(license)
+                await db.flush()  # get license.id
+            else:
+                license.credits_remaining += credits
+                license.credits_purchased += credits
 
         # Log transaction
         tx = CreditTransaction(
@@ -1855,22 +1885,102 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             amount=credits,
             balance_after=license.credits_remaining,
             reference_id=session['id'],
-            description=f"Purchased {CREDIT_PACKS.get(pack_name, {}).get('name', pack_name)} via Stripe checkout"
+            description=f"Purchased {pack_name} pack via Stripe checkout"
         )
         db.add(tx)
-        
+
         await db.commit()
+
+        # Send confirmation email via Zoho SMTP or SendGrid
+        try:
+            download_url = f"https://api.lawtasksai.com/download/loader/{license.license_key}"
+            success_url = f"https://{purchase_product_domain}/success?session_id={session['id']}"
+            email_subject = f"Your {purchase_product_name} license key and download link"
+            email_body = f"""Thank you for purchasing {purchase_product_name}!
+
+Your license key: {license.license_key}
+Credits: {credits}
+
+Download your skills package here:
+{download_url}
+
+Or visit your purchase summary:
+{success_url}
+
+Keep this email — your license key gives you access to your downloads anytime.
+
+Questions? hello@{purchase_product_domain}
+"""
+            from_addr = f"hello@{purchase_product_domain}"
+            from_name = purchase_product_name
+            email_sent = False
+
+            # Send via Zoho Mail API (OAuth) — no password needed
+            try:
+                zoho_client_id = os.getenv("ZOHO_CLIENT_ID", "")
+                zoho_client_secret = os.getenv("ZOHO_CLIENT_SECRET", "")
+                zoho_refresh_token = os.getenv("ZOHO_REFRESH_TOKEN", "")
+                zoho_org_id = "914522041"
+                zoho_zuid = "730494764"
+
+                if zoho_client_id and zoho_refresh_token:
+                    # Get fresh access token
+                    token_resp = await asyncio.get_event_loop().run_in_executor(None, lambda: __import__('urllib.request', fromlist=['urlopen']).urlopen(
+                        __import__('urllib.request', fromlist=['Request']).Request(
+                            "https://accounts.zoho.com/oauth/v2/token",
+                            data=f"refresh_token={zoho_refresh_token}&client_id={zoho_client_id}&client_secret={zoho_client_secret}&grant_type=refresh_token".encode(),
+                            method="POST"
+                        ), timeout=10
+                    ))
+                    token_data = json.loads(token_resp.read())
+                    access_token = token_data.get("access_token")
+
+                    if access_token:
+                        # Send via Zoho Mail API
+                        mail_payload = json.dumps({
+                            "fromAddress": from_addr,
+                            "toAddress": customer_email,
+                            "subject": email_subject,
+                            "content": email_body,
+                            "mailFormat": "plaintext"
+                        }).encode()
+                        import urllib.request as _ur
+                        mail_req = _ur.Request(
+                            f"https://mail.zoho.com/api/accounts/{zoho_zuid}/messages",
+                            data=mail_payload,
+                            headers={
+                                "Authorization": f"Zoho-oauthtoken {access_token}",
+                                "Content-Type": "application/json"
+                            },
+                            method="POST"
+                        )
+                        with _ur.urlopen(mail_req, timeout=10) as mr:
+                            resp_data = json.loads(mr.read())
+                            print(f"[Email] sent via Zoho API to {customer_email}: {resp_data.get('status', {}).get('code')}")
+                        email_sent = True
+                    else:
+                        print(f"[Email] Zoho token refresh failed: {token_data}")
+            except Exception as zoho_err:
+                print(f"[Email] Zoho API send failed: {zoho_err}")
+
+            if not email_sent:
+                print(f"[Email] skipped for {customer_email}: Zoho API send failed or not configured")
+        except Exception as email_err:
+            print(f"[Email] failed for {customer_email}: {email_err}")
 
         # Add buyer to Zoho Campaigns subscriber list
         await add_to_zoho_list(customer_email, user.name or "")
-        
-        return {"status": "success", "credits_added": credits}
+
+        return {"status": "success", "credits_added": credits, "product_id": purchase_product_id}
     
     return {"status": "ignored", "event_type": event['type']}
 
 @app.get("/checkout/session/{session_id}")
 async def get_checkout_session(session_id: str, db: AsyncSession = Depends(get_db)):
-    """Get checkout session details (for success page)."""
+    """Get checkout session details (for success page).
+    If webhook hasn't fired yet, provisions the user on the spot so the
+    success page always works regardless of webhook timing.
+    """
     try:
         session = stripe.checkout.Session.retrieve(session_id)
         
@@ -1878,15 +1988,46 @@ async def get_checkout_session(session_id: str, db: AsyncSession = Depends(get_d
             raise HTTPException(status_code=400, detail="Payment not completed")
         
         customer_email = session.get('customer_details', {}).get('email')
-        credits = int(session.get('metadata', {}).get('credits', 0))
-        
-        # Get user's license key
+        meta = session.get('metadata', {})
+        credits = int(meta.get('credits', 0))
+        purchase_product_id = meta.get('product_id', 'law')
+
+        # Get user — provision if webhook hasn't fired yet
         result = await db.execute(select(User).where(User.email == customer_email))
         user = result.scalar_one_or_none()
-        
+
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
+            # Webhook hasn't fired yet — provision now (webhook will be idempotent)
+            user = User(
+                email=customer_email,
+                password_hash=hash_password(secrets.token_hex(16)),
+                credits_balance=credits,
+                product_id=purchase_product_id,
+            )
+            db.add(user)
+            await db.flush()
+            license = License(
+                license_key=generate_license_key(),
+                user_id=user.id,
+                type="credits",
+                credits_purchased=credits,
+                credits_remaining=credits,
+            )
+            db.add(license)
+            # Log transaction with session_id so webhook skips it later
+            tx = CreditTransaction(
+                user_id=user.id,
+                license_id=license.id,
+                type="purchase",
+                amount=credits,
+                balance_after=credits,
+                reference_id=session_id,
+                description=f"Purchased {meta.get('pack','unknown')} pack via Stripe checkout"
+            )
+            db.add(tx)
+            await db.flush()
+            await db.commit()
+
         result = await db.execute(
             select(License).where(
                 License.user_id == user.id,
@@ -1894,12 +2035,13 @@ async def get_checkout_session(session_id: str, db: AsyncSession = Depends(get_d
             ).order_by(License.created_at.desc())
         )
         license = result.scalar_one_or_none()
-        
+
         return {
             "email": customer_email,
             "credits_purchased": credits,
             "license_key": license.license_key if license else None,
-            "total_credits": license.credits_remaining if license else credits
+            "total_credits": license.credits_remaining if license else credits,
+            "product_id": user.product_id or "law"
         }
     except stripe.error.InvalidRequestError:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1950,6 +2092,8 @@ async def download_loader(license_key: str, db: AsyncSession = Depends(get_db)):
         pass
 
     zip_filename = f"{prod_domain.split('.')[0]}.zip"  # e.g. contractortasksai.zip
+    prod_slug = prod_domain.split('.')[0]   # e.g. "realtortasksai"
+    env_prefix = prod_slug.upper()          # e.g. "REALTORTASKSAI"
 
     # Create config.json with license key
     config = {
@@ -2014,14 +2158,12 @@ Just ask for any task — your AI will know exactly what to do.
 
 ## ⚠️ Confidentiality Notice
 
-Some skills process document text on LawTasksAI servers. For highly sensitive 
-or privileged materials, ensure you have appropriate client consent. Skills 
-marked with 🔒 run entirely locally for maximum confidentiality.
+Skills run entirely locally on your machine. Your data never leaves your computer.
 
 ## Need Help?
 
-- Email: hello@lawtasksai.com
-- Docs: https://lawtasksai.com/docs
+- Email: {prod_support_email}
+- Website: https://{prod_domain}
 '''
         zf.writestr('openclaw/README.md', readme)
     
@@ -2029,17 +2171,16 @@ marked with 🔒 run entirely locally for maximum confidentiality.
         # Add MCP Server for Claude Desktop/Cursor
         # =========================================
         
-        mcp_server_py = '''"""
-LawTasksAI MCP Server — Smart Router
+        mcp_server_py = f'''"""
+{prod_name} MCP Server — Smart Router
 
 Instead of exposing 200+ tools (token bloat), we expose 4 clean tools:
-  1. lawtasks_search     — Find the right skill for a legal question
-  2. lawtasks_execute    — Get a skill's expert framework (runs locally)
-  3. lawtasks_balance    — Check credit balance
-  4. lawtasks_categories — Browse skill categories
+  1. {prod_slug}_search     — Find the right skill for a task
+  2. {prod_slug}_execute    — Get a skill\'s expert framework (runs locally)
+  3. {prod_slug}_balance    — Check credit balance
+  4. {prod_slug}_categories — Browse skill categories
 
-LawTasksAI.com never sees your prompts, your client files, or your client data. Skills run entirely on your machine — your documents stay local if using OpenClaw, or go to your LLM provider if using a cloud AI.
-For full details see our Zero Data Retention & ABA Compliance guide: https://lawtasksai.com/zdr-aba-compliance-guide
+{prod_domain} never sees your prompts, your client files, or your client data. Skills run entirely on your machine — your documents stay local if using OpenClaw, or go to your LLM provider if using a cloud AI.
 """
 
 import os
@@ -2052,74 +2193,75 @@ from mcp.types import GetPromptResult
 
 load_dotenv()
 
-API_BASE = os.getenv("LAWTASKSAI_API_BASE", "https://api.lawtasksai.com")
-LICENSE_KEY = os.getenv("LAWTASKSAI_LICENSE_KEY", "")
+API_BASE = os.getenv("{env_prefix}_API_BASE", "https://api.lawtasksai.com")
+LICENSE_KEY = os.getenv("{env_prefix}_LICENSE_KEY", "")
 
 if not LICENSE_KEY:
-    raise ValueError("LAWTASKSAI_LICENSE_KEY is required. Set it in .env file.")
+    raise ValueError("{env_prefix}_LICENSE_KEY is required. Set it in .env file.")
 
-AUTH_HEADERS = {
-    "Authorization": f"Bearer {LICENSE_KEY}",
+AUTH_HEADERS = {{
+    "Authorization": f"Bearer {{LICENSE_KEY}}",
     "Content-Type": "application/json",
     "X-Client-Type": "mcp-server",
     "X-Client-Version": "1.4.0",
-}
+    "X-Product-ID": "{user_product_id}",
+}}
 
 async def api_get(path):
     async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(f"{API_BASE}{path}", headers=AUTH_HEADERS)
+        resp = await client.get(f"{{API_BASE}}{{path}}", headers=AUTH_HEADERS)
         resp.raise_for_status()
         return resp.json()
 
 TOOLS = [
     Tool(
-        name="lawtasks_search",
+        name="{prod_slug}_search",
         description=(
-            "Search for legal skills by keyword. "
+            "Search for {prod_name} skills by keyword. "
             "After getting results, ALWAYS present the top matches to the user as a numbered list "
             "with the skill name and a brief description of each. "
-            "Then ask the user: 'Which of these best fits your situation? (reply with a number, "
-            "or describe your task differently for a new search)' "
-            "NEVER call lawtasks_execute without explicit user confirmation of which skill to use."
+            "Then ask the user: \'Which of these best fits your situation? (reply with a number, "
+            "or describe your task differently for a new search)\' "
+            "NEVER call {prod_slug}_execute without explicit user confirmation of which skill to use."
         ),
-        inputSchema={
+        inputSchema={{
             "type": "object",
-            "properties": {
-                "query": {
+            "properties": {{
+                "query": {{
                     "type": "string",
-                    "description": "Legal topic to search for (e.g. 'statute of limitations', 'motion to compel', 'NDA review')"
-                }
-            },
+                    "description": "Topic to search for (e.g. \'listing description\', \'offer letter\', \'transaction checklist\')"
+                }}
+            }},
             "required": ["query"]
-        },
+        }},
     ),
     Tool(
-        name="lawtasks_execute",
+        name="{prod_slug}_execute",
         description=(
-            "Get a skill's expert analysis framework by skill ID. "
+            "Get a skill\'s expert analysis framework by skill ID. "
             "Returns the full prompt/schema for your AI to apply locally. Costs 1 credit. "
-            "Only call this after the user has confirmed which skill they want from lawtasks_search results."
+            "Only call this after the user has confirmed which skill they want from {prod_slug}_search results."
         ),
-        inputSchema={
+        inputSchema={{
             "type": "object",
-            "properties": {
-                "skill_id": {
+            "properties": {{
+                "skill_id": {{
                     "type": "string",
-                    "description": "Skill ID from lawtasks_search results, confirmed by the user"
-                }
-            },
+                    "description": "Skill ID from {prod_slug}_search results, confirmed by the user"
+                }}
+            }},
             "required": ["skill_id"]
-        },
+        }},
     ),
     Tool(
-        name="lawtasks_balance",
-        description="Check your remaining LawTasksAI credit balance.",
-        inputSchema={"type": "object", "properties": {}},
+        name="{prod_slug}_balance",
+        description="Check your remaining {prod_name} credit balance.",
+        inputSchema={{"type": "object", "properties": {{}}}},
     ),
     Tool(
-        name="lawtasks_categories",
-        description="List all available skill categories to browse by practice area.",
-        inputSchema={"type": "object", "properties": {}},
+        name="{prod_slug}_categories",
+        description="List all available skill categories to browse by workflow area.",
+        inputSchema={{"type": "object", "properties": {{}}}},
     ),
 ]
 
@@ -2130,36 +2272,36 @@ TOOLS = [
 # ─────────────────────────────────────────────
 
 SYSTEM_PROMPT_TEXT = """\
-You have access to LawTasksAI, a library of 206+ expert legal task skills for attorneys.
+You have access to {prod_name}, a library of 200+ expert task skills for {prod_name} users.
 
-## How to use LawTasksAI
+## How to use {prod_name}
 
 **Always follow this 3-step flow:**
 
-1. **Search** — Call lawtasks_search with the user's legal topic to find matching skills.
+1. **Search** — Call {prod_slug}_search with the user\'s topic to find matching skills.
 
 2. **Confirm** — Present the top results to the user as a numbered list, like this:
    > I found these skills that match your request:
-   > 1. **Motion to Compel Discovery** — Drafts a motion compelling an opposing party to respond to discovery requests.
-   > 2. **Discovery Deficiency Letter** — Drafts a letter identifying deficiencies in discovery responses.
-   > 3. **Request for Production** — Prepares a formal request for production of documents.
+   > 1. **[Skill Name]** — [brief description]
+   > 2. **[Skill Name]** — [brief description]
+   > 3. **[Skill Name]** — [brief description]
    >
-   > Which of these best fits your situation? (Reply with a number, or describe your task differently and I'll search again.)
+   > Which of these best fits your situation? (Reply with a number, or describe your task differently and I\'ll search again.)
 
-3. **Execute** — Only after the user confirms their choice, call lawtasks_execute with that skill's ID.
+3. **Execute** — Only after the user confirms their choice, call {prod_slug}_execute with that skill\'s ID.
 
 ## Important rules
 - NEVER auto-execute a skill without explicit user confirmation.
-- If the user's reply is ambiguous, ask a clarifying question rather than guessing.
-- If no skills match, suggest the user try lawtasks_categories to browse by practice area.
-- After executing a skill, apply its framework to the user's specific facts and produce the full output.
+- If the user\'s reply is ambiguous, ask a clarifying question rather than guessing.
+- If no skills match, suggest the user try {prod_slug}_categories to browse by workflow area.
+- After executing a skill, apply its framework to the user\'s specific details and produce the full output.
 - Always remind the user that outputs require their professional review and judgment.
 """
 
 PROMPTS = [
     Prompt(
-        name="lawtasksai-workflow",
-        description="LawTasksAI skill selection workflow — always confirm skill choice with user before executing.",
+        name="{prod_slug}-workflow",
+        description="{prod_name} skill selection workflow — always confirm skill choice with user before executing.",
         arguments=[],
     )
 ]
@@ -2175,7 +2317,7 @@ async def get_skills():
             _skills_cache = []
     return _skills_cache
 
-server = Server("lawtasksai")
+server = Server("{prod_slug}")
 
 @server.list_prompts()
 async def list_prompts():
@@ -2183,9 +2325,9 @@ async def list_prompts():
 
 @server.get_prompt()
 async def get_prompt(name, arguments):
-    if name == "lawtasksai-workflow":
+    if name == "{prod_slug}-workflow":
         return GetPromptResult(
-            description="LawTasksAI skill selection workflow",
+            description="{prod_name} skill selection workflow",
             messages=[
                 PromptMessage(
                     role="user",
@@ -2193,7 +2335,7 @@ async def get_prompt(name, arguments):
                 )
             ]
         )
-    raise ValueError(f"Unknown prompt: {name}")
+    raise ValueError(f"Unknown prompt: {{name}}")
 
 @server.list_tools()
 async def list_tools():
@@ -2202,16 +2344,15 @@ async def list_tools():
 @server.call_tool()
 async def call_tool(name, arguments):
     try:
-        if name == "lawtasks_search":
+        if name == "{prod_slug}_search":
             skills = await get_skills()
             query = arguments.get("query", "").lower()
-            STOP_WORDS = {"a","an","the","and","or","of","in","to","for","is","are",
-                          "with","at","by","on","from","as","it","its","be","was","can"}
+            STOP_WORDS = {{"a","an","the","and","or","of","in","to","for","is","are",
+                          "with","at","by","on","from","as","it","its","be","was","can"}}
             words = [w for w in query.split() if w not in STOP_WORDS and len(w) > 2]
             scored = []
             for s in skills:
                 text = (s.get("name", "") + " " + s.get("description", "")).lower()
-                # Weight name matches higher than description matches
                 name_text = s.get("name", "").lower()
                 score = sum(3 if w in name_text else 1 for w in words if w in text)
                 if score > 0:
@@ -2221,52 +2362,52 @@ async def call_tool(name, arguments):
             if not matches:
                 matches = skills[:5]
 
-            lines = [f"**Top {len(matches)} matching skills for '{arguments.get('query', '')}':**\n"]
+            lines = [f"**Top {{len(matches)}} matching skills for \'{{arguments.get(\'query\', \'\')}}\':**\\n"]
             for i, s in enumerate(matches, 1):
                 desc = s.get("description", "")[:100]
-                lines.append(f"{i}. **{s['name']}** (`{s['id']}`)\n   {desc}\n")
+                lines.append(f"{{i}}. **{{s[\'name\']}}** (`{{s[\'id\']}}`)\n   {{desc}}\n")
             lines.append("---")
-            lines.append("*Present these options to the user and ask which one they'd like to use before calling lawtasks_execute.*")
-            return [TextContent(type="text", text="\n".join(lines))]
+            lines.append(f"*Present these options to the user and ask which one they\'d like to use before calling {prod_slug}_execute.*")
+            return [TextContent(type="text", text="\\n".join(lines))]
 
-        if name == "lawtasks_execute":
+        if name == "{prod_slug}_execute":
             skill_id = arguments.get("skill_id", "")
             if not skill_id:
-                return [TextContent(type="text", text="Error: skill_id is required. Use lawtasks_search first to find a skill ID.")]
-            result = await api_get(f"/v1/skills/{skill_id}/schema")
+                return [TextContent(type="text", text=f"Error: skill_id is required. Use {prod_slug}_search first to find a skill ID.")]
+            result = await api_get(f"/v1/skills/{{skill_id}}/schema")
             schema = result.get("schema", "")
             instructions = result.get("instructions", "")
             credits_used = result.get("credits_used", 1)
             credits_remaining = result.get("credits_remaining", "?")
-            text = f"# {result.get('skill_name', skill_id)}\n\n"
-            text += f"{instructions}\n\n"
-            text += f"## Expert Analysis Framework\n\n{schema}\n\n"
-            text += f"---\n*Credits used: {credits_used} | Remaining: {credits_remaining}*"
+            text = f"# {{result.get(\'skill_name\', skill_id)}}\\n\\n"
+            text += f"{{instructions}}\\n\\n"
+            text += f"## Expert Analysis Framework\\n\\n{{schema}}\\n\\n"
+            text += f"---\\n*Credits used: {{credits_used}} | Remaining: {{credits_remaining}}*"
             return [TextContent(type="text", text=text)]
 
-        if name == "lawtasks_balance":
+        if name == "{prod_slug}_balance":
             b = await api_get("/v1/credits/balance")
-            return [TextContent(type="text", text=f"**Credit Balance:** {b.get('credits_balance', '?')} credits")]
+            return [TextContent(type="text", text=f"**Credit Balance:** {{b.get(\'credits_balance\', \'?\')}} credits")]
 
-        if name == "lawtasks_categories":
+        if name == "{prod_slug}_categories":
             cats = await api_get("/v1/categories")
             if isinstance(cats, list):
-                lines = ["**Skill Categories:**\n"]
+                lines = ["**Skill Categories:**\\n"]
                 for c in cats:
-                    lines.append(f"- **{c.get('name', '?')}** (`{c.get('id', '?')}`)")
-                return [TextContent(type="text", text="\n".join(lines))]
+                    lines.append(f"- **{{c.get(\'name\', \'?\')}}** (`{{c.get(\'id\', \'?\')}}`)")
+                return [TextContent(type="text", text="\\n".join(lines))]
             return [TextContent(type="text", text=str(cats))]
 
-        return [TextContent(type="text", text=f"Unknown tool: {name}")]
+        return [TextContent(type="text", text=f"Unknown tool: {{name}}")]
 
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 402:
-            return [TextContent(type="text", text="Insufficient credits. Purchase more at https://lawtasksai.com/#pricing")]
+            return [TextContent(type="text", text=f"Insufficient credits. Purchase more at https://{prod_domain}/#pricing")]
         if e.response.status_code == 401:
             return [TextContent(type="text", text="Invalid or expired license key. Check your .env file.")]
-        return [TextContent(type="text", text=f"API error ({e.response.status_code}): {e.response.text[:200]}")]
+        return [TextContent(type="text", text=f"API error ({{e.response.status_code}}): {{e.response.text[:200]}}")]
     except Exception as e:
-        return [TextContent(type="text", text=f"Error: {e}")]
+        return [TextContent(type="text", text=f"Error: {{e}}")]
 
 if __name__ == "__main__":
     import asyncio
@@ -2289,12 +2430,12 @@ python-dotenv>=1.0.0
 '''
         zf.writestr('mcp/requirements.txt', mcp_requirements)
         
-        mcp_env = f'''LAWTASKSAI_LICENSE_KEY={license_key}
-LAWTASKSAI_API_BASE={API_BASE_URL}
+        mcp_env = f'''{env_prefix}_LICENSE_KEY={license_key}
+{env_prefix}_API_BASE={API_BASE_URL}
 '''
         zf.writestr('mcp/.env', mcp_env)
         
-        mcp_readme = f'''# LawTasksAI MCP Server
+        mcp_readme = f'''# {prod_name} MCP Server
 
 Works with Claude Desktop, Cursor, Windsurf, and any MCP-compatible AI client.
 Requires Python 3.8 or later.
@@ -2320,10 +2461,7 @@ The installer will:
 
 ### 2. Restart your MCP client (Claude Desktop, Cursor, etc.)
 
-### 3. Ask a legal question!
-- "What\'s the statute of limitations for negligence in Colorado?"
-- "Draft a motion to compel discovery in a breach of contract case."
-- Attach a document: "Analyze this NDA for unfavorable terms"
+### 3. Start using your skills!
 
 ## Your License Key
 `{license_key}` (already configured — no need to enter it again)
@@ -2336,20 +2474,20 @@ The installer will:
 
 ## Don\'t have Python?
 
-Use LawTasksAI with OpenClaw instead —
+Use {prod_name} with OpenClaw instead —
 no Python, no terminal, no config files required. See the openclaw folder
-in this download, or visit https://lawtasksai.com/getting-started.html
+in this download, or visit https://{prod_domain}/getting-started.html
 
 ## Support
-hello@lawtasksai.com | https://lawtasksai.com
+{prod_support_email} | https://{prod_domain}
 '''
         zf.writestr('mcp/README.md', mcp_readme)
         
-        mcp_installer = '''#!/usr/bin/env python3
+        mcp_installer = f'''#!/usr/bin/env python3
 """
-LawTasksAI MCP Installer
+{prod_name} MCP Installer
 
-Detects and configures LawTasksAI for all supported MCP clients:
+Detects and configures {prod_name} for all supported MCP clients:
   - Claude Desktop
   - Cursor
   - Windsurf
@@ -2389,11 +2527,11 @@ def get_license_key():
     if env_path.exists():
         with open(env_path) as f:
             for line in f:
-                if line.startswith("LAWTASKSAI_LICENSE_KEY="):
+                if line.startswith("{env_prefix}_LICENSE_KEY="):
                     key = line.split("=", 1)[1].strip()
                     if key and key != "YOUR_KEY_HERE":
                         return key
-    print("\\n  Enter your LawTasksAI license key (starts with lt_):")
+    print("\\\\n  Enter your {prod_name} license key:")
     key = input("   > ").strip()
     if not key:
         print("  No license key provided. Check your purchase confirmation email.")
@@ -2402,9 +2540,9 @@ def get_license_key():
 
 
 def get_mcp_clients():
-    """Return dict of {client_name: config_path} for all installed MCP clients."""
+    """Return dict of {{client_name: config_path}} for all installed MCP clients."""
     system = platform.system()
-    clients = {}
+    clients = {{}}
 
     if system == "Darwin":
         claude_path = Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
@@ -2423,14 +2561,14 @@ def get_mcp_clients():
 
     # Only include clients that are already installed (config dir exists or app exists)
     if system == "Darwin":
-        if (Path.home() / "Applications" / "Claude.app").exists() or \\
-           (Path("/Applications/Claude.app")).exists() or \\
+        if (Path.home() / "Applications" / "Claude.app").exists() or \\\\
+           (Path("/Applications/Claude.app")).exists() or \\\\
            claude_path.parent.exists():
             clients["Claude Desktop"] = claude_path
-        if (Path.home() / "Applications" / "Cursor.app").exists() or \\
+        if (Path.home() / "Applications" / "Cursor.app").exists() or \\\\
            Path("/Applications/Cursor.app").exists():
             clients["Cursor"] = cursor_path
-        if (Path.home() / "Applications" / "Windsurf.app").exists() or \\
+        if (Path.home() / "Applications" / "Windsurf.app").exists() or \\\\
            Path("/Applications/Windsurf.app").exists():
             clients["Windsurf"] = windsurf_path
     else:
@@ -2445,9 +2583,7 @@ def get_mcp_clients():
 def install_dependencies():
     req_path = Path(__file__).parent / "requirements.txt"
     if req_path.exists():
-        print("\\n  Installing required packages...")
-        # Try normal install first, then fall back to --break-system-packages
-        # (needed on modern Macs with Homebrew-managed Python)
+        print("\\\\n  Installing required packages...")
         result = subprocess.run(
             [sys.executable, "-m", "pip", "install", "-q", "-r", str(req_path)],
             capture_output=True, text=True
@@ -2466,35 +2602,35 @@ def install_dependencies():
 
 def update_config(client_name, config_path, server_path, python_path, license_key):
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config = {}
+    config = {{}}
     if config_path.exists():
         backup_path = config_path.with_suffix(
-            f".backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+            f".backup-{{datetime.now().strftime(\'%Y%m%d-%H%M%S\')}}.json"
         )
         shutil.copy2(config_path, backup_path)
-        print(f"    Backed up existing config to: {backup_path.name}")
+        print(f"    Backed up existing config to: {{backup_path.name}}")
         with open(config_path) as f:
             try:
                 config = json.load(f)
             except json.JSONDecodeError:
                 print("    Existing config was invalid — starting fresh (backup saved).")
-                config = {}
+                config = {{}}
     if "mcpServers" not in config:
-        config["mcpServers"] = {}
-    config["mcpServers"]["lawtasksai"] = {
+        config["mcpServers"] = {{}}
+    config["mcpServers"]["{prod_slug}"] = {{
         "command": python_path,
         "args": [server_path],
-        "env": {"LAWTASKSAI_LICENSE_KEY": license_key}
-    }
+        "env": {{"{env_prefix}_LICENSE_KEY": license_key}}
+    }}
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
-    print(f"    Config updated: {config_path}")
+    print(f"    Config updated: {{config_path}}")
 
 
 def main():
     print()
     print("  " + "=" * 50)
-    print("  LawTasksAI MCP Installer")
+    print("  {prod_name} MCP Installer")
     print("  " + "=" * 50)
     print()
 
@@ -2504,15 +2640,15 @@ def main():
         print("  Supported: Claude Desktop, Cursor, Windsurf")
         print()
         print("  If you have one installed, please configure manually:")
-        print("  https://lawtasksai.com/getting-started.html")
+        print("  https://{prod_domain}/getting-started.html")
         print()
         sys.exit(0)
 
-    print(f"  Detected MCP client(s): {', '.join(clients.keys())}")
+    print(f"  Detected MCP client(s): {{', '.join(clients.keys())}}")
     print()
     print("  This installer will:")
     print("    1. Install required Python packages")
-    print("    2. Configure LawTasksAI in each detected client")
+    print("    2. Configure {prod_name} in each detected client")
     print("       (existing configs are backed up first)")
     print()
     input("  Press Enter to continue (or Ctrl+C to cancel)... ")
@@ -2526,12 +2662,12 @@ def main():
     print()
     configured = []
     for client_name, config_path in clients.items():
-        print(f"  Configuring {client_name}...")
+        print(f"  Configuring {{client_name}}...")
         try:
             update_config(client_name, config_path, server_path, python_path, license_key)
             configured.append(client_name)
         except Exception as e:
-            print(f"    Warning: could not configure {client_name}: {e}")
+            print(f"    Warning: could not configure {{client_name}}: {{e}}")
 
     print()
     print("  " + "=" * 50)
@@ -2539,16 +2675,14 @@ def main():
     print("  " + "=" * 50)
     print()
     if configured:
-        print(f"  Configured: {', '.join(configured)}")
+        print(f"  Configured: {{', '.join(configured)}}")
         print()
         print("  Next steps:")
         print("    1. Restart your MCP client(s)")
-        print("    2. Ask a legal question, like:")
-        print('       "What is the statute of limitations for')
-        print('        breach of contract in Texas?"')
+        print("    2. Start asking for tasks!")
     print()
-    print("  Support: hello@lawtasksai.com")
-    print("  Website: https://lawtasksai.com")
+    print("  Support: {prod_support_email}")
+    print("  Website: https://{prod_domain}")
 
 
 if __name__ == "__main__":
@@ -3668,6 +3802,123 @@ async def run_migration_001(db: AsyncSession = Depends(get_db)):
 
     await db.commit()
     return {"migration": "001_add_multitenant", "steps": len(results), "results": results}
+
+
+@admin_router.post("/provision-user")
+async def admin_provision_user(
+    email: str,
+    product_id: str,
+    credits: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Manually provision a user+license for a product. Idempotent — safe to run twice."""
+    # Find user by email (one user per email, product tracked on license/user)
+    result = await db.execute(
+        select(User).where(User.email == email.lower().strip())
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        user = User(
+            email=email.lower().strip(),
+            password_hash=hash_password(secrets.token_hex(16)),
+            credits_balance=credits,
+            product_id=product_id,
+        )
+        db.add(user)
+        await db.flush()
+        license = License(
+            license_key=generate_license_key(),
+            user_id=user.id,
+            type="credits",
+            credits_purchased=credits,
+            credits_remaining=credits,
+        )
+        db.add(license)
+        await db.flush()
+        action = "created"
+    else:
+        # Update product_id if being provisioned for a different product
+        if user.product_id != product_id:
+            user.product_id = product_id
+        user.credits_balance += credits
+        result2 = await db.execute(
+            select(License).where(License.user_id == user.id, License.status == "active")
+            .order_by(License.created_at.desc())
+        )
+        license = result2.scalar_one_or_none()
+        if not license:
+            license = License(
+                license_key=generate_license_key(),
+                user_id=user.id,
+                type="credits",
+                credits_purchased=credits,
+                credits_remaining=credits,
+            )
+            db.add(license)
+            await db.flush()
+        else:
+            license.credits_remaining += credits
+            license.credits_purchased += credits
+        action = "updated"
+
+    await db.commit()
+    return {
+        "action": action,
+        "email": email,
+        "product_id": product_id,
+        "license_key": license.license_key,
+        "credits": license.credits_remaining,
+        "download_url": f"https://api.lawtasksai.com/download/loader/{license.license_key}",
+    }
+
+
+@admin_router.post("/migrate/set-product-domains")
+async def migrate_set_product_domains(db: AsyncSession = Depends(get_db)):
+    """One-time migration: populate domain column for all 29 products."""
+    domains = {
+        "law":            "lawtasksai.com",
+        "contractor":     "contractortasksai.com",
+        "realtor":        "realtortasksai.com",
+        "accounting":     "accountingtasksai.com",
+        "chiropractor":   "chiropractortasksai.com",
+        "churchadmin":    "churchadmintasksai.com",
+        "dentist":        "dentisttasksai.com",
+        "designer":       "designertasksai.com",
+        "electrician":    "electriciantasksai.com",
+        "eventplanner":   "eventplannertasksai.com",
+        "farmer":         "farmertasksai.com",
+        "funeral":        "funeraltasksai.com",
+        "hr":             "hrtasksai.com",
+        "insurance":      "insurancetasksai.com",
+        "landlord":       "landlordtasksai.com",
+        "militaryspouse": "militaryspousetasksai.com",
+        "mortgage":       "mortgagetasksai.com",
+        "mortician":      "mortuarytasksai.com",
+        "nutritionist":   "nutritionisttasksai.com",
+        "pastor":         "pastortasksai.com",
+        "personaltrainer":"personaltrainertasksai.com",
+        "plumber":        "plumbertasksai.com",
+        "principal":      "principaltasksai.com",
+        "restaurant":     "restauranttasksai.com",
+        "salon":          "salontasksai.com",
+        "teacher":        "teachertasksai.com",
+        "therapist":      "therapisttasksai.com",
+        "travelagent":    "travelagenttasksai.com",
+        "vet":            "vettasksai.com",
+    }
+    results = []
+    for pid, domain in domains.items():
+        try:
+            await db.execute(
+                text("UPDATE products SET domain = :domain WHERE id = :pid"),
+                {"domain": domain, "pid": pid}
+            )
+            results.append({"product_id": pid, "domain": domain, "status": "ok"})
+        except Exception as e:
+            results.append({"product_id": pid, "domain": domain, "status": f"error: {e}"})
+    await db.commit()
+    return {"updated": len([r for r in results if r["status"] == "ok"]), "results": results}
 
 
 # Register admin router (all routes protected by X-Admin-Secret)
