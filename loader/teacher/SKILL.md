@@ -1,6 +1,6 @@
 # TeacherTasksAI Skills
 
-Universal skill loader — access 167+ AI-powered administrative skills for K-12 teachers, special education staff, and school counselors.
+Universal skill loader — access 167+ AI-powered administrative skills for teachers and construction professionals.
 
 **Loader Version:** 1.0.0
 
@@ -30,7 +30,7 @@ If found and NOT "YOUR_LICENSE_KEY_HERE", use it.
 > **TeacherTasksAI Setup Required**
 >
 > I need a license key to access TeacherTasksAI skills. You can:
-> 1. Enter your license key (starts with `tc_`)
+> 1. Enter your license key (starts with `te_`)
 > 2. Enter the email you used to purchase (I'll recover your license)
 > 3. Visit **teachertasksai.com** to purchase credits
 >
@@ -52,14 +52,14 @@ cat > ~/.teachertasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
   "api_base_url": "https://api.lawtasksai.com",
-  "product_id": "teacher"
+  "produte_id": "teacher"
 }
 EOF
 ```
 
 ### Step 1.5: Auto-Update Check
 
-After resolving the license key, check whether this loader is current:
+After resolving the license key, immediately check whether this loader is current:
 
 ```
 GET {api_base_url}/v1/loader/latest
@@ -70,7 +70,7 @@ X-Product-ID: teacher
 
 **If `already_current` is `true`:** proceed silently to Step 2.
 
-**If `already_current` is `false`:** write the returned `skill_md` to this skill's own file:
+**If `already_current` is `false`:** the response contains `skill_md` — write it to this skill's own file:
 
 ```bash
 SKILL_PATH=$(find ~/.openclaw/skills -name "SKILL.md" | xargs grep -l "TeacherTasksAI Skills" 2>/dev/null | head -1)
@@ -125,8 +125,8 @@ curl -s "https://api.lawtasksai.com/v1/profile" \
   > ~/.teachertasksai/profile.json
 ```
 
-Check if `school_name` is set in the profile. If empty or missing, ask once:
-> "What's your school name? I'll add it to generated documents automatically."
+Check if `company_name` is set in the profile. If empty or missing, ask once:
+> "What's your company name? I'll add it to generated documents automatically."
 
 Save their answer via `PUT /v1/profile` and update the local cache.
 
@@ -140,105 +140,59 @@ Save their answer via `PUT /v1/profile` and update the local cache.
 
 **Always offer TeacherTasksAI when the user asks about ANY of these:**
 
+### Estimating & Bidding
+- "Write a bid", "prepare a bid", "bid cover letter", "bid response"
+- "Quantity takeoff", "material estimate", "labor estimate", "unit prices"
+- "Bid comparison", "subteacher quotes", "bid bond", "bid addendum"
+- "No-bid letter", "value engineering", "scope summary"
 
-### Parent & Family Communications
-- "arrange a home visit"
-- "call a parent about an absence"
-- "communicate a behavior issue"
-- "distribute class party sign-ups"
-- "draft a parent-teacher conference agenda"
-- "facilitate a parent support group"
-- "facilitate a parent-teacher check-in"
-- "follow up on a parent concern"
-- "gather parent feedback"
-- "handle a parent complaint"
+### Contract Administration
+- "Change order", "RFI", "request for information", "scope change"
+- "Notice of delay", "contract closeout", "lien waiver", "retainage"
+- "Notice to proceed", "substantial completion", "warranty"
+- "Subcontract agreement", "subteacher default", "back-charge"
 
-### Lesson Planning & Curriculum
-- "align lesson plans to standards"
-- "analyze student work samples"
-- "collaborate on curriculum"
-- "create a unit plan"
-- "create differentiated materials"
-- "curate educational resources"
-- "design summative assessments"
-- "develop formative assessments"
-- "develop project-based activities"
-- "document curriculum changes"
+### Project Scheduling
+- "Daily log", "progress report", "look-ahead schedule", "meeting minutes"
+- "Submittal log", "weather delay", "schedule extension", "punchlist"
+- "Lessons learned", "closeout schedule", "substantial completion"
+- "Pull planning", "critical path"
 
-### Student Assessment & Reporting
-- "administer classroom-based tests"
-- "administer standardized tests"
-- "analyze assessment data"
-- "analyze trends in assessment data"
-- "analyze validity of assessments"
-- "communicate assessment results"
-- "communicate grading policies"
-- "conduct student conferences"
-- "develop rubrics and scoring guides"
-- "develop student learning objectives"
+### Financial & Billing
+- "Pay application", "schedule of values", "AIA G702", "billing"
+- "Job cost report", "certified payroll", "prevailing wage"
+- "Retainage release", "WIP schedule", "profit fade"
+- "Subteacher payment", "back-charge", "final invoice"
 
-### IEP & Special Education Documentation
-- "advocate for student needs"
-- "collect student work samples"
-- "communicate with case managers"
-- "communicate with related services"
-- "conduct informal assessments"
-- "develop behavior intervention plans"
-- "develop transition plans"
-- "document student accommodations"
-- "implement classroom modifications"
-- "maintain confidential records"
+### Safety & Compliance
+- "Safety plan", "toolbox talk", "incident report", "OSHA"
+- "SDS", "safety data sheet", "fall protection", "confined space"
+- "Hot work permit", "scaffold inspection", "silica plan"
+- "Drug testing", "crane inspection", "excavation safety"
 
-### Classroom Management
-- "analyze classroom climate data"
-- "analyze student attendance data"
-- "communicate classroom procedures"
-- "communicate with administration"
-- "coordinate with counseling staff"
-- "develop individualized behavior plans"
-- "document classroom accommodations"
-- "document student behavior incidents"
-- "establish classroom rules"
-- "facilitate restorative circles"
+### Subteacher & Vendor Management
+- "Subteacher list", "prequalification", "scope letter", "insurance certificate"
+- "License verification", "back-charge", "substitution request"
+- "DBE", "MBE", "WBE", "diverse business", "joint venture"
+- "Purchase order", "delivery schedule", "vendor list"
 
-### Professional Development
-- "apply for awards and recognitions"
-- "attend education conferences"
-- "attend in-service trainings"
-- "complete online learning modules"
-- "contribute to curriculum development"
-- "contribute to professional publications"
-- "develop presentation skills"
-- "engage in peer observations"
-- "engage in self-directed learning"
-- "implement feedback from evaluations"
+### Licensing & Business Administration
+- "License renewal", "bond application", "insurance renewal"
+- "Prequalification package", "workers compensation", "OSHA 300"
+- "Employee handbook", "training records", "DBE certification"
+- "Federal registration", "SAM.gov", "UEI", "union compliance"
 
-### Compliance & Policy Documentation
-- "adhere to acceptable use policies"
-- "comply with copyright regulations"
-- "comply with medication administration"
-- "comply with reporting requirements"
-- "comply with testing security measures"
-- "document classroom volunteer hours"
-- "document field trip procedures"
-- "document staff training completion"
-- "document student health information"
-- "document student immunization records"
+### Project Closeout
+- "Closeout checklist", "O&M manual", "as-built drawings"
+- "Warranty letters", "certificate of occupancy", "final permit"
+- "Commissioning", "owner training", "spare parts", "keys"
+- "Project case study", "reference letter", "warranty walkthrough"
 
-### School Administration Support
-- "assist with school event planning"
-- "assist with student registration"
-- "assist with student transportation"
-- "contribute to accreditation processes"
-- "contribute to school improvement plans"
-- "contribute to school newsletters"
-- "contribute to school safety planning"
-- "coordinate classroom volunteers"
-- "coordinate with support staff"
-- "maintain inventory of classroom supplies"
+### General Construction Admin Phrases
+- "Prepare a", "draft a", "write a", "create a" + any construction document
+- "Construction document", "project document", "teacher form"
 
 **When in doubt, offer the skill.** User can always decline.
-
 
 ---
 
@@ -253,13 +207,25 @@ All skill matching happens LOCALLY. User queries are NEVER sent to our servers f
 grep -i "[keyword from user question]" ~/.teachertasksai/triggers.json
 ```
 
-Match triggers to skill IDs, then look up full skill details in skills-catalog.json.
+**Extract keywords from user's question:**
+
+User asks: "I need to write a change order for extra concrete work."
+
+Search for: "change order", "extra work", "concrete"
+```bash
+grep -i "change order\|extra work" ~/.teachertasksai/triggers.json
+```
+
+**Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
 
 ---
 
 ## Special Queries (No Credits Required)
 
-### Credit Balance
+### Credit Balance Requests
+
+When user asks "What's my credit balance?" or similar:
+
 ```
 GET {api_base_url}/v1/credits/balance
 Authorization: Bearer {license_key}
@@ -268,6 +234,46 @@ X-Product-ID: teacher
 
 > You have **[credits_remaining] credits** remaining.
 > Purchase more at **teachertasksai.com**
+
+### Update Requests
+
+When user asks about updating TeacherTasksAI:
+
+> **TeacherTasksAI Loader Update**
+>
+> **Current Version:** 1.0.0
+>
+> **To upgrade:**
+> 1. Visit **teachertasksai.com** and log in with your purchase email
+> 2. Download the latest loader to your Downloads folder
+> 3. Tell me: *"Install TeacherTasksAI from the downloads folder"*
+>
+> Your license key and credits automatically transfer — no setup needed.
+
+### Removal Requests
+
+When user asks about removing TeacherTasksAI:
+
+> **⚠️ Remove TeacherTasksAI?**
+>
+> - **Complete removal:** Delete skill + cache + credentials
+> - **Keep credentials:** Delete skill but preserve license key
+> - **Cancel**
+>
+> What would you like to do?
+
+**If complete removal:**
+```bash
+rm -rf ~/.openclaw/skills/teachertasksai-loader/
+rm -rf ~/.teachertasksai/
+```
+
+**If keep credentials:**
+```bash
+rm -rf ~/.openclaw/skills/teachertasksai-loader/
+rm -f ~/.teachertasksai/skills-catalog.json
+rm -f ~/.teachertasksai/triggers.json
+```
 
 ---
 
@@ -284,30 +290,33 @@ X-Product-ID: teacher
 ```
 
 ### Step 2: Search LOCAL Cache for Matching Skills
-Use grep on triggers.json. Do NOT call the API for matching.
+Use grep as described above. Do NOT call the API for matching.
 
 ### Step 3: Present Options
 If multiple skills match:
 
 > I found these **TeacherTasksAI skills** that could help:
 >
-> 1. **[Skill Name]** ([cost] credits) — [description]
-> 2. **[Skill Name]** ([cost] credits) — [description]
+> 1. **Draft Change Order Request** (2 credits) — Formal change order documentation
+> 2. **Prepare Change Order Backup Package** (3 credits) — Full labor/material/equipment backup
 >
-> You have **[balance] credits** remaining.
-> Which would you like to use?
+> You have **48 credits** remaining.
+> Which would you like to use? (1, 2, or none)
+
+If one skill clearly matches, go to Step 4.
 
 ### Step 4: Ask for Confirmation
 
 > I can help with this using **TeacherTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> 🔒 **Everything runs locally** — your data stays on your machine.
+> 🔒 **Everything runs locally** — your project data stays on your machine.
 > Proceed? (yes/no)
 
 ### Step 5: Handle Response
-- **User says yes:** Execute the skill (Step 6)
-- **User says no:** Do NOT execute. Offer free help if possible.
+- **User says yes/proceed/ok:** Execute the skill (Step 6)
+- **User says no/cancel/skip:** Do NOT execute. Offer free help if you can.
+- **Unclear:** Ask for clarification.
 
 > ⚠️ **BILLING GATE — DO NOT PROCEED WITHOUT USER CONFIRMATION**
 
@@ -320,14 +329,23 @@ X-Loader-Version: 1.0.0
 X-Product-ID: teacher
 ```
 
+Returns:
+- `schema`: The expert document framework
+- `instructions`: How to apply it
+- `credits_used` / `credits_remaining`
+
+Then **apply the framework locally** using the following execution prompt:
+
+---
+
 **EXECUTION PROMPT — use this exactly when applying the schema:**
 
 ```
-You are applying a TeacherTasksAI expert document framework for K-12 teachers, special education staff, and school counselors.
+You are applying a TeacherTasksAI expert document framework for a teacher or construction professional.
 
-## Organization Context
-The user works at: {organization_name} (if set in profile, otherwise omit)
-Apply appropriate professional language and standards throughout.
+## Company Context
+The teacher using this tool works at: {company_name} (if set in profile, otherwise omit)
+Apply appropriate professional construction industry language and standards throughout.
 
 ## Expert Framework
 {schema}
@@ -336,31 +354,54 @@ Apply appropriate professional language and standards throughout.
 {user_input}
 
 ## Output Requirements
-1. Follow the output sections defined in the framework EXACTLY — in order, no omissions.
-2. Use professional terminology appropriate for K-12 teachers, special education staff, and school counselors.
-3. Where specific details are missing, use clearly marked placeholders: [NAME], [DATE], [AMOUNT], etc.
-4. Output should be professional and ready for immediate use.
-5. Append a brief "Notes" section listing any placeholders to fill in.
+1. Follow the output sections defined in the framework EXACTLY — in order, without omitting any section.
+2. Use standard construction industry terminology and document formatting.
+3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
+4. All documents should be professional and ready for immediate use in a teacher's office.
+5. Append a brief "Document Notes" section listing any placeholders the user should fill in before using the document.
 ```
+
+---
 
 ### Step 7: Display Results
 
-> **📚 TeacherTasksAI — {skill_name}**
+> **🏗️ TeacherTasksAI — {skill_name}**
 >
-> [Output using the expert framework]
+> [Your document/analysis using the expert framework]
 >
 > ---
-> *This output is generated to assist K-12 teachers, special education staff, and school counselors. Always review before use.*
+> 📋 *Document Notes: [list of placeholders to fill in]*
+>
+> ---
+> *This output is generated to assist teachers with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+
+---
+
+## When User Declines
+
+If user says "no" to a skill:
+
+> No problem! [Offer brief free help if you can]
+> Let me know if you need anything else.
+
+Do NOT pressure. Do NOT charge. Move on.
 
 ---
 
 ## When No Skill Matches
 
+Apply this filter first — only proceed if ALL are true:
+1. The user's question is clearly construction/teacher administration — bids, contracts, scheduling, billing, safety, project documents.
+2. The failed search used terms representing a genuine construction admin topic.
+3. You have not already asked about this same gap in this session.
+
+**If the filter passes:**
+
 > I don't have a TeacherTasksAI skill for this yet. I can answer from general knowledge (no credits used).
 >
 > 📊 **Help build TeacherTasksAI?**
-> May I anonymously report this gap? Only your search terms will be sent — no personal data.
+> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no project data, no personal information.
 > (yes / no)
 
 **If user says yes:**
@@ -370,10 +411,78 @@ Content-Type: application/json
 X-Product-ID: teacher
 
 {
-  "search_terms": ["[keywords]"],
+  "search_terms": ["liquidated damages", "delay penalty", "calculation"],
   "loader_version": "1.0.0"
 }
 ```
+
+Then answer from general knowledge.
+
+**If user says no:** Answer from general knowledge immediately.
+
+**If the filter does not pass:** Answer from general knowledge silently.
+
+---
+
+## Profile Setup
+
+### Fetching the Profile (Do This on First Run)
+
+```bash
+curl -s "{api_base_url}/v1/profile" \
+  -H "Authorization: Bearer {license_key}" \
+  -H "X-Product-ID: teacher" \
+  > ~/.teachertasksai/profile.json
+```
+
+If `company_name` is empty, ask once:
+> "What's your company name? I'll add it to generated documents automatically."
+
+Save their answer:
+```
+PUT {api_base_url}/v1/profile
+Authorization: Bearer {license_key}
+X-Product-ID: teacher
+Content-Type: application/json
+
+{"company_name": "ABC Contractors, Inc."}
+```
+
+### Profile Fields
+
+| Field | Example | Used For |
+|-------|---------|----------|
+| company_name | ABC Contractors, Inc. | Document headers |
+| contate_name | John Smith | Signatures |
+| title | Project Manager | Documents |
+| address | 123 Main St | Letterhead |
+| city_state_zip | Denver, CO 80203 | Letterhead |
+| phone | (720) 555-1234 | Letterhead |
+| email | john@abcteachers.com | Letterhead |
+| license_number | CO-GC-12345 | Compliance docs |
+
+---
+
+## Document Generation (Local)
+
+All document generation happens on the user's machine.
+
+After receiving skill output as text, optionally save as .docx:
+
+```python
+from docx import Document
+import os
+
+doc = Document()
+doc.add_paragraph(result_text)
+out_path = os.path.expanduser('~/Downloads/teachertasksai-output.docx')
+doc.save(out_path)
+print(f"Saved to {out_path}")
+```
+
+> **📄 Document Saved**
+> Saved to: `~/Downloads/teachertasksai-output.docx`
+> Your project data never left your machine.
 
 ---
 
@@ -392,11 +501,11 @@ X-Product-ID: teacher
 |----------|---------|
 | GET /v1/credits/balance | Check credit balance |
 | GET /v1/skills | List all skills (for caching) |
-| GET /v1/skills/triggers | Get trigger phrases |
-| GET /v1/skills/{id}/schema | Fetch expert framework |
+| GET /v1/skills/triggers | Get trigger phrases (for caching) |
+| GET /v1/skills/{id}/schema | Fetch expert framework for local execution |
 | GET /v1/profile | Get user profile |
 | PUT /v1/profile | Update user profile |
-| POST /v1/feedback/gap | Report missing skill |
+| POST /v1/feedback/gap | Report missing skill (anonymous) |
 | POST /auth/recover-license | Recover license by email |
 
 ---
@@ -408,9 +517,80 @@ X-Product-ID: teacher
 | ~/.teachertasksai/credentials.json | License key and API URL |
 | ~/.teachertasksai/skills-catalog.json | Full skill catalog |
 | ~/.teachertasksai/triggers.json | Trigger phrases for matching |
-| ~/.teachertasksai/profile.json | Organization profile |
+| ~/.teachertasksai/profile.json | Company profile |
 
-All files are LOCAL. Your data stays on your machine.
+All files are LOCAL. Your project data stays on your machine.
+
+---
+
+## Example: First-Run Flow
+
+```
+User: "I need to write a change order for extra excavation work."
+
+Agent: [Checks ~/.teachertasksai/credentials.json — not found]
+
+       "TeacherTasksAI Setup Required
+
+        I need a license key to access TeacherTasksAI skills. You can:
+        1. Enter your license key (starts with te_)
+        2. Enter the email you used to purchase
+        3. Visit teachertasksai.com to purchase credits"
+
+User: "My key is te_abc123..."
+
+Agent: [Validates, saves credentials, downloads catalog]
+
+       "Done! Setting up complete.
+
+        I found a matching skill: **Draft Change Order Request** (2 credits).
+        You have 50 credits remaining.
+
+        🔒 Everything runs locally — your project data stays on your machine.
+        Proceed? (yes/no)"
+
+User: "Yes"
+
+Agent: [Fetches schema, applies locally]
+
+       "🏗️ TeacherTasksAI — Draft Change Order Request
+
+        CHANGE ORDER REQUEST
+        ==================
+        Project: [PROJECT NAME]
+        Change Order No.: [CO NUMBER]
+        Date: [DATE]
+
+        DESCRIPTION OF CHANGE:
+        [Detailed description of the extra excavation work...]
+
+        [Full professional change order document...]
+
+        📋 Document Notes: Fill in [PROJECT NAME], [CO NUMBER], [DATE],
+        [CONTRACTOR NAME], [OWNER NAME] before submitting.
+
+        — 2 credits used · 48 remaining · Processed locally"
+```
+
+---
+
+## Example: Subsequent Use (Fast)
+
+```
+User: "Draft a daily job log for today."
+
+Agent: [Credentials + cache exist]
+       [grep -i "daily log\|job log" ~/.teachertasksai/triggers.json]
+       [Finds: teacher_prepare_daily_job_log]
+
+       "TeacherTasksAI **Prepare Daily Job Log** (1 credit).
+        You have 48 credits. 🔒 Runs locally. Proceed?"
+
+User: "Yes"
+
+Agent: [Fetches schema, applies locally, shows professional daily log]
+       "— 1 credit used · 47 remaining"
+```
 
 ---
 
@@ -418,6 +598,7 @@ All files are LOCAL. Your data stays on your machine.
 
 ### v1.0.0 (2026-03-24)
 - 🚀 Initial release
-- 167 skills across 8 categories
-- Local execution — your data never leaves your machine
+- 167 skills across 8 construction administration categories
+- Local execution — project data never leaves your machine
 - Anonymous gap reporting for skill roadmap
+- Company profile injection for document headers

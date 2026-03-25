@@ -1,6 +1,6 @@
 # AccountingTasksAI Skills
 
-Universal skill loader — access 161+ AI-powered administrative skills for CPAs, bookkeepers, and accounting firm staff.
+Universal skill loader — access 161+ AI-powered administrative skills for accountings and construction professionals.
 
 **Loader Version:** 1.0.0
 
@@ -52,14 +52,14 @@ cat > ~/.accountingtasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
   "api_base_url": "https://api.lawtasksai.com",
-  "product_id": "accounting"
+  "produac_id": "accounting"
 }
 EOF
 ```
 
 ### Step 1.5: Auto-Update Check
 
-After resolving the license key, check whether this loader is current:
+After resolving the license key, immediately check whether this loader is current:
 
 ```
 GET {api_base_url}/v1/loader/latest
@@ -70,7 +70,7 @@ X-Product-ID: accounting
 
 **If `already_current` is `true`:** proceed silently to Step 2.
 
-**If `already_current` is `false`:** write the returned `skill_md` to this skill's own file:
+**If `already_current` is `false`:** the response contains `skill_md` — write it to this skill's own file:
 
 ```bash
 SKILL_PATH=$(find ~/.openclaw/skills -name "SKILL.md" | xargs grep -l "AccountingTasksAI Skills" 2>/dev/null | head -1)
@@ -125,8 +125,8 @@ curl -s "https://api.lawtasksai.com/v1/profile" \
   > ~/.accountingtasksai/profile.json
 ```
 
-Check if `firm_name` is set in the profile. If empty or missing, ask once:
-> "What's your firm name? I'll add it to generated documents automatically."
+Check if `company_name` is set in the profile. If empty or missing, ask once:
+> "What's your company name? I'll add it to generated documents automatically."
 
 Save their answer via `PUT /v1/profile` and update the local cache.
 
@@ -140,103 +140,59 @@ Save their answer via `PUT /v1/profile` and update the local cache.
 
 **Always offer AccountingTasksAI when the user asks about ANY of these:**
 
+### Estimating & Bidding
+- "Write a bid", "prepare a bid", "bid cover letter", "bid response"
+- "Quantity takeoff", "material estimate", "labor estimate", "unit prices"
+- "Bid comparison", "subaccounting quotes", "bid bond", "bid addendum"
+- "No-bid letter", "value engineering", "scope summary"
 
-### Client Onboarding & Engagement
-- "acquire client signatures on agreements"
-- "assign client to appropriate team members"
-- "automate onboarding workflow processes"
-- "conduct client orientation webinars"
-- "conduct new client intake interview"
-- "conduct post-engagement reviews"
-- "coordinate with other service providers"
-- "create client account profile"
-- "develop client onboarding checklists"
-- "discuss billing and payment terms"
+### Contract Administration
+- "Change order", "RFI", "request for information", "scope change"
+- "Notice of delay", "contract closeout", "lien waiver", "retainage"
+- "Notice to proceed", "substantial completion", "warranty"
+- "Subcontract agreement", "subaccounting default", "back-charge"
 
-### Tax Season Administration
-- "analyze tax season performance metrics"
-- "assemble client tax information packets"
-- "communicate tax season status updates"
-- "conduct post-tax season reviews"
-- "coordinate with tax software providers"
-- "develop tax season project plans"
-- "file client tax returns electronically"
-- "follow up on missing tax documents"
-- "handle irs notices and correspondence"
-- "implement secure digital tax workflows"
+### Project Scheduling
+- "Daily log", "progress report", "look-ahead schedule", "meeting minutes"
+- "Submittal log", "weather delay", "schedule extension", "punchlist"
+- "Lessons learned", "closeout schedule", "substantial completion"
+- "Pull planning", "critical path"
 
-### Bookkeeping & Reporting
-- "analyze client financial performance"
-- "coordinate with client tax professionals"
-- "develop client accounting training materials"
-- "identify opportunities for process improvements"
-- "implement accounting software integrations"
-- "implement internal control procedures"
-- "maintain client accounting documentation"
-- "manage client accounts payable and receivable"
-- "manage client fixed asset records"
-- "monitor client cash flow and liquidity"
+### Financial & Billing
+- "Pay application", "schedule of values", "AIA G702", "billing"
+- "Job cost report", "certified payroll", "prevailing wage"
+- "Retainage release", "WIP schedule", "profit fade"
+- "Subaccounting payment", "back-charge", "final invoice"
 
-### Payroll Administration
-- "analyze client payroll data for insights"
-- "assist with client new hire onboarding"
-- "assist with client year-end tax reporting"
-- "automate client payroll workflow processes"
-- "coordinate with client hr and accounting teams"
-- "develop client payroll training documentation"
-- "file client payroll tax returns"
-- "generate client payroll compliance reports"
-- "handle client payroll record keeping"
-- "implement client payroll data security measures"
+### Safety & Compliance
+- "Safety plan", "toolbox talk", "incident report", "OSHA"
+- "SDS", "safety data sheet", "fall protection", "confined space"
+- "Hot work permit", "scaffold inspection", "silica plan"
+- "Drug testing", "crane inspection", "excavation safety"
 
-### Compliance & Regulatory Documentation
-- "advise clients on data privacy and security laws"
-- "advise clients on workplace safety procedures"
-- "assist clients with government grant applications"
-- "assist with client professional certification renewals"
-- "coordinate client employment law compliance"
-- "coordinate with client legal counsel on compliance"
-- "develop client compliance policy and procedure manuals"
-- "facilitate client audits by regulatory agencies"
-- "handle client employee retirement plan filings"
-- "implement client records retention schedules"
+### Subaccounting & Vendor Management
+- "Subaccounting list", "prequalification", "scope letter", "insurance certificate"
+- "License verification", "back-charge", "substitution request"
+- "DBE", "MBE", "WBE", "diverse business", "joint venture"
+- "Purchase order", "delivery schedule", "vendor list"
 
-### Client Communications
-- "align client communications with the firm's brand"
-- "analyze client communication metrics"
-- "collaborate with clients on public statements"
-- "conduct client satisfaction surveys"
-- "coordinate client events and webinars"
-- "create client-facing marketing content"
-- "develop client communication policies"
-- "develop client communication training for staff"
-- "draft client newsletter articles and updates"
-- "expand client communication channels strategically"
+### Licensing & Business Administration
+- "License renewal", "bond application", "insurance renewal"
+- "Prequalification package", "workers compensation", "OSHA 300"
+- "Employee handbook", "training records", "DBE certification"
+- "Federal registration", "SAM.gov", "UEI", "union compliance"
 
-### Financial Statement Preparation
-- "advise clients on accounting policy selection"
-- "analyze client financial performance trends"
-- "assist clients with budgeting and forecasting"
-- "assist with client audits and reviews by cpas"
-- "compile client consolidated financial statements"
-- "conduct client financial benchmarking analysis"
-- "convert client financial data to gaap standards"
-- "deliver client financial presentations and briefings"
-- "develop client reporting templates and tools"
-- "draft client financial statement narratives"
+### Project Closeout
+- "Closeout checklist", "O&M manual", "as-built drawings"
+- "Warranty letters", "certificate of occupancy", "final permit"
+- "Commissioning", "owner training", "spare parts", "keys"
+- "Project case study", "reference letter", "warranty walkthrough"
 
-### Practice Management
-- "administer client data backup and disaster recovery"
-- "coordinate client engagement profitability analysis"
-- "develop client fee structures and pricing models"
-- "maintain client accounts receivable records"
-- "manage client billing and invoicing"
-- "manage the client onboarding and offboarding process"
-- "oversee client file organization and document storage"
-- "process client payments and collections"
+### General Construction Admin Phrases
+- "Prepare a", "draft a", "write a", "create a" + any construction document
+- "Construction document", "project document", "accounting form"
 
 **When in doubt, offer the skill.** User can always decline.
-
 
 ---
 
@@ -251,13 +207,25 @@ All skill matching happens LOCALLY. User queries are NEVER sent to our servers f
 grep -i "[keyword from user question]" ~/.accountingtasksai/triggers.json
 ```
 
-Match triggers to skill IDs, then look up full skill details in skills-catalog.json.
+**Extract keywords from user's question:**
+
+User asks: "I need to write a change order for extra concrete work."
+
+Search for: "change order", "extra work", "concrete"
+```bash
+grep -i "change order\|extra work" ~/.accountingtasksai/triggers.json
+```
+
+**Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
 
 ---
 
 ## Special Queries (No Credits Required)
 
-### Credit Balance
+### Credit Balance Requests
+
+When user asks "What's my credit balance?" or similar:
+
 ```
 GET {api_base_url}/v1/credits/balance
 Authorization: Bearer {license_key}
@@ -266,6 +234,46 @@ X-Product-ID: accounting
 
 > You have **[credits_remaining] credits** remaining.
 > Purchase more at **accountingtasksai.com**
+
+### Update Requests
+
+When user asks about updating AccountingTasksAI:
+
+> **AccountingTasksAI Loader Update**
+>
+> **Current Version:** 1.0.0
+>
+> **To upgrade:**
+> 1. Visit **accountingtasksai.com** and log in with your purchase email
+> 2. Download the latest loader to your Downloads folder
+> 3. Tell me: *"Install AccountingTasksAI from the downloads folder"*
+>
+> Your license key and credits automatically transfer — no setup needed.
+
+### Removal Requests
+
+When user asks about removing AccountingTasksAI:
+
+> **⚠️ Remove AccountingTasksAI?**
+>
+> - **Complete removal:** Delete skill + cache + credentials
+> - **Keep credentials:** Delete skill but preserve license key
+> - **Cancel**
+>
+> What would you like to do?
+
+**If complete removal:**
+```bash
+rm -rf ~/.openclaw/skills/accountingtasksai-loader/
+rm -rf ~/.accountingtasksai/
+```
+
+**If keep credentials:**
+```bash
+rm -rf ~/.openclaw/skills/accountingtasksai-loader/
+rm -f ~/.accountingtasksai/skills-catalog.json
+rm -f ~/.accountingtasksai/triggers.json
+```
 
 ---
 
@@ -282,30 +290,33 @@ X-Product-ID: accounting
 ```
 
 ### Step 2: Search LOCAL Cache for Matching Skills
-Use grep on triggers.json. Do NOT call the API for matching.
+Use grep as described above. Do NOT call the API for matching.
 
 ### Step 3: Present Options
 If multiple skills match:
 
 > I found these **AccountingTasksAI skills** that could help:
 >
-> 1. **[Skill Name]** ([cost] credits) — [description]
-> 2. **[Skill Name]** ([cost] credits) — [description]
+> 1. **Draft Change Order Request** (2 credits) — Formal change order documentation
+> 2. **Prepare Change Order Backup Package** (3 credits) — Full labor/material/equipment backup
 >
-> You have **[balance] credits** remaining.
-> Which would you like to use?
+> You have **48 credits** remaining.
+> Which would you like to use? (1, 2, or none)
+
+If one skill clearly matches, go to Step 4.
 
 ### Step 4: Ask for Confirmation
 
 > I can help with this using **AccountingTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> 🔒 **Everything runs locally** — your data stays on your machine.
+> 🔒 **Everything runs locally** — your project data stays on your machine.
 > Proceed? (yes/no)
 
 ### Step 5: Handle Response
-- **User says yes:** Execute the skill (Step 6)
-- **User says no:** Do NOT execute. Offer free help if possible.
+- **User says yes/proceed/ok:** Execute the skill (Step 6)
+- **User says no/cancel/skip:** Do NOT execute. Offer free help if you can.
+- **Unclear:** Ask for clarification.
 
 > ⚠️ **BILLING GATE — DO NOT PROCEED WITHOUT USER CONFIRMATION**
 
@@ -318,14 +329,23 @@ X-Loader-Version: 1.0.0
 X-Product-ID: accounting
 ```
 
+Returns:
+- `schema`: The expert document framework
+- `instructions`: How to apply it
+- `credits_used` / `credits_remaining`
+
+Then **apply the framework locally** using the following execution prompt:
+
+---
+
 **EXECUTION PROMPT — use this exactly when applying the schema:**
 
 ```
-You are applying a AccountingTasksAI expert document framework for CPAs, bookkeepers, and accounting firm staff.
+You are applying a AccountingTasksAI expert document framework for a accounting or construction professional.
 
-## Organization Context
-The user works at: {organization_name} (if set in profile, otherwise omit)
-Apply appropriate professional language and standards throughout.
+## Company Context
+The accounting using this tool works at: {company_name} (if set in profile, otherwise omit)
+Apply appropriate professional construction industry language and standards throughout.
 
 ## Expert Framework
 {schema}
@@ -334,31 +354,54 @@ Apply appropriate professional language and standards throughout.
 {user_input}
 
 ## Output Requirements
-1. Follow the output sections defined in the framework EXACTLY — in order, no omissions.
-2. Use professional terminology appropriate for CPAs, bookkeepers, and accounting firm staff.
-3. Where specific details are missing, use clearly marked placeholders: [NAME], [DATE], [AMOUNT], etc.
-4. Output should be professional and ready for immediate use.
-5. Append a brief "Notes" section listing any placeholders to fill in.
+1. Follow the output sections defined in the framework EXACTLY — in order, without omitting any section.
+2. Use standard construction industry terminology and document formatting.
+3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
+4. All documents should be professional and ready for immediate use in a accounting's office.
+5. Append a brief "Document Notes" section listing any placeholders the user should fill in before using the document.
 ```
+
+---
 
 ### Step 7: Display Results
 
-> **📊 AccountingTasksAI — {skill_name}**
+> **🏗️ AccountingTasksAI — {skill_name}**
 >
-> [Output using the expert framework]
+> [Your document/analysis using the expert framework]
 >
 > ---
-> *This output is generated to assist CPAs, bookkeepers, and accounting firm staff. Always review before use.*
+> 📋 *Document Notes: [list of placeholders to fill in]*
+>
+> ---
+> *This output is generated to assist accountings with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+
+---
+
+## When User Declines
+
+If user says "no" to a skill:
+
+> No problem! [Offer brief free help if you can]
+> Let me know if you need anything else.
+
+Do NOT pressure. Do NOT charge. Move on.
 
 ---
 
 ## When No Skill Matches
 
+Apply this filter first — only proceed if ALL are true:
+1. The user's question is clearly construction/accounting administration — bids, contracts, scheduling, billing, safety, project documents.
+2. The failed search used terms representing a genuine construction admin topic.
+3. You have not already asked about this same gap in this session.
+
+**If the filter passes:**
+
 > I don't have a AccountingTasksAI skill for this yet. I can answer from general knowledge (no credits used).
 >
 > 📊 **Help build AccountingTasksAI?**
-> May I anonymously report this gap? Only your search terms will be sent — no personal data.
+> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no project data, no personal information.
 > (yes / no)
 
 **If user says yes:**
@@ -368,10 +411,78 @@ Content-Type: application/json
 X-Product-ID: accounting
 
 {
-  "search_terms": ["[keywords]"],
+  "search_terms": ["liquidated damages", "delay penalty", "calculation"],
   "loader_version": "1.0.0"
 }
 ```
+
+Then answer from general knowledge.
+
+**If user says no:** Answer from general knowledge immediately.
+
+**If the filter does not pass:** Answer from general knowledge silently.
+
+---
+
+## Profile Setup
+
+### Fetching the Profile (Do This on First Run)
+
+```bash
+curl -s "{api_base_url}/v1/profile" \
+  -H "Authorization: Bearer {license_key}" \
+  -H "X-Product-ID: accounting" \
+  > ~/.accountingtasksai/profile.json
+```
+
+If `company_name` is empty, ask once:
+> "What's your company name? I'll add it to generated documents automatically."
+
+Save their answer:
+```
+PUT {api_base_url}/v1/profile
+Authorization: Bearer {license_key}
+X-Product-ID: accounting
+Content-Type: application/json
+
+{"company_name": "ABC Contractors, Inc."}
+```
+
+### Profile Fields
+
+| Field | Example | Used For |
+|-------|---------|----------|
+| company_name | ABC Contractors, Inc. | Document headers |
+| contaac_name | John Smith | Signatures |
+| title | Project Manager | Documents |
+| address | 123 Main St | Letterhead |
+| city_state_zip | Denver, CO 80203 | Letterhead |
+| phone | (720) 555-1234 | Letterhead |
+| email | john@abcaccountings.com | Letterhead |
+| license_number | CO-GC-12345 | Compliance docs |
+
+---
+
+## Document Generation (Local)
+
+All document generation happens on the user's machine.
+
+After receiving skill output as text, optionally save as .docx:
+
+```python
+from docx import Document
+import os
+
+doc = Document()
+doc.add_paragraph(result_text)
+out_path = os.path.expanduser('~/Downloads/accountingtasksai-output.docx')
+doc.save(out_path)
+print(f"Saved to {out_path}")
+```
+
+> **📄 Document Saved**
+> Saved to: `~/Downloads/accountingtasksai-output.docx`
+> Your project data never left your machine.
 
 ---
 
@@ -390,11 +501,11 @@ X-Product-ID: accounting
 |----------|---------|
 | GET /v1/credits/balance | Check credit balance |
 | GET /v1/skills | List all skills (for caching) |
-| GET /v1/skills/triggers | Get trigger phrases |
-| GET /v1/skills/{id}/schema | Fetch expert framework |
+| GET /v1/skills/triggers | Get trigger phrases (for caching) |
+| GET /v1/skills/{id}/schema | Fetch expert framework for local execution |
 | GET /v1/profile | Get user profile |
 | PUT /v1/profile | Update user profile |
-| POST /v1/feedback/gap | Report missing skill |
+| POST /v1/feedback/gap | Report missing skill (anonymous) |
 | POST /auth/recover-license | Recover license by email |
 
 ---
@@ -406,9 +517,80 @@ X-Product-ID: accounting
 | ~/.accountingtasksai/credentials.json | License key and API URL |
 | ~/.accountingtasksai/skills-catalog.json | Full skill catalog |
 | ~/.accountingtasksai/triggers.json | Trigger phrases for matching |
-| ~/.accountingtasksai/profile.json | Organization profile |
+| ~/.accountingtasksai/profile.json | Company profile |
 
-All files are LOCAL. Your data stays on your machine.
+All files are LOCAL. Your project data stays on your machine.
+
+---
+
+## Example: First-Run Flow
+
+```
+User: "I need to write a change order for extra excavation work."
+
+Agent: [Checks ~/.accountingtasksai/credentials.json — not found]
+
+       "AccountingTasksAI Setup Required
+
+        I need a license key to access AccountingTasksAI skills. You can:
+        1. Enter your license key (starts with ac_)
+        2. Enter the email you used to purchase
+        3. Visit accountingtasksai.com to purchase credits"
+
+User: "My key is ac_abc123..."
+
+Agent: [Validates, saves credentials, downloads catalog]
+
+       "Done! Setting up complete.
+
+        I found a matching skill: **Draft Change Order Request** (2 credits).
+        You have 50 credits remaining.
+
+        🔒 Everything runs locally — your project data stays on your machine.
+        Proceed? (yes/no)"
+
+User: "Yes"
+
+Agent: [Fetches schema, applies locally]
+
+       "🏗️ AccountingTasksAI — Draft Change Order Request
+
+        CHANGE ORDER REQUEST
+        ==================
+        Project: [PROJECT NAME]
+        Change Order No.: [CO NUMBER]
+        Date: [DATE]
+
+        DESCRIPTION OF CHANGE:
+        [Detailed description of the extra excavation work...]
+
+        [Full professional change order document...]
+
+        📋 Document Notes: Fill in [PROJECT NAME], [CO NUMBER], [DATE],
+        [CONTRACTOR NAME], [OWNER NAME] before submitting.
+
+        — 2 credits used · 48 remaining · Processed locally"
+```
+
+---
+
+## Example: Subsequent Use (Fast)
+
+```
+User: "Draft a daily job log for today."
+
+Agent: [Credentials + cache exist]
+       [grep -i "daily log\|job log" ~/.accountingtasksai/triggers.json]
+       [Finds: accounting_prepare_daily_job_log]
+
+       "AccountingTasksAI **Prepare Daily Job Log** (1 credit).
+        You have 48 credits. 🔒 Runs locally. Proceed?"
+
+User: "Yes"
+
+Agent: [Fetches schema, applies locally, shows professional daily log]
+       "— 1 credit used · 47 remaining"
+```
 
 ---
 
@@ -416,6 +598,7 @@ All files are LOCAL. Your data stays on your machine.
 
 ### v1.0.0 (2026-03-24)
 - 🚀 Initial release
-- 161 skills across 8 categories
-- Local execution — your data never leaves your machine
+- 161 skills across 8 construction administration categories
+- Local execution — project data never leaves your machine
 - Anonymous gap reporting for skill roadmap
+- Company profile injection for document headers
