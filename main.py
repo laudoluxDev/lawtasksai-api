@@ -436,13 +436,20 @@ def generate_token(user_id: str, license_key: str) -> str:
 
 # Credit pack pricing
 CREDIT_PACKS = {
-    "trial": {"credits": 10, "price_cents": 2000, "one_time": False, "name": "Trial"},
-    "starter": {"credits": 10, "price_cents": 2000, "one_time": False, "name": "Trial"},  # Deprecated, use 'trial'
-    "essentials": {"credits": 50, "price_cents": 7500, "one_time": False, "name": "Essentials"},
-    "accelerator": {"credits": 100, "price_cents": 12500, "one_time": False, "name": "Accelerator"},
-    "efficient": {"credits": 250, "price_cents": 25000, "one_time": False, "name": "Efficient"},
-    "unstoppable": {"credits": 625, "price_cents": 50000, "one_time": False, "name": "Unstoppable"},
-    "apex": {"credits": 1500, "price_cents": 100000, "one_time": False, "name": "Apex"},
+    "tryit":       {"credits": 2,    "price_cents": 500,    "one_time": False, "name": "Try It"},
+    "starter":     {"credits": 15,   "price_cents": 2900,   "one_time": False, "name": "Starter"},
+    "pro":         {"credits": 60,   "price_cents": 9900,   "one_time": False, "name": "Pro"},
+    "business":    {"credits": 150,  "price_cents": 19900,  "one_time": False, "name": "Business"},
+    "power":       {"credits": 350,  "price_cents": 34900,  "one_time": False, "name": "Power"},
+    "unlimited":   {"credits": 800,  "price_cents": 59900,  "one_time": False, "name": "Unlimited"},
+    "enterprise":  {"credits": 2000, "price_cents": 99900,  "one_time": False, "name": "Enterprise"},
+    # Legacy aliases
+    "trial":       {"credits": 15,   "price_cents": 2900,   "one_time": False, "name": "Starter"},
+    "essentials":  {"credits": 60,   "price_cents": 9900,   "one_time": False, "name": "Pro"},
+    "accelerator": {"credits": 150,  "price_cents": 19900,  "one_time": False, "name": "Business"},
+    "efficient":   {"credits": 350,  "price_cents": 34900,  "one_time": False, "name": "Power"},
+    "unstoppable": {"credits": 800,  "price_cents": 59900,  "one_time": False, "name": "Unlimited"},
+    "apex":        {"credits": 2000, "price_cents": 99900,  "one_time": False, "name": "Enterprise"},
 }
 
 # ============================================
