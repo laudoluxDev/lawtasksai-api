@@ -1927,9 +1927,8 @@ Questions? hello@{purchase_product_domain}
             try:
                 zoho_client_id = os.getenv("ZOHO_CLIENT_ID", "")
                 zoho_client_secret = os.getenv("ZOHO_CLIENT_SECRET", "")
-                zoho_refresh_token = os.getenv("ZOHO_REFRESH_TOKEN", "")
-                zoho_org_id = "914522041"
-                zoho_zuid = "730494764"
+                zoho_refresh_token = os.getenv("ZOHO_MAIL_REFRESH_TOKEN", "") or os.getenv("ZOHO_REFRESH_TOKEN", "")
+                zoho_account_id = "6556209000000008002"
 
                 if zoho_client_id and zoho_refresh_token:
                     # Get fresh access token
@@ -1954,7 +1953,7 @@ Questions? hello@{purchase_product_domain}
                         }).encode()
                         import urllib.request as _ur
                         mail_req = _ur.Request(
-                            f"https://mail.zoho.com/api/organization/{zoho_org_id}/accounts/{zoho_zuid}/messages",
+                            f"https://mail.zoho.com/api/accounts/{zoho_account_id}/messages",
                             data=mail_payload,
                             headers={
                                 "Authorization": f"Zoho-oauthtoken {access_token}",
