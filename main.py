@@ -1947,7 +1947,7 @@ Questions? hello@{purchase_product_domain}
                         }).encode()
                         import urllib.request as _ur
                         mail_req = _ur.Request(
-                            f"https://mail.zoho.com/api/accounts/{zoho_zuid}/messages",
+                            f"https://mail.zoho.com/api/organization/{zoho_org_id}/accounts/{zoho_zuid}/messages",
                             data=mail_payload,
                             headers={
                                 "Authorization": f"Zoho-oauthtoken {access_token}",
