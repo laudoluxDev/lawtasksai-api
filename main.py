@@ -15,6 +15,7 @@ import hashlib
 import io
 import zipfile
 import json
+import asyncio
 import stripe
 import anthropic
 import re
@@ -1893,7 +1894,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
         # Send confirmation email via Zoho SMTP or SendGrid
         try:
-            download_url = f"https://api.lawtasksai.com/download/loader/{license.license_key}"
+            download_url = f"https://api.lawtasksai.com/download/loader?session_id={session['id']}"
             success_url = f"https://{purchase_product_domain}/success?session_id={session['id']}"
             email_subject = f"Your {purchase_product_name} license key and download link"
             email_body = f"""Thank you for purchasing {purchase_product_name}!
@@ -2046,28 +2047,50 @@ async def get_checkout_session(session_id: str, db: AsyncSession = Depends(get_d
     except stripe.error.InvalidRequestError:
         raise HTTPException(status_code=404, detail="Session not found")
 
-@app.get("/download/loader/{license_key}")
-async def download_loader(license_key: str, db: AsyncSession = Depends(get_db)):
+@app.get("/download/loader")
+async def download_loader_by_session(session_id: str, db: AsyncSession = Depends(get_db)):
     """
-    Generate and download personalized loader skill with license key pre-configured.
-    Product-aware: uses the product tied to the user's license.
+    Download loader using Stripe session_id — always serves the correct product
+    regardless of what else is on the account. Used in purchase confirmation emails.
     """
-    # Validate license key
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+        if session.payment_status != 'paid':
+            raise HTTPException(status_code=400, detail="Payment not completed")
+        customer_email = session.get('customer_details', {}).get('email')
+        meta = session.get('metadata', {})
+        product_id = meta.get('product_id', 'law')
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid session: {e}")
+
+    # Get the user's license key
+    result = await db.execute(select(User).where(User.email == customer_email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    license_result = await db.execute(
+        select(License).where(License.user_id == user.id, License.status == "active")
+        .order_by(License.valid_from.desc()).limit(1)
+    )
+    license = license_result.scalar_one_or_none()
+    if not license:
+        raise HTTPException(status_code=404, detail="No active license found")
+
+    # Delegate to the core download logic with the session's product_id
+    return await _build_loader_zip(license.license_key, product_id, db)
+
+
+async def _build_loader_zip(license_key: str, product_id: str, db: AsyncSession):
+    """Core download logic — builds the zip for a given license + product."""
     result = await db.execute(
-        select(License).where(
-            License.license_key == license_key,
-            License.status == "active"
-        )
+        select(License).where(License.license_key == license_key, License.status == "active")
     )
     license = result.scalar_one_or_none()
-
     if not license:
         raise HTTPException(status_code=404, detail="Invalid license key")
 
-    # Resolve product info from the user's product_id
-    user_result = await db.execute(select(User).where(User.id == license.user_id))
-    user = user_result.scalar_one_or_none()
-    user_product_id = (user.product_id if user else None) or "law"
+    user_product_id = product_id or "law"
 
     prod_name = "LawTasksAI"
     prod_domain = "lawtasksai.com"
@@ -2699,6 +2722,21 @@ if __name__ == "__main__":
             'Content-Disposition': f'attachment; filename={zip_filename}'
         }
     )
+
+
+@app.get("/download/loader/{license_key}")
+async def download_loader(license_key: str, db: AsyncSession = Depends(get_db)):
+    """
+    Download loader by license key — uses account's current product_id.
+    Kept for backwards compatibility and re-download links.
+    """
+    result = await db.execute(select(User).join(License, License.user_id == User.id).where(
+        License.license_key == license_key, License.status == "active"
+    ))
+    user = result.scalar_one_or_none()
+    product_id = (user.product_id if user else None) or "law"
+    return await _build_loader_zip(license_key, product_id, db)
+
 
 # ============================================
 # Routes: Products (public branding endpoint)
