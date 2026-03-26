@@ -2910,7 +2910,8 @@ async def create_skill(
         credits_per_use=skill_data.get("credits_per_use", 1),
         requires_upload=skill_data.get("requires_upload", False),
         execution_type=skill_data.get("execution_type", "server"),
-        is_published=skill_data.get("is_published", False)
+        is_published=skill_data.get("is_published", False),
+        product_id=skill_data.get("product_id", "law")
     )
     
     await db.merge(skill)
@@ -2933,7 +2934,7 @@ async def update_skill(
     
     # Apply partial updates
     allowed_fields = ['execution_type', 'requires_upload', 'credits_per_use', 
-                      'is_published', 'description', 'name', 'category_id']
+                      'is_published', 'description', 'name', 'category_id', 'product_id']
     
     for field, value in updates.items():
         if field in allowed_fields:
