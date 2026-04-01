@@ -3967,6 +3967,32 @@ async def migrate_set_product_domains(db: AsyncSession = Depends(get_db)):
 
 
 # Register admin router (all routes protected by X-Admin-Secret)
+@admin_router.post("/migrate/add-product")
+async def migrate_add_product(data: dict, db: AsyncSession = Depends(get_db)):
+    """Insert or update a product record."""
+    pid = data.get("id")
+    if not pid:
+        raise HTTPException(status_code=400, detail="id is required")
+    await db.execute(text("""
+        INSERT INTO products (id, name, primary_color, accent_color, background_color, domain, is_active)
+        VALUES (:id, :name, :primary_color, :accent_color, :background_color, :domain, TRUE)
+        ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            domain = EXCLUDED.domain,
+            accent_color = EXCLUDED.accent_color,
+            is_active = TRUE
+    """), {
+        "id": pid,
+        "name": data.get("name", pid),
+        "primary_color": data.get("primary_color", "#1a1a2e"),
+        "accent_color": data.get("accent_color", "#2563eb"),
+        "background_color": data.get("background_color", "#ffffff"),
+        "domain": data.get("domain", f"{pid}tasksai.com"),
+    })
+    await db.commit()
+    return {"success": True, "product_id": pid}
+
+
 app.include_router(admin_router)
 
 if __name__ == "__main__":
