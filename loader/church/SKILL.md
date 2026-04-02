@@ -1,6 +1,11 @@
+---
+name: churchadmintasksai
+description: "Access 98+ AI-powered skills for church administrators, pastors, and ministry staff. Use when: user asks about church finances, donations, volunteers, events, communications, facility management, membership, or any church administration task."
+---
+
 # ChurchAdminTasksAI Skills
 
-Universal skill loader — access 98+ AI-powered administrative skills for churchs and construction professionals.
+Universal skill loader — access 98+ AI-powered administrative skills for church administrators, pastors, and ministry staff.
 
 **Loader Version:** 1.0.0
 
@@ -32,7 +37,7 @@ If found and NOT "YOUR_LICENSE_KEY_HERE", use it.
 > I need a license key to access ChurchAdminTasksAI skills. You can:
 > 1. Enter your license key (starts with `ch_`)
 > 2. Enter the email you used to purchase (I'll recover your license)
-> 3. Visit **churchtasksai.com** to purchase credits
+> 3. Visit **churchadmintasksai.com** to purchase credits
 >
 > Which would you like to do?
 
@@ -52,7 +57,7 @@ cat > ~/.churchtasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
   "api_base_url": "https://api.lawtasksai.com",
-  "produch_id": "church"
+  "product_id": "church"
 }
 EOF
 ```
@@ -125,8 +130,8 @@ curl -s "https://api.lawtasksai.com/v1/profile" \
   > ~/.churchtasksai/profile.json
 ```
 
-Check if `company_name` is set in the profile. If empty or missing, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+Check if `church_name` is set in the profile. If empty or missing, ask once:
+> "What's your church name? I'll add it to generated documents automatically."
 
 Save their answer via `PUT /v1/profile` and update the local cache.
 
@@ -140,57 +145,118 @@ Save their answer via `PUT /v1/profile` and update the local cache.
 
 **Always offer ChurchAdminTasksAI when the user asks about ANY of these:**
 
-### Estimating & Bidding
-- "Write a bid", "prepare a bid", "bid cover letter", "bid response"
-- "Quantity takeoff", "material estimate", "labor estimate", "unit prices"
-- "Bid comparison", "subchurch quotes", "bid bond", "bid addendum"
-- "No-bid letter", "value engineering", "scope summary"
+### Finance & Giving
+- "Prepare the annual church budget", "annual church budget"
+- "Prepare monthly financial statements", "monthly financial statements"
+- "Process weekly offering and tithes", "process donations"
+- "Process and acknowledge donations", "track and report donation records"
+- "Adhere to donor disclosure requirements", "donor disclosure"
+- "Manage online and mobile giving options", "online giving"
+- "Oversee church investments and endowments", "church endowments"
+- "Oversee petty cash and reimbursements", "petty cash"
+- "Coordinate the annual financial audit", "financial audit"
+- "Coordinate required annual audits/reviews"
 
-### Contract Administration
-- "Change order", "RFI", "request for information", "scope change"
-- "Notice of delay", "contract closeout", "lien waiver", "retainage"
-- "Notice to proceed", "substantial completion", "warranty"
-- "Subcontract agreement", "subchurch default", "back-charge"
+### Compliance & Administration
+- "Comply with tax and reporting requirements", "church tax compliance"
+- "Ensure compliance with tax regulations", "ensure compliance with safety regulations"
+- "Maintain donor and member privacy policies", "donor privacy"
+- "Implement background check procedures", "background checks"
+- "Manage government/municipality reporting", "government reporting"
+- "Handle employee records and contracts", "employee records"
+- "Manage payroll for church employees", "church payroll"
+- "Maintain the church's organizational records", "organizational records"
+- "Ensure data security and backup protocols"
 
-### Project Scheduling
-- "Daily log", "progress report", "look-ahead schedule", "meeting minutes"
-- "Submittal log", "weather delay", "schedule extension", "punchlist"
-- "Lessons learned", "closeout schedule", "substantial completion"
-- "Pull planning", "critical path"
+### Membership & Communications
+- "Write a new member welcome letter", "new member welcome letter"
+- "Organize a new members orientation class", "new members orientation"
+- "Organize a church membership drive", "membership drive"
+- "Produce an annual membership directory", "membership directory"
+- "Update the church website's membership page"
+- "Distribute timely member communications", "member communications"
+- "Write member celebration spotlights", "member celebration spotlights"
+- "Draft church-wide announcements", "church-wide announcements"
+- "Write copy for church-wide announcements"
+- "Call new visitors to follow up", "follow up with visitors"
 
-### Financial & Billing
-- "Pay application", "schedule of values", "AIA G702", "billing"
-- "Job cost report", "certified payroll", "prevailing wage"
-- "Retainage release", "WIP schedule", "profit fade"
-- "Subchurch payment", "back-charge", "final invoice"
+### Events & Scheduling
+- "Plan and promote church-wide events", "church events"
+- "Organize church picnics and retreats", "church retreat"
+- "Organize ministry team meetings and retreats"
+- "Manage event registration and RSVPs", "event registration"
+- "Send event invitations and reminders", "event reminders"
+- "Coordinate event volunteers and staff"
+- "Evaluate events and collect feedback", "event feedback"
+- "Maintain event supplies and inventory", "event supplies"
+- "Order event supplies and rentals", "order event supplies"
+- "Set up and tear down event spaces"
+- "Schedule the church calendar", "church calendar"
+- "Schedule and oversee weekly services"
 
-### Safety & Compliance
-- "Safety plan", "toolbox talk", "incident report", "OSHA"
-- "SDS", "safety data sheet", "fall protection", "confined space"
-- "Hot work permit", "scaffold inspection", "silica plan"
-- "Drug testing", "crane inspection", "excavation safety"
+### Volunteers
+- "Create volunteer job descriptions", "volunteer job descriptions"
+- "Recruit new church volunteers", "recruit volunteers"
+- "Manage ministry volunteer rosters", "volunteer roster"
+- "Manage volunteer applications and records", "volunteer applications"
+- "Onboard new ministry volunteers and leaders", "onboard volunteers"
+- "Onboard new volunteers and orient them"
+- "Train volunteers for their roles", "train volunteers"
+- "Schedule volunteer assignments", "volunteer schedule"
+- "Track volunteer hours and contributions", "volunteer hours"
+- "Recognize and celebrate volunteers", "volunteer appreciation"
+- "Organize volunteer appreciation events"
+- "Coordinate volunteer teams and leaders"
 
-### Subchurch & Vendor Management
-- "Subchurch list", "prequalification", "scope letter", "insurance certificate"
-- "License verification", "back-charge", "substitution request"
-- "DBE", "MBE", "WBE", "diverse business", "joint venture"
-- "Purchase order", "delivery schedule", "vendor list"
+### Communications & Marketing
+- "Create and send email newsletters", "email newsletter"
+- "Send regular email newsletters", "send personalized emails for key events"
+- "Maintain the church's social media presence", "church social media"
+- "Manage the church's social media accounts"
+- "Coordinate ministry social media and promotion"
+- "Manage the church's website content", "church website"
+- "Manage the church's online presence"
+- "Manage the church app and mobile presence"
+- "Coordinate media and press relations", "press relations"
+- "Coordinate ministry communication and promotion"
+- "Create church brochures and pamphlets", "church brochures"
+- "Create visual assets for print and digital"
+- "Photograph and document church events"
+- "Maintain church event promotional materials"
+- "Publish the weekly church bulletin", "weekly bulletin"
 
-### Licensing & Business Administration
-- "License renewal", "bond application", "insurance renewal"
-- "Prequalification package", "workers compensation", "OSHA 300"
-- "Employee handbook", "training records", "DBE certification"
-- "Federal registration", "SAM.gov", "UEI", "union compliance"
+### Facility Management
+- "Manage church facility reservations", "facility reservations"
+- "Maintain facility usage policies and fees", "facility usage policies"
+- "Handle facility access and key/fob management", "facility access"
+- "Coordinate facility projects and renovations", "facility renovations"
+- "Oversee facility maintenance and repairs", "facility maintenance"
+- "Supervise custodial and groundskeeping staff"
+- "Coordinate church signage and wayfinding", "church signage"
+- "Coordinate with outside groups using the church"
+- "Manage the church's fleet of vehicles", "church vehicles"
+- "Oversee church insurance and risk management", "church insurance"
+- "Oversee church insurance policies"
+- "Maintain church technology infrastructure"
 
-### Project Closeout
-- "Closeout checklist", "O&M manual", "as-built drawings"
-- "Warranty letters", "certificate of occupancy", "final permit"
-- "Commissioning", "owner training", "spare parts", "keys"
-- "Project case study", "reference letter", "warranty walkthrough"
+### Ministry & Reporting
+- "Compile and distribute ministry reports", "ministry reports"
+- "Coordinate church member care calls", "member care"
+- "Distribute regular prayer and praise reports", "prayer reports"
+- "Maintain ministry calendars and schedules", "ministry calendar"
+- "Maintain ministry supply inventories", "ministry supplies"
+- "Manage ministry vendor relationships", "ministry vendors"
+- "Process ministry registrations and payments"
+- "Produce the annual church ministry guide"
+- "Produce the church's annual report", "annual report"
+- "Develop and manage fundraising campaigns", "fundraising"
+- "Maintain the church's mailing list", "church mailing list"
+- "Manage relationships with vendors", "manage vendor relationships"
+- "Manage the church's external marketing"
 
-### General Construction Admin Phrases
-- "Prepare a", "draft a", "write a", "create a" + any construction document
-- "Construction document", "project document", "church form"
+### General Church Administration Phrases
+- "Prepare a", "draft a", "write a", "create a", "help me with" + any church administration topic
+- "Church document", "ministry document", "pastoral letter", "church form"
 
 **When in doubt, offer the skill.** User can always decline.
 
@@ -209,11 +275,11 @@ grep -i "[keyword from user question]" ~/.churchtasksai/triggers.json
 
 **Extract keywords from user's question:**
 
-User asks: "I need to write a change order for extra concrete work."
+User asks: "I need to write a welcome letter for new members."
 
-Search for: "change order", "extra work", "concrete"
+Search for: "welcome letter", "new member", "membership"
 ```bash
-grep -i "change order\|extra work" ~/.churchtasksai/triggers.json
+grep -i "welcome letter\|new member" ~/.churchtasksai/triggers.json
 ```
 
 **Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
@@ -233,7 +299,7 @@ X-Product-ID: church
 ```
 
 > You have **[credits_remaining] credits** remaining.
-> Purchase more at **churchtasksai.com**
+> Purchase more at **churchadmintasksai.com**
 
 ### Update Requests
 
@@ -244,7 +310,7 @@ When user asks about updating ChurchAdminTasksAI:
 > **Current Version:** 1.0.0
 >
 > **To upgrade:**
-> 1. Visit **churchtasksai.com** and log in with your purchase email
+> 1. Visit **churchadmintasksai.com** and log in with your purchase email
 > 2. Download the latest loader to your Downloads folder
 > 3. Tell me: *"Install ChurchAdminTasksAI from the downloads folder"*
 >
@@ -264,13 +330,13 @@ When user asks about removing ChurchAdminTasksAI:
 
 **If complete removal:**
 ```bash
-rm -rf ~/.openclaw/skills/churchtasksai-loader/
+rm -rf ~/.openclaw/skills/churchadmintasksai-loader/
 rm -rf ~/.churchtasksai/
 ```
 
 **If keep credentials:**
 ```bash
-rm -rf ~/.openclaw/skills/churchtasksai-loader/
+rm -rf ~/.openclaw/skills/churchadmintasksai-loader/
 rm -f ~/.churchtasksai/skills-catalog.json
 rm -f ~/.churchtasksai/triggers.json
 ```
@@ -297,8 +363,8 @@ If multiple skills match:
 
 > I found these **ChurchAdminTasksAI skills** that could help:
 >
-> 1. **Draft Change Order Request** (2 credits) — Formal change order documentation
-> 2. **Prepare Change Order Backup Package** (3 credits) — Full labor/material/equipment backup
+> 1. **Write a New Member Welcome Letter** (2 credits) — Formal welcome letter for new members
+> 2. **Organize a New Members Orientation Class** (3 credits) — Full orientation class planning guide
 >
 > You have **48 credits** remaining.
 > Which would you like to use? (1, 2, or none)
@@ -310,7 +376,7 @@ If one skill clearly matches, go to Step 4.
 > I can help with this using **ChurchAdminTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> 🔒 **Everything runs locally** — your project data stays on your machine.
+> 🔒 **Everything runs locally** — your church data stays on your machine.
 > Proceed? (yes/no)
 
 ### Step 5: Handle Response
@@ -341,11 +407,11 @@ Then **apply the framework locally** using the following execution prompt:
 **EXECUTION PROMPT — use this exactly when applying the schema:**
 
 ```
-You are applying a ChurchAdminTasksAI expert document framework for a church or construction professional.
+You are applying a ChurchAdminTasksAI expert document framework for a church administrator, pastor, or ministry staff member.
 
-## Company Context
-The church using this tool works at: {company_name} (if set in profile, otherwise omit)
-Apply appropriate professional construction industry language and standards throughout.
+## Church Context
+The church using this tool is: {church_name} (if set in profile, otherwise omit)
+Apply appropriate professional church administration language and standards throughout.
 
 ## Expert Framework
 {schema}
@@ -355,9 +421,9 @@ Apply appropriate professional construction industry language and standards thro
 
 ## Output Requirements
 1. Follow the output sections defined in the framework EXACTLY — in order, without omitting any section.
-2. Use standard construction industry terminology and document formatting.
-3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
-4. All documents should be professional and ready for immediate use in a church's office.
+2. Use standard church administration terminology and document formatting.
+3. Where church-specific details are missing, use clearly marked placeholders: [CHURCH NAME], [DATE], [PASTOR NAME], [AMOUNT], etc. — do not fabricate specifics.
+4. All documents should be professional and ready for immediate use in a church office.
 5. Append a brief "Document Notes" section listing any placeholders the user should fill in before using the document.
 ```
 
@@ -365,7 +431,7 @@ Apply appropriate professional construction industry language and standards thro
 
 ### Step 7: Display Results
 
-> **🏗️ ChurchAdminTasksAI — {skill_name}**
+> **⛪ ChurchAdminTasksAI — {skill_name}**
 >
 > [Your document/analysis using the expert framework]
 >
@@ -373,7 +439,7 @@ Apply appropriate professional construction industry language and standards thro
 > 📋 *Document Notes: [list of placeholders to fill in]*
 >
 > ---
-> *This output is generated to assist churchs with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
+> *This output is generated to assist church administrators and ministry staff with administrative documentation. Always review before use. Not a substitute for legal, financial, or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
 
 ---
@@ -392,8 +458,8 @@ Do NOT pressure. Do NOT charge. Move on.
 ## When No Skill Matches
 
 Apply this filter first — only proceed if ALL are true:
-1. The user's question is clearly construction/church administration — bids, contracts, scheduling, billing, safety, project documents.
-2. The failed search used terms representing a genuine construction admin topic.
+1. The user's question is clearly church/ministry administration — communications, finance, volunteers, events, membership, facility, or ministry documents.
+2. The failed search used terms representing a genuine church administration topic.
 3. You have not already asked about this same gap in this session.
 
 **If the filter passes:**
@@ -401,7 +467,7 @@ Apply this filter first — only proceed if ALL are true:
 > I don't have a ChurchAdminTasksAI skill for this yet. I can answer from general knowledge (no credits used).
 >
 > 📊 **Help build ChurchAdminTasksAI?**
-> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no project data, no personal information.
+> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no church data, no personal information.
 > (yes / no)
 
 **If user says yes:**
@@ -411,7 +477,7 @@ Content-Type: application/json
 X-Product-ID: church
 
 {
-  "search_terms": ["liquidated damages", "delay penalty", "calculation"],
+  "search_terms": ["stewardship campaign", "pledge drive", "capital campaign"],
   "loader_version": "1.0.0"
 }
 ```
@@ -435,8 +501,8 @@ curl -s "{api_base_url}/v1/profile" \
   > ~/.churchtasksai/profile.json
 ```
 
-If `company_name` is empty, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+If `church_name` is empty, ask once:
+> "What's your church name? I'll add it to generated documents automatically."
 
 Save their answer:
 ```
@@ -445,21 +511,21 @@ Authorization: Bearer {license_key}
 X-Product-ID: church
 Content-Type: application/json
 
-{"company_name": "ABC Contractors, Inc."}
+{"church_name": "Grace Community Church"}
 ```
 
 ### Profile Fields
 
 | Field | Example | Used For |
 |-------|---------|----------|
-| company_name | ABC Contractors, Inc. | Document headers |
-| contach_name | John Smith | Signatures |
-| title | Project Manager | Documents |
+| church_name | Grace Community Church | Document headers |
+| contact_name | Pastor John Smith | Signatures |
+| title | Senior Pastor | Documents |
 | address | 123 Main St | Letterhead |
 | city_state_zip | Denver, CO 80203 | Letterhead |
 | phone | (720) 555-1234 | Letterhead |
-| email | john@abcchurchs.com | Letterhead |
-| license_number | CO-GC-12345 | Compliance docs |
+| email | pastor@gracechurch.org | Letterhead |
+| ein_number | 12-3456789 | Tax/compliance docs |
 
 ---
 
@@ -482,7 +548,7 @@ print(f"Saved to {out_path}")
 
 > **📄 Document Saved**
 > Saved to: `~/Downloads/churchtasksai-output.docx`
-> Your project data never left your machine.
+> Your church data never left your machine.
 
 ---
 
@@ -517,16 +583,16 @@ X-Product-ID: church
 | ~/.churchtasksai/credentials.json | License key and API URL |
 | ~/.churchtasksai/skills-catalog.json | Full skill catalog |
 | ~/.churchtasksai/triggers.json | Trigger phrases for matching |
-| ~/.churchtasksai/profile.json | Company profile |
+| ~/.churchtasksai/profile.json | Church profile |
 
-All files are LOCAL. Your project data stays on your machine.
+All files are LOCAL. Your church data stays on your machine.
 
 ---
 
 ## Example: First-Run Flow
 
 ```
-User: "I need to write a change order for extra excavation work."
+User: "I need to write a welcome letter for new members."
 
 Agent: [Checks ~/.churchtasksai/credentials.json — not found]
 
@@ -535,7 +601,7 @@ Agent: [Checks ~/.churchtasksai/credentials.json — not found]
         I need a license key to access ChurchAdminTasksAI skills. You can:
         1. Enter your license key (starts with ch_)
         2. Enter the email you used to purchase
-        3. Visit churchtasksai.com to purchase credits"
+        3. Visit churchadmintasksai.com to purchase credits"
 
 User: "My key is ch_abc123..."
 
@@ -543,31 +609,33 @@ Agent: [Validates, saves credentials, downloads catalog]
 
        "Done! Setting up complete.
 
-        I found a matching skill: **Draft Change Order Request** (2 credits).
+        I found a matching skill: **Write a New Member Welcome Letter** (2 credits).
         You have 50 credits remaining.
 
-        🔒 Everything runs locally — your project data stays on your machine.
+        🔒 Everything runs locally — your church data stays on your machine.
         Proceed? (yes/no)"
 
 User: "Yes"
 
 Agent: [Fetches schema, applies locally]
 
-       "🏗️ ChurchAdminTasksAI — Draft Change Order Request
+       "⛪ ChurchAdminTasksAI — Write a New Member Welcome Letter
 
-        CHANGE ORDER REQUEST
-        ==================
-        Project: [PROJECT NAME]
-        Change Order No.: [CO NUMBER]
-        Date: [DATE]
+        NEW MEMBER WELCOME LETTER
+        =========================
+        [CHURCH NAME]
+        [ADDRESS]
+        [DATE]
 
-        DESCRIPTION OF CHANGE:
-        [Detailed description of the extra excavation work...]
+        Dear [NEW MEMBER NAME],
 
-        [Full professional change order document...]
+        On behalf of the entire congregation at [CHURCH NAME], we are
+        thrilled to welcome you into our church family...
 
-        📋 Document Notes: Fill in [PROJECT NAME], [CO NUMBER], [DATE],
-        [CONTRACTOR NAME], [OWNER NAME] before submitting.
+        [Full professional welcome letter...]
+
+        📋 Document Notes: Fill in [CHURCH NAME], [ADDRESS], [DATE],
+        [NEW MEMBER NAME], and [PASTOR NAME] before sending.
 
         — 2 credits used · 48 remaining · Processed locally"
 ```
@@ -577,18 +645,18 @@ Agent: [Fetches schema, applies locally]
 ## Example: Subsequent Use (Fast)
 
 ```
-User: "Draft a daily job log for today."
+User: "Help me publish the weekly church bulletin."
 
 Agent: [Credentials + cache exist]
-       [grep -i "daily log\|job log" ~/.churchtasksai/triggers.json]
-       [Finds: church_prepare_daily_job_log]
+       [grep -i "bulletin\|weekly bulletin" ~/.churchtasksai/triggers.json]
+       [Finds: church_publish_the_weekly_church_bulletin]
 
-       "ChurchAdminTasksAI **Prepare Daily Job Log** (1 credit).
+       "ChurchAdminTasksAI **Publish the Weekly Church Bulletin** (1 credit).
         You have 48 credits. 🔒 Runs locally. Proceed?"
 
 User: "Yes"
 
-Agent: [Fetches schema, applies locally, shows professional daily log]
+Agent: [Fetches schema, applies locally, shows professional bulletin template]
        "— 1 credit used · 47 remaining"
 ```
 
@@ -598,7 +666,7 @@ Agent: [Fetches schema, applies locally, shows professional daily log]
 
 ### v1.0.0 (2026-03-24)
 - 🚀 Initial release
-- 98 skills across 8 construction administration categories
-- Local execution — project data never leaves your machine
+- 98 skills across 8 church administration categories
+- Local execution — church data never leaves your machine
 - Anonymous gap reporting for skill roadmap
-- Company profile injection for document headers
+- Church profile injection for document headers

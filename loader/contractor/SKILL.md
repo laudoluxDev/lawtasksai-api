@@ -1,3 +1,8 @@
+---
+name: contractortasksai
+description: "Access 180+ AI-powered skills for general contractors, subcontractors, and construction project managers. Use when: user asks about estimating, bidding, change orders, RFIs, daily logs, safety plans, pay applications, subcontractor management, project closeout, or any construction administration task."
+---
+
 # ContractorTasksAI Skills
 
 Universal skill loader — access 180+ AI-powered administrative skills for contractors and construction professionals.

@@ -1,6 +1,11 @@
+---
+name: mortgagetasksai
+description: "Access 80+ AI-powered skills for mortgage loan officers, processors, and underwriters. Use when: user asks about borrower intake, loan applications, pre-approval, underwriting, closing disclosures, TRID compliance, pipeline management, appraisals, or any mortgage lending administration task."
+---
+
 # MortgageTasksAI Skills
 
-Universal skill loader — access 80+ AI-powered administrative skills for mortgages and construction professionals.
+Universal skill loader — access 80+ AI-powered administrative skills for mortgage loan officers, processors, and underwriters.
 
 **Loader Version:** 1.0.0
 
@@ -52,7 +57,7 @@ cat > ~/.mortgagetasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
   "api_base_url": "https://api.lawtasksai.com",
-  "produmo_id": "mortgage"
+  "product_id": "mortgage"
 }
 EOF
 ```
@@ -126,7 +131,7 @@ curl -s "https://api.lawtasksai.com/v1/profile" \
 ```
 
 Check if `company_name` is set in the profile. If empty or missing, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+> "What's your company or brokerage name? I'll add it to generated documents automatically."
 
 Save their answer via `PUT /v1/profile` and update the local cache.
 
@@ -140,57 +145,103 @@ Save their answer via `PUT /v1/profile` and update the local cache.
 
 **Always offer MortgageTasksAI when the user asks about ANY of these:**
 
-### Estimating & Bidding
-- "Write a bid", "prepare a bid", "bid cover letter", "bid response"
-- "Quantity takeoff", "material estimate", "labor estimate", "unit prices"
-- "Bid comparison", "submortgage quotes", "bid bond", "bid addendum"
-- "No-bid letter", "value engineering", "scope summary"
+### Borrower Intake & Application
+- "Conduct initial borrower interview"
+- "Assist the borrower in completing the application"
+- "Collect borrower contact information"
+- "Obtain borrower income documentation"
+- "Explain loan program options to the borrower"
+- "Assess borrower eligibility for loan programs"
+- "Educate the borrower on affordability guidelines"
+- "Initiate borrower credit report authorization", "explain and obtain borrower consent for credit report"
+- "Review application for completeness and accuracy"
+- "Follow up on application submission"
 
-### Contract Administration
-- "Change order", "RFI", "request for information", "scope change"
-- "Notice of delay", "contract closeout", "lien waiver", "retainage"
-- "Notice to proceed", "substantial completion", "warranty"
-- "Subcontract agreement", "submortgage default", "back-charge"
+### Pre-Approval & Disclosures
+- "Provide pre-approval letter to the borrower", "write a pre-approval congratulations letter"
+- "Manage borrower expectations around pre-approval"
+- "Provide initial truth in lending disclosure"
+- "Prepare loan estimate disclosure"
+- "Deliver good faith estimate to borrower"
+- "Provide estimated closing costs disclosure"
+- "Clarify loan program details for the borrower"
+- "Respond to borrower inquiries about interest rates"
 
-### Project Scheduling
-- "Daily log", "progress report", "look-ahead schedule", "meeting minutes"
-- "Submittal log", "weather delay", "schedule extension", "punchlist"
-- "Lessons learned", "closeout schedule", "substantial completion"
-- "Pull planning", "critical path"
+### Processing & Documentation
+- "Obtain borrower tax transcript authorization"
+- "Obtain credit report and FICO scores"
+- "Verify borrower employment history"
+- "Verify borrower asset documentation"
+- "Review borrower debt obligations"
+- "Analyze borrower income and debt ratios"
+- "Collect homeowner's insurance information", "obtain homeowner's insurance binder"
+- "Determine if additional documentation is needed"
+- "Resolve borrower questions about required documents"
+- "Maintain loan file documentation"
 
-### Financial & Billing
-- "Pay application", "schedule of values", "AIA G702", "billing"
-- "Job cost report", "certified payroll", "prevailing wage"
-- "Retainage release", "WIP schedule", "profit fade"
-- "Submortgage payment", "back-charge", "final invoice"
+### Underwriting
+- "Recommend loan approval or denial to underwriter"
+- "Document underwriting decision rationale"
+- "Prepare underwriting summary memo"
+- "Manage borrower communications during underwriting"
+- "Manage receipt of required loan conditions"
+- "Resolve outstanding loan conditions"
+- "Confirm all loan conditions have been satisfied"
 
-### Safety & Compliance
-- "Safety plan", "toolbox talk", "incident report", "OSHA"
-- "SDS", "safety data sheet", "fall protection", "confined space"
-- "Hot work permit", "scaffold inspection", "silica plan"
-- "Drug testing", "crane inspection", "excavation safety"
+### Appraisal & Title
+- "Coordinate property appraisal scheduling"
+- "Review appraisal report for accuracy"
+- "Review property information and comparable sales"
+- "Order title search and title insurance"
+- "Obtain title commitment and legal description"
 
-### Submortgage & Vendor Management
-- "Submortgage list", "prequalification", "scope letter", "insurance certificate"
-- "License verification", "back-charge", "substitution request"
-- "DBE", "MBE", "WBE", "diverse business", "joint venture"
-- "Purchase order", "delivery schedule", "vendor list"
+### Closing & Post-Closing
+- "Prepare closing disclosure statement"
+- "Review closing disclosure statement for accuracy"
+- "Deliver final closing disclosure to borrower"
+- "Prepare closing instructions for settlement agent"
+- "Schedule closing appointment with all parties"
+- "Schedule borrower signing appointment"
+- "Facilitate signing of closing documents"
+- "Disburse funds to appropriate parties"
+- "Manage trailing documents and post-closing items"
+- "Provide final documentation to the borrower"
+- "Obtain borrower acknowledgments"
 
-### Licensing & Business Administration
-- "License renewal", "bond application", "insurance renewal"
-- "Prequalification package", "workers compensation", "OSHA 300"
-- "Employee handbook", "training records", "DBE certification"
-- "Federal registration", "SAM.gov", "UEI", "union compliance"
+### Compliance & Regulatory
+- "Manage TRID compliance and timing"
+- "Ensure compliance with RESPA regulations"
+- "Document state-specific regulatory compliance"
+- "Prepare HMDA reporting data"
+- "Provide disclosures for loan program changes"
+- "Coordinate with third-party partners"
 
-### Project Closeout
-- "Closeout checklist", "O&M manual", "as-built drawings"
-- "Warranty letters", "certificate of occupancy", "final permit"
-- "Commissioning", "owner training", "spare parts", "keys"
-- "Project case study", "reference letter", "warranty walkthrough"
+### Pipeline Management
+- "Maintain an organized loan pipeline tracker"
+- "Monitor loan statuses and next steps"
+- "Update borrower on loan status changes"
+- "Analyze pipeline metrics and trends"
+- "Prepare weekly or monthly pipeline reports"
+- "Identify and address pipeline bottlenecks"
+- "Develop strategies to improve pipeline efficiency"
+- "Document pipeline processes and best practices"
+- "Schedule periodic pipeline review meetings"
+- "Provide pipeline visibility to leadership"
 
-### General Construction Admin Phrases
-- "Prepare a", "draft a", "write a", "create a" + any construction document
-- "Construction document", "project document", "mortgage form"
+### Business Development & Marketing
+- "Maintain a database of referral sources"
+- "Reach out to referral partners proactively"
+- "Respond to inbound leads from the website"
+- "Analyze market trends and competitor activities"
+- "Develop marketing materials for the loan programs"
+- "Develop a comprehensive content marketing strategy"
+- "Host educational webinars for potential borrowers"
+- "Manage the company's social media presence"
+- "Attend local networking events and meetups"
+- "Collaborate with the sales team on lead generation"
+
+### General Mortgage Phrases
+- "Prepare a", "draft a", "write a", "create a", "help me with" + any mortgage lending topic
 
 **When in doubt, offer the skill.** User can always decline.
 
@@ -209,11 +260,11 @@ grep -i "[keyword from user question]" ~/.mortgagetasksai/triggers.json
 
 **Extract keywords from user's question:**
 
-User asks: "I need to write a change order for extra concrete work."
+User asks: "I need to prepare a closing disclosure for my borrower."
 
-Search for: "change order", "extra work", "concrete"
+Search for: "closing disclosure", "borrower"
 ```bash
-grep -i "change order\|extra work" ~/.mortgagetasksai/triggers.json
+grep -i "closing disclosure\|closing statement" ~/.mortgagetasksai/triggers.json
 ```
 
 **Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
@@ -297,8 +348,8 @@ If multiple skills match:
 
 > I found these **MortgageTasksAI skills** that could help:
 >
-> 1. **Draft Change Order Request** (2 credits) — Formal change order documentation
-> 2. **Prepare Change Order Backup Package** (3 credits) — Full labor/material/equipment backup
+> 1. **Prepare Closing Disclosure Statement** (2 credits) — Formal closing disclosure documentation
+> 2. **Review Closing Disclosure Statement for Accuracy** (2 credits) — Audit and verify closing disclosure
 >
 > You have **48 credits** remaining.
 > Which would you like to use? (1, 2, or none)
@@ -310,7 +361,7 @@ If one skill clearly matches, go to Step 4.
 > I can help with this using **MortgageTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> 🔒 **Everything runs locally** — your project data stays on your machine.
+> 🔒 **Everything runs locally** — your borrower data stays on your machine.
 > Proceed? (yes/no)
 
 ### Step 5: Handle Response
@@ -341,11 +392,11 @@ Then **apply the framework locally** using the following execution prompt:
 **EXECUTION PROMPT — use this exactly when applying the schema:**
 
 ```
-You are applying a MortgageTasksAI expert document framework for a mortgage or construction professional.
+You are applying a MortgageTasksAI expert document framework for a mortgage loan officer, processor, or underwriter.
 
 ## Company Context
-The mortgage using this tool works at: {company_name} (if set in profile, otherwise omit)
-Apply appropriate professional construction industry language and standards throughout.
+The professional using this tool works at: {company_name} (if set in profile, otherwise omit)
+Apply appropriate professional mortgage lending industry language and standards throughout.
 
 ## Expert Framework
 {schema}
@@ -355,9 +406,9 @@ Apply appropriate professional construction industry language and standards thro
 
 ## Output Requirements
 1. Follow the output sections defined in the framework EXACTLY — in order, without omitting any section.
-2. Use standard construction industry terminology and document formatting.
-3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
-4. All documents should be professional and ready for immediate use in a mortgage's office.
+2. Use standard mortgage lending terminology and document formatting.
+3. Where loan-specific details are missing, use clearly marked placeholders: [BORROWER NAME], [LOAN NUMBER], [DATE], [AMOUNT], etc. — do not fabricate specifics.
+4. All documents should be professional and ready for immediate use in a mortgage lending office.
 5. Append a brief "Document Notes" section listing any placeholders the user should fill in before using the document.
 ```
 
@@ -365,7 +416,7 @@ Apply appropriate professional construction industry language and standards thro
 
 ### Step 7: Display Results
 
-> **🏗️ MortgageTasksAI — {skill_name}**
+> **🏦 MortgageTasksAI — {skill_name}**
 >
 > [Your document/analysis using the expert framework]
 >
@@ -373,7 +424,7 @@ Apply appropriate professional construction industry language and standards thro
 > 📋 *Document Notes: [list of placeholders to fill in]*
 >
 > ---
-> *This output is generated to assist mortgages with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
+> *This output is generated to assist mortgage professionals with administrative documentation. Always review before use. Not a substitute for legal, compliance, or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
 
 ---
@@ -392,8 +443,8 @@ Do NOT pressure. Do NOT charge. Move on.
 ## When No Skill Matches
 
 Apply this filter first — only proceed if ALL are true:
-1. The user's question is clearly construction/mortgage administration — bids, contracts, scheduling, billing, safety, project documents.
-2. The failed search used terms representing a genuine construction admin topic.
+1. The user's question is clearly mortgage lending administration — borrower intake, loan processing, underwriting, disclosures, closing, pipeline management, compliance.
+2. The failed search used terms representing a genuine mortgage lending topic.
 3. You have not already asked about this same gap in this session.
 
 **If the filter passes:**
@@ -401,7 +452,7 @@ Apply this filter first — only proceed if ALL are true:
 > I don't have a MortgageTasksAI skill for this yet. I can answer from general knowledge (no credits used).
 >
 > 📊 **Help build MortgageTasksAI?**
-> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no project data, no personal information.
+> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no borrower data, no personal information.
 > (yes / no)
 
 **If user says yes:**
@@ -411,7 +462,7 @@ Content-Type: application/json
 X-Product-ID: mortgage
 
 {
-  "search_terms": ["liquidated damages", "delay penalty", "calculation"],
+  "search_terms": ["rate lock", "extension", "fee calculation"],
   "loader_version": "1.0.0"
 }
 ```
@@ -436,7 +487,7 @@ curl -s "{api_base_url}/v1/profile" \
 ```
 
 If `company_name` is empty, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+> "What's your company or brokerage name? I'll add it to generated documents automatically."
 
 Save their answer:
 ```
@@ -445,21 +496,21 @@ Authorization: Bearer {license_key}
 X-Product-ID: mortgage
 Content-Type: application/json
 
-{"company_name": "ABC Contractors, Inc."}
+{"company_name": "First National Mortgage, LLC"}
 ```
 
 ### Profile Fields
 
 | Field | Example | Used For |
 |-------|---------|----------|
-| company_name | ABC Contractors, Inc. | Document headers |
-| contamo_name | John Smith | Signatures |
-| title | Project Manager | Documents |
+| company_name | First National Mortgage, LLC | Document headers |
+| loan_officer_name | Jane Smith | Signatures |
+| title | Senior Loan Officer | Documents |
+| nmls_number | NMLS# 123456 | Compliance docs |
 | address | 123 Main St | Letterhead |
 | city_state_zip | Denver, CO 80203 | Letterhead |
 | phone | (720) 555-1234 | Letterhead |
-| email | john@abcmortgages.com | Letterhead |
-| license_number | CO-GC-12345 | Compliance docs |
+| email | jane@firstnationalmortgage.com | Letterhead |
 
 ---
 
@@ -482,7 +533,7 @@ print(f"Saved to {out_path}")
 
 > **📄 Document Saved**
 > Saved to: `~/Downloads/mortgagetasksai-output.docx`
-> Your project data never left your machine.
+> Your borrower data never left your machine.
 
 ---
 
@@ -519,14 +570,14 @@ X-Product-ID: mortgage
 | ~/.mortgagetasksai/triggers.json | Trigger phrases for matching |
 | ~/.mortgagetasksai/profile.json | Company profile |
 
-All files are LOCAL. Your project data stays on your machine.
+All files are LOCAL. Your borrower data stays on your machine.
 
 ---
 
 ## Example: First-Run Flow
 
 ```
-User: "I need to write a change order for extra excavation work."
+User: "I need to prepare a loan estimate disclosure for my borrower."
 
 Agent: [Checks ~/.mortgagetasksai/credentials.json — not found]
 
@@ -543,31 +594,35 @@ Agent: [Validates, saves credentials, downloads catalog]
 
        "Done! Setting up complete.
 
-        I found a matching skill: **Draft Change Order Request** (2 credits).
+        I found a matching skill: **Prepare Loan Estimate Disclosure** (2 credits).
         You have 50 credits remaining.
 
-        🔒 Everything runs locally — your project data stays on your machine.
+        🔒 Everything runs locally — your borrower data stays on your machine.
         Proceed? (yes/no)"
 
 User: "Yes"
 
 Agent: [Fetches schema, applies locally]
 
-       "🏗️ MortgageTasksAI — Draft Change Order Request
+       "🏦 MortgageTasksAI — Prepare Loan Estimate Disclosure
 
-        CHANGE ORDER REQUEST
-        ==================
-        Project: [PROJECT NAME]
-        Change Order No.: [CO NUMBER]
-        Date: [DATE]
+        LOAN ESTIMATE
+        =============
+        Date Issued: [DATE]
+        Applicant(s): [BORROWER NAME]
+        Property: [PROPERTY ADDRESS]
+        Loan Term: [LOAN TERM]
+        Purpose: [LOAN PURPOSE]
+        Product: [LOAN PRODUCT]
+        Loan Type: [LOAN TYPE]
 
-        DESCRIPTION OF CHANGE:
-        [Detailed description of the extra excavation work...]
+        PROJECTED PAYMENTS:
+        [Detailed payment schedule with principal, interest, taxes, and insurance...]
 
-        [Full professional change order document...]
+        [Full professional loan estimate disclosure...]
 
-        📋 Document Notes: Fill in [PROJECT NAME], [CO NUMBER], [DATE],
-        [CONTRACTOR NAME], [OWNER NAME] before submitting.
+        📋 Document Notes: Fill in [BORROWER NAME], [PROPERTY ADDRESS], [DATE],
+        [LOAN AMOUNT], [INTEREST RATE], [LOAN OFFICER NAME] before delivering.
 
         — 2 credits used · 48 remaining · Processed locally"
 ```
@@ -577,18 +632,18 @@ Agent: [Fetches schema, applies locally]
 ## Example: Subsequent Use (Fast)
 
 ```
-User: "Draft a daily job log for today."
+User: "Write a pre-approval congratulations letter for my borrower."
 
 Agent: [Credentials + cache exist]
-       [grep -i "daily log\|job log" ~/.mortgagetasksai/triggers.json]
-       [Finds: mortgage_prepare_daily_job_log]
+       [grep -i "pre-approval\|preapproval" ~/.mortgagetasksai/triggers.json]
+       [Finds: mortgage_write_a_preapproval_congratulations_letter]
 
-       "MortgageTasksAI **Prepare Daily Job Log** (1 credit).
+       "MortgageTasksAI **Write a Pre-Approval Congratulations Letter** (1 credit).
         You have 48 credits. 🔒 Runs locally. Proceed?"
 
 User: "Yes"
 
-Agent: [Fetches schema, applies locally, shows professional daily log]
+Agent: [Fetches schema, applies locally, shows professional pre-approval letter]
        "— 1 credit used · 47 remaining"
 ```
 
@@ -598,7 +653,7 @@ Agent: [Fetches schema, applies locally, shows professional daily log]
 
 ### v1.0.0 (2026-03-24)
 - 🚀 Initial release
-- 80 skills across 8 construction administration categories
-- Local execution — project data never leaves your machine
+- 80 skills across 10 mortgage lending administration categories
+- Local execution — borrower data never leaves your machine
 - Anonymous gap reporting for skill roadmap
 - Company profile injection for document headers

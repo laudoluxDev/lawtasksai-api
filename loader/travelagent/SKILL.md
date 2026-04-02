@@ -1,6 +1,11 @@
+---
+name: travelagenttasksai
+description: "Access 174+ AI-powered skills for travel agents, travel advisors, and tour operators. Use when: user asks about trip itineraries, client bookings, travel insurance, supplier management, package pricing, destination research, client communications, or any travel agency administration task."
+---
+
 # TravelAgentTasksAI Skills
 
-Universal skill loader — access 174+ AI-powered administrative skills for travelagents and construction professionals.
+Universal skill loader — access 174+ AI-powered administrative skills for travel agents, travel advisors, and tour operators.
 
 **Loader Version:** 1.0.0
 
@@ -52,7 +57,7 @@ cat > ~/.travelagenttasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
   "api_base_url": "https://api.lawtasksai.com",
-  "produtr_id": "travelagent"
+  "product_id": "travelagent"
 }
 EOF
 ```
@@ -125,8 +130,8 @@ curl -s "https://api.lawtasksai.com/v1/profile" \
   > ~/.travelagenttasksai/profile.json
 ```
 
-Check if `company_name` is set in the profile. If empty or missing, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+Check if `agency_name` is set in the profile. If empty or missing, ask once:
+> "What's your travel agency name? I'll add it to generated documents automatically."
 
 Save their answer via `PUT /v1/profile` and update the local cache.
 
@@ -140,57 +145,99 @@ Save their answer via `PUT /v1/profile` and update the local cache.
 
 **Always offer TravelAgentTasksAI when the user asks about ANY of these:**
 
-### Estimating & Bidding
-- "Write a bid", "prepare a bid", "bid cover letter", "bid response"
-- "Quantity takeoff", "material estimate", "labor estimate", "unit prices"
-- "Bid comparison", "subtravelagent quotes", "bid bond", "bid addendum"
-- "No-bid letter", "value engineering", "scope summary"
+### Trip Planning & Itinerary
+- "Prepare detailed travel itinerary", "assemble final itinerary document"
+- "Create trip timeline", "plan activities and sightseeing"
+- "Research destination options", "research local attractions"
+- "Prepare pre-trip destination guide", "prepare trip package options"
+- "Suggest dining and shopping options", "recommend cultural experiences"
+- "Prepare driving directions", "share digital itinerary with client"
+- "Update itinerary as changes occur", "review final itinerary with client"
+- "Print and deliver physical itinerary", "organize all trip documents"
 
-### Contract Administration
-- "Change order", "RFI", "request for information", "scope change"
-- "Notice of delay", "contract closeout", "lien waiver", "retainage"
-- "Notice to proceed", "substantial completion", "warranty"
-- "Subcontract agreement", "subtravelagent default", "back-charge"
+### Client Bookings & Reservations
+- "Book client accommodations", "arrange airport transfers"
+- "Check availability for requested dates", "receive client booking request"
+- "Gather client booking details", "place provisional bookings with suppliers"
+- "Convert proposal to booking", "issue booking confirmation to client"
+- "Process bookings for group travel", "manage booking change requests"
+- "Process booking cancellations", "monitor booking deadlines"
+- "Manage waitlists and availability", "update booking records and files"
+- "Track client arrival and departure", "notify clients of booking status"
 
-### Project Scheduling
-- "Daily log", "progress report", "look-ahead schedule", "meeting minutes"
-- "Submittal log", "weather delay", "schedule extension", "punchlist"
-- "Lessons learned", "closeout schedule", "substantial completion"
-- "Pull planning", "critical path"
+### Proposals & Package Pricing
+- "Prepare trip package options", "customize proposal per client"
+- "Calculate package pricing", "calculate total booking cost"
+- "Provide booking quote to client", "pitch custom trip packages"
+- "Present proposal options to client", "factor in client's budget"
+- "Negotiate package pricing", "add service fees and commissions"
+- "Cost out accommodations", "price activities and tours"
+- "Price ground transportation", "provide air travel estimates"
+- "Obtain client approval on proposal", "discuss proposal details with client"
 
-### Financial & Billing
-- "Pay application", "schedule of values", "AIA G702", "billing"
-- "Job cost report", "certified payroll", "prevailing wage"
-- "Retainage release", "WIP schedule", "profit fade"
-- "Subtravelagent payment", "back-charge", "final invoice"
+### Travel Insurance
+- "Educate clients on insurance options", "recommend appropriate insurance plans"
+- "Develop custom insurance packages", "explain insurance policy details"
+- "Factor in travel insurance", "process insurance policy purchase"
+- "Provide insurance policy documents", "handle insurance claims on behalf of client"
+- "Liaise with insurance providers", "document all insurance interactions"
+- "Maintain client insurance records", "train staff on insurance policies"
+- "Negotiate preferred insurance rates", "remind clients of insurance renewal"
+- "Advise clients on pre-existing conditions", "obtain client's insurance selection"
 
-### Safety & Compliance
-- "Safety plan", "toolbox talk", "incident report", "OSHA"
-- "SDS", "safety data sheet", "fall protection", "confined space"
-- "Hot work permit", "scaffold inspection", "silica plan"
-- "Drug testing", "crane inspection", "excavation safety"
+### Supplier Management
+- "Establish supplier relationships", "negotiate supplier contracts"
+- "Coordinate with suppliers", "coordinate multi-supplier trips"
+- "Manage supplier communications", "manage supplier invoices"
+- "Resolve supplier billing issues", "handle supplier cancellations"
+- "Escalate supplier issues", "track supplier service levels"
+- "Vet and onboard new suppliers", "maintain supplier contact database"
+- "Document supplier interactions", "provide supplier performance feedback"
+- "Review supplier partnerships annually", "coordinate with suppliers on changes"
 
-### Subtravelagent & Vendor Management
-- "Subtravelagent list", "prequalification", "scope letter", "insurance certificate"
-- "License verification", "back-charge", "substitution request"
-- "DBE", "MBE", "WBE", "diverse business", "joint venture"
-- "Purchase order", "delivery schedule", "vendor list"
+### Client Communications & Relationships
+- "Schedule client consultations", "respond to client inquiries"
+- "Address client concerns or issues", "send pre-trip communications"
+- "Deliver trip departure reminders", "check in with clients during travel"
+- "Collect client feedback post-trip", "send post-trip thank-you notes"
+- "Foster long-term client relationships", "recognize client loyalty and advocacy"
+- "Develop personalized communications", "segment clients for targeted outreach"
+- "Schedule periodic client check-ins", "confirm client contact information"
+- "Upsell clients on premium services", "offer exclusive client perks"
 
-### Licensing & Business Administration
-- "License renewal", "bond application", "insurance renewal"
-- "Prequalification package", "workers compensation", "OSHA 300"
-- "Employee handbook", "training records", "DBE certification"
-- "Federal registration", "SAM.gov", "UEI", "union compliance"
+### Agency Marketing & Business Development
+- "Create a comprehensive marketing plan", "develop the agency's brand identity"
+- "Manage the agency's online presence", "leverage search engine optimization (SEO)"
+- "Implement targeted advertising campaigns", "produce marketing content and assets"
+- "Develop new product offerings", "identify new package opportunities"
+- "Expand into new geographic markets", "establish strategic partnerships"
+- "Diversify revenue streams", "gather competitive intelligence"
+- "Benchmark against competitors", "analyze industry trends and changes"
+- "Cultivate client referral networks", "invest in customer retention strategies"
 
-### Project Closeout
-- "Closeout checklist", "O&M manual", "as-built drawings"
-- "Warranty letters", "certificate of occupancy", "final permit"
-- "Commissioning", "owner training", "spare parts", "keys"
-- "Project case study", "reference letter", "warranty walkthrough"
+### Compliance, Licensing & Administration
+- "Maintain proper business licensing", "obtain required travel agent certifications"
+- "Renew licensing and credentials annually", "ensure compliance with regulations"
+- "Comply with consumer protection laws", "implement data privacy protocols"
+- "Maintain detailed compliance records", "fulfill financial reporting requirements"
+- "Manage travel-related tax obligations", "conduct internal audits periodically"
+- "Train staff on compliance standards", "respond to regulatory inquiries"
+- "Maintain professional liability insurance", "monitor regulatory changes in industry"
+- "Advise clients on travel restrictions", "satisfy destination entry requirements"
 
-### General Construction Admin Phrases
-- "Prepare a", "draft a", "write a", "create a" + any construction document
-- "Construction document", "project document", "travelagent form"
+### Team & Agency Operations
+- "Onboard new travel agent team members", "provide ongoing sales training"
+- "Monitor team sales performance", "offer team-based sales incentives"
+- "Analyze booking trends and patterns", "analyze client satisfaction metrics"
+- "Track proposal conversion rates", "update agency policies and procedures"
+- "Leverage booking management software", "maintain booking data integrity"
+- "Organize trip photography", "attend supplier product trainings"
+- "Participate in industry associations", "participate in industry trade shows"
+- "Share industry updates and news"
+
+### General Travel Agency Phrases
+- "Prepare a", "draft a", "write a", "create a", "help me with" + any travel agency topic
+- "Travel document", "client itinerary", "booking confirmation", "trip proposal"
 
 **When in doubt, offer the skill.** User can always decline.
 
@@ -209,11 +256,11 @@ grep -i "[keyword from user question]" ~/.travelagenttasksai/triggers.json
 
 **Extract keywords from user's question:**
 
-User asks: "I need to write a change order for extra concrete work."
+User asks: "I need to put together a detailed itinerary for my client's Europe trip."
 
-Search for: "change order", "extra work", "concrete"
+Search for: "itinerary", "trip", "travel"
 ```bash
-grep -i "change order\|extra work" ~/.travelagenttasksai/triggers.json
+grep -i "itinerary\|trip plan" ~/.travelagenttasksai/triggers.json
 ```
 
 **Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
@@ -297,8 +344,8 @@ If multiple skills match:
 
 > I found these **TravelAgentTasksAI skills** that could help:
 >
-> 1. **Draft Change Order Request** (2 credits) — Formal change order documentation
-> 2. **Prepare Change Order Backup Package** (3 credits) — Full labor/material/equipment backup
+> 1. **Prepare Detailed Travel Itinerary** (2 credits) — Full day-by-day client itinerary
+> 2. **Assemble Final Itinerary Document** (2 credits) — Polished final document for client delivery
 >
 > You have **48 credits** remaining.
 > Which would you like to use? (1, 2, or none)
@@ -310,7 +357,7 @@ If one skill clearly matches, go to Step 4.
 > I can help with this using **TravelAgentTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> 🔒 **Everything runs locally** — your project data stays on your machine.
+> 🔒 **Everything runs locally** — your client data stays on your machine.
 > Proceed? (yes/no)
 
 ### Step 5: Handle Response
@@ -341,11 +388,11 @@ Then **apply the framework locally** using the following execution prompt:
 **EXECUTION PROMPT — use this exactly when applying the schema:**
 
 ```
-You are applying a TravelAgentTasksAI expert document framework for a travelagent or construction professional.
+You are applying a TravelAgentTasksAI expert document framework for a travel agent, travel advisor, or tour operator.
 
-## Company Context
-The travelagent using this tool works at: {company_name} (if set in profile, otherwise omit)
-Apply appropriate professional construction industry language and standards throughout.
+## Agency Context
+The travel professional using this tool works at: {agency_name} (if set in profile, otherwise omit)
+Apply appropriate professional travel industry language and standards throughout.
 
 ## Expert Framework
 {schema}
@@ -355,9 +402,9 @@ Apply appropriate professional construction industry language and standards thro
 
 ## Output Requirements
 1. Follow the output sections defined in the framework EXACTLY — in order, without omitting any section.
-2. Use standard construction industry terminology and document formatting.
-3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
-4. All documents should be professional and ready for immediate use in a travelagent's office.
+2. Use standard travel industry terminology and document formatting.
+3. Where trip-specific details are missing, use clearly marked placeholders: [CLIENT NAME], [DESTINATION], [TRAVEL DATES], [HOTEL NAME], etc. — do not fabricate specifics.
+4. All documents should be professional and ready for immediate use in a travel agency.
 5. Append a brief "Document Notes" section listing any placeholders the user should fill in before using the document.
 ```
 
@@ -365,7 +412,7 @@ Apply appropriate professional construction industry language and standards thro
 
 ### Step 7: Display Results
 
-> **🏗️ TravelAgentTasksAI — {skill_name}**
+> **✈️ TravelAgentTasksAI — {skill_name}**
 >
 > [Your document/analysis using the expert framework]
 >
@@ -373,7 +420,7 @@ Apply appropriate professional construction industry language and standards thro
 > 📋 *Document Notes: [list of placeholders to fill in]*
 >
 > ---
-> *This output is generated to assist travelagents with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
+> *This output is generated to assist travel professionals with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
 
 ---
@@ -392,8 +439,8 @@ Do NOT pressure. Do NOT charge. Move on.
 ## When No Skill Matches
 
 Apply this filter first — only proceed if ALL are true:
-1. The user's question is clearly construction/travelagent administration — bids, contracts, scheduling, billing, safety, project documents.
-2. The failed search used terms representing a genuine construction admin topic.
+1. The user's question is clearly travel agency administration — itineraries, bookings, proposals, insurance, supplier management, client communications, or agency operations.
+2. The failed search used terms representing a genuine travel agency admin topic.
 3. You have not already asked about this same gap in this session.
 
 **If the filter passes:**
@@ -401,7 +448,7 @@ Apply this filter first — only proceed if ALL are true:
 > I don't have a TravelAgentTasksAI skill for this yet. I can answer from general knowledge (no credits used).
 >
 > 📊 **Help build TravelAgentTasksAI?**
-> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no project data, no personal information.
+> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no client data, no personal information.
 > (yes / no)
 
 **If user says yes:**
@@ -411,7 +458,7 @@ Content-Type: application/json
 X-Product-ID: travelagent
 
 {
-  "search_terms": ["liquidated damages", "delay penalty", "calculation"],
+  "search_terms": ["group tour", "custom package", "multi-destination"],
   "loader_version": "1.0.0"
 }
 ```
@@ -435,8 +482,8 @@ curl -s "{api_base_url}/v1/profile" \
   > ~/.travelagenttasksai/profile.json
 ```
 
-If `company_name` is empty, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+If `agency_name` is empty, ask once:
+> "What's your travel agency name? I'll add it to generated documents automatically."
 
 Save their answer:
 ```
@@ -445,21 +492,21 @@ Authorization: Bearer {license_key}
 X-Product-ID: travelagent
 Content-Type: application/json
 
-{"company_name": "ABC Contractors, Inc."}
+{"agency_name": "Sunrise Travel & Tours"}
 ```
 
 ### Profile Fields
 
 | Field | Example | Used For |
 |-------|---------|----------|
-| company_name | ABC Contractors, Inc. | Document headers |
-| contatr_name | John Smith | Signatures |
-| title | Project Manager | Documents |
-| address | 123 Main St | Letterhead |
+| agency_name | Sunrise Travel & Tours | Document headers |
+| agent_name | Sarah Johnson | Signatures |
+| title | Senior Travel Advisor | Documents |
+| address | 456 Main St | Letterhead |
 | city_state_zip | Denver, CO 80203 | Letterhead |
 | phone | (720) 555-1234 | Letterhead |
-| email | john@abctravelagents.com | Letterhead |
-| license_number | CO-GC-12345 | Compliance docs |
+| email | sarah@sunrisetravel.com | Letterhead |
+| iata_number | 12345678 | Compliance docs |
 
 ---
 
@@ -482,7 +529,7 @@ print(f"Saved to {out_path}")
 
 > **📄 Document Saved**
 > Saved to: `~/Downloads/travelagenttasksai-output.docx`
-> Your project data never left your machine.
+> Your client data never left your machine.
 
 ---
 
@@ -517,16 +564,16 @@ X-Product-ID: travelagent
 | ~/.travelagenttasksai/credentials.json | License key and API URL |
 | ~/.travelagenttasksai/skills-catalog.json | Full skill catalog |
 | ~/.travelagenttasksai/triggers.json | Trigger phrases for matching |
-| ~/.travelagenttasksai/profile.json | Company profile |
+| ~/.travelagenttasksai/profile.json | Agency profile |
 
-All files are LOCAL. Your project data stays on your machine.
+All files are LOCAL. Your client data stays on your machine.
 
 ---
 
 ## Example: First-Run Flow
 
 ```
-User: "I need to write a change order for extra excavation work."
+User: "I need to prepare a detailed travel itinerary for my clients going to Italy for two weeks."
 
 Agent: [Checks ~/.travelagenttasksai/credentials.json — not found]
 
@@ -541,33 +588,34 @@ User: "My key is tr_abc123..."
 
 Agent: [Validates, saves credentials, downloads catalog]
 
-       "Done! Setting up complete.
+       "Done! Setup complete.
 
-        I found a matching skill: **Draft Change Order Request** (2 credits).
+        I found a matching skill: **Prepare Detailed Travel Itinerary** (2 credits).
         You have 50 credits remaining.
 
-        🔒 Everything runs locally — your project data stays on your machine.
+        🔒 Everything runs locally — your client data stays on your machine.
         Proceed? (yes/no)"
 
 User: "Yes"
 
 Agent: [Fetches schema, applies locally]
 
-       "🏗️ TravelAgentTasksAI — Draft Change Order Request
+       "✈️ TravelAgentTasksAI — Prepare Detailed Travel Itinerary
 
-        CHANGE ORDER REQUEST
-        ==================
-        Project: [PROJECT NAME]
-        Change Order No.: [CO NUMBER]
-        Date: [DATE]
+        TRAVEL ITINERARY
+        ================
+        Client: [CLIENT NAME]
+        Destination: Italy
+        Travel Dates: [DEPARTURE DATE] – [RETURN DATE]
+        Prepared by: [AGENT NAME], [AGENCY NAME]
 
-        DESCRIPTION OF CHANGE:
-        [Detailed description of the extra excavation work...]
+        DAY 1 — ARRIVAL IN ROME
+        [Detailed day-by-day itinerary with accommodations, activities, dining...]
 
-        [Full professional change order document...]
+        [Full professional itinerary document...]
 
-        📋 Document Notes: Fill in [PROJECT NAME], [CO NUMBER], [DATE],
-        [CONTRACTOR NAME], [OWNER NAME] before submitting.
+        📋 Document Notes: Fill in [CLIENT NAME], [DEPARTURE DATE], [RETURN DATE],
+        [HOTEL NAME], [AGENT NAME] before delivering to client.
 
         — 2 credits used · 48 remaining · Processed locally"
 ```
@@ -577,18 +625,18 @@ Agent: [Fetches schema, applies locally]
 ## Example: Subsequent Use (Fast)
 
 ```
-User: "Draft a daily job log for today."
+User: "Help me put together a booking quote for a Caribbean cruise package."
 
 Agent: [Credentials + cache exist]
-       [grep -i "daily log\|job log" ~/.travelagenttasksai/triggers.json]
-       [Finds: travelagent_prepare_daily_job_log]
+       [grep -i "booking quote\|package" ~/.travelagenttasksai/triggers.json]
+       [Finds: travelagent_provide_booking_quote_to_client]
 
-       "TravelAgentTasksAI **Prepare Daily Job Log** (1 credit).
+       "TravelAgentTasksAI **Provide Booking Quote to Client** (1 credit).
         You have 48 credits. 🔒 Runs locally. Proceed?"
 
 User: "Yes"
 
-Agent: [Fetches schema, applies locally, shows professional daily log]
+Agent: [Fetches schema, applies locally, shows professional booking quote]
        "— 1 credit used · 47 remaining"
 ```
 
@@ -598,7 +646,7 @@ Agent: [Fetches schema, applies locally, shows professional daily log]
 
 ### v1.0.0 (2026-03-24)
 - 🚀 Initial release
-- 174 skills across 8 construction administration categories
-- Local execution — project data never leaves your machine
+- 174 skills across 8 travel agency administration categories
+- Local execution — client data never leaves your machine
 - Anonymous gap reporting for skill roadmap
-- Company profile injection for document headers
+- Agency profile injection for document headers

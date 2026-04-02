@@ -1,6 +1,11 @@
+---
+name: landlordtasksai
+description: "Access 149+ AI-powered skills for landlords, property managers, and real estate investors. Use when: user asks about lease agreements, tenant management, rent collection, security deposits, property maintenance, fair housing compliance, move-in/move-out, eviction notices, or any rental property administration task."
+---
+
 # LandlordTasksAI Skills
 
-Universal skill loader — access 149+ AI-powered administrative skills for landlords and construction professionals.
+Universal skill loader — access 149+ AI-powered administrative skills for landlords, property managers, and real estate investors.
 
 **Loader Version:** 1.0.0
 
@@ -52,7 +57,7 @@ cat > ~/.landlordtasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
   "api_base_url": "https://api.lawtasksai.com",
-  "produla_id": "landlord"
+  "product_id": "landlord"
 }
 EOF
 ```
@@ -126,7 +131,7 @@ curl -s "https://api.lawtasksai.com/v1/profile" \
 ```
 
 Check if `company_name` is set in the profile. If empty or missing, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+> "What's your property management company or business name? I'll add it to generated documents automatically."
 
 Save their answer via `PUT /v1/profile` and update the local cache.
 
@@ -140,57 +145,83 @@ Save their answer via `PUT /v1/profile` and update the local cache.
 
 **Always offer LandlordTasksAI when the user asks about ANY of these:**
 
-### Estimating & Bidding
-- "Write a bid", "prepare a bid", "bid cover letter", "bid response"
-- "Quantity takeoff", "material estimate", "labor estimate", "unit prices"
-- "Bid comparison", "sublandlord quotes", "bid bond", "bid addendum"
-- "No-bid letter", "value engineering", "scope summary"
+### Lease Management
+- "Draft custom lease addendums", "lease amendment documentation"
+- "Prepare lease renewal offer", "prepare and send lease renewal notices"
+- "Review and update standard lease agreement", "update lease templates for legal changes"
+- "Audit lease files for completeness", "organize lease files by property/tenant"
+- "Store digital copies of all leases", "review leases for legal compliance"
+- "Track and enforce lease expiration dates", "track recurring lease renewal dates"
+- "Explain lease terms to new tenants", "negotiate lease terms with new tenants"
+- "Respond to tenant requests for lease changes", "retain expired lease documentation"
 
-### Contract Administration
-- "Change order", "RFI", "request for information", "scope change"
-- "Notice of delay", "contract closeout", "lien waiver", "retainage"
-- "Notice to proceed", "substantial completion", "warranty"
-- "Subcontract agreement", "sublandlord default", "back-charge"
+### Tenant Communication & Relations
+- "Respond to routine tenant inquiries", "respond to tenant complaints and grievances"
+- "Deliver formal tenant violation notices", "document tenant lease violations"
+- "Collect tenant feedback and suggestions", "distribute tenant surveys and feedback forms"
+- "Communicate changes to rental policies", "notify tenants of lease policy changes"
+- "Deliver seasonal reminders to tenants", "distribute newsletters and updates"
+- "Coordinate with tenant representatives", "escalate serious tenant disputes"
+- "Handle tenant requests for accommodations", "manage tenant service animal requests"
+- "Provide move-in orientation for new tenants", "coordinate move-in schedules with new tenants"
 
-### Project Scheduling
-- "Daily log", "progress report", "look-ahead schedule", "meeting minutes"
-- "Submittal log", "weather delay", "schedule extension", "punchlist"
-- "Lessons learned", "closeout schedule", "substantial completion"
-- "Pull planning", "critical path"
+### Rent Collection & Financial Management
+- "Collect and process monthly rent payments", "manage late fees and rental arrears"
+- "Handle tenant bounced or reversed payments", "handle tenant payment questions/issues"
+- "Manage payment plans for delinquent tenants", "monitor tenant compliance with rent payment terms"
+- "Calculate and collect annual rent increases", "administer legally-binding rent increase notifications"
+- "Manage online rental payment portals", "generate rent rolls and occupancy reports"
+- "Prepare annual property operating budgets", "maintain detailed property financial records"
+- "Reconcile bank statements and transactions", "generate year-end tax documentation"
+- "Prepare and deliver monthly owner statements", "prepare operating expense reimbursement bills"
 
-### Financial & Billing
-- "Pay application", "schedule of values", "AIA G702", "billing"
-- "Job cost report", "certified payroll", "prevailing wage"
-- "Retainage release", "WIP schedule", "profit fade"
-- "Sublandlord payment", "back-charge", "final invoice"
+### Security Deposits
+- "Collect and secure new tenant security deposits", "manage security deposit accounts and refunds"
+- "Process security deposit refunds and deductions", "calculate and apply security deposit interest"
+- "Properly store and handle tenant security deposit funds", "assess and bill tenants for excessive cleaning/damage"
+- "Manage security deposit refunds", "maintain comprehensive move-in/out documentation"
 
-### Safety & Compliance
-- "Safety plan", "toolbox talk", "incident report", "OSHA"
-- "SDS", "safety data sheet", "fall protection", "confined space"
-- "Hot work permit", "scaffold inspection", "silica plan"
-- "Drug testing", "crane inspection", "excavation safety"
+### Move-In & Move-Out
+- "Conduct rental unit move-in inspections", "generate and retain move-in condition reports"
+- "Facilitate move-in and move-out walkthroughs", "perform final walkthrough with outgoing tenants"
+- "Prepare move-in and move-out checklists", "prepare detailed move-out cleaning checklists"
+- "Generate and deliver move-out notices to tenants", "prepare and distribute tenant move-out guides"
+- "Manage abandoned property left by outgoing tenants", "process and retain digital move-in/out photos"
+- "Maintain a move-in/out calendar and schedule", "manage tenant move-in/move-out coordination"
 
-### Sublandlord & Vendor Management
-- "Sublandlord list", "prequalification", "scope letter", "insurance certificate"
-- "License verification", "back-charge", "substitution request"
-- "DBE", "MBE", "WBE", "diverse business", "joint venture"
-- "Purchase order", "delivery schedule", "vendor list"
+### Property Maintenance & Inspections
+- "Handle tenant maintenance requests", "handle tenant repair requests and work orders"
+- "Schedule and oversee routine maintenance work", "manage emergency maintenance and repairs"
+- "Coordinate schedules for maintenance and repairs", "notify tenants of planned maintenance"
+- "Conduct periodic unit inspections during tenancy", "coordinate and oversee property inspections"
+- "Oversee preventive maintenance programs", "maintain a property maintenance calendar"
+- "Document all maintenance activities", "troubleshoot and diagnose maintenance issues"
+- "Schedule and supervise unit turnover work", "respond to tenant questions about repairs"
+- "Obtain necessary permits for improvements", "prepare cost estimates for capital projects"
 
-### Licensing & Business Administration
-- "License renewal", "bond application", "insurance renewal"
-- "Prequalification package", "workers compensation", "OSHA 300"
-- "Employee handbook", "training records", "DBE certification"
-- "Federal registration", "SAM.gov", "UEI", "union compliance"
+### Legal Compliance & Notices
+- "Adhere to fair housing act and anti-discrimination laws", "comply with local rent control or stabilization laws"
+- "Deliver legally-required tenant notices", "provide legally-compliant lease termination notices"
+- "Prepare lease termination notices", "deliver legally-valid termination notices for evictions"
+- "Ensure lead-based paint disclosures are provided", "distribute mandated tenant education materials"
+- "Fulfill state-mandated reporting and filings", "retain records to demonstrate legal compliance"
+- "Notify tenants of entry for inspections", "provide proper notices for entry and unit inspections"
+- "Adhere to fair debt collection practices and laws", "respond to subpoenas and information requests"
+- "Manage legally-required tenant utility shut-off notices", "post required signage in common areas"
 
-### Project Closeout
-- "Closeout checklist", "O&M manual", "as-built drawings"
-- "Warranty letters", "certificate of occupancy", "final permit"
-- "Commissioning", "owner training", "spare parts", "keys"
-- "Project case study", "reference letter", "warranty walkthrough"
+### Vendor & Contractor Management
+- "Maintain an approved vendor and contractor list", "manage vendor and contractor relationships"
+- "Solicit bids and proposals for property work", "manage bids and proposals from contractors"
+- "Negotiate and execute vendor service agreements", "manage vendor relationships and contract renewals"
+- "Process invoices and vendor payments", "process and pay vendor invoices in a timely manner"
+- "Implement quality control checks for vendor work", "conduct performance reviews of service contractors"
+- "Establish and enforce vendor liability insurance requirements", "manage vendor insurance, licenses, and certifications"
+- "Maintain a centralized vendor contact information database", "develop and maintain a vendor communication plan"
+- "Oversee vendor compliance with company policies", "handle tenant escalations about vendor service issues"
 
-### General Construction Admin Phrases
-- "Prepare a", "draft a", "write a", "create a" + any construction document
-- "Construction document", "project document", "landlord form"
+### General Landlord & Property Management Phrases
+- "Prepare a", "draft a", "write a", "create a", "help me with" + any rental property or landlord topic
+- "Lease document", "tenant notice", "property management form", "rental agreement"
 
 **When in doubt, offer the skill.** User can always decline.
 
@@ -209,11 +240,11 @@ grep -i "[keyword from user question]" ~/.landlordtasksai/triggers.json
 
 **Extract keywords from user's question:**
 
-User asks: "I need to write a change order for extra concrete work."
+User asks: "I need to send a lease renewal notice to my tenant."
 
-Search for: "change order", "extra work", "concrete"
+Search for: "lease renewal", "renewal notice"
 ```bash
-grep -i "change order\|extra work" ~/.landlordtasksai/triggers.json
+grep -i "lease renewal\|renewal notice" ~/.landlordtasksai/triggers.json
 ```
 
 **Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
@@ -297,8 +328,8 @@ If multiple skills match:
 
 > I found these **LandlordTasksAI skills** that could help:
 >
-> 1. **Draft Change Order Request** (2 credits) — Formal change order documentation
-> 2. **Prepare Change Order Backup Package** (3 credits) — Full labor/material/equipment backup
+> 1. **Prepare and Send Lease Renewal Notices** (2 credits) — Formal lease renewal documentation
+> 2. **Draft Lease Amendment Documentation** (2 credits) — Legal lease modification forms
 >
 > You have **48 credits** remaining.
 > Which would you like to use? (1, 2, or none)
@@ -310,7 +341,7 @@ If one skill clearly matches, go to Step 4.
 > I can help with this using **LandlordTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> 🔒 **Everything runs locally** — your project data stays on your machine.
+> 🔒 **Everything runs locally** — your tenant and property data stays on your machine.
 > Proceed? (yes/no)
 
 ### Step 5: Handle Response
@@ -341,11 +372,11 @@ Then **apply the framework locally** using the following execution prompt:
 **EXECUTION PROMPT — use this exactly when applying the schema:**
 
 ```
-You are applying a LandlordTasksAI expert document framework for a landlord or construction professional.
+You are applying a LandlordTasksAI expert document framework for a landlord, property manager, or real estate investor.
 
 ## Company Context
-The landlord using this tool works at: {company_name} (if set in profile, otherwise omit)
-Apply appropriate professional construction industry language and standards throughout.
+The property manager using this tool works at: {company_name} (if set in profile, otherwise omit)
+Apply appropriate professional property management language and standards throughout.
 
 ## Expert Framework
 {schema}
@@ -355,9 +386,9 @@ Apply appropriate professional construction industry language and standards thro
 
 ## Output Requirements
 1. Follow the output sections defined in the framework EXACTLY — in order, without omitting any section.
-2. Use standard construction industry terminology and document formatting.
-3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
-4. All documents should be professional and ready for immediate use in a landlord's office.
+2. Use standard property management and real estate terminology and document formatting.
+3. Where property-specific details are missing, use clearly marked placeholders: [PROPERTY ADDRESS], [TENANT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
+4. All documents should be professional and ready for immediate use in a property management office.
 5. Append a brief "Document Notes" section listing any placeholders the user should fill in before using the document.
 ```
 
@@ -365,7 +396,7 @@ Apply appropriate professional construction industry language and standards thro
 
 ### Step 7: Display Results
 
-> **🏗️ LandlordTasksAI — {skill_name}**
+> **🏠 LandlordTasksAI — {skill_name}**
 >
 > [Your document/analysis using the expert framework]
 >
@@ -373,7 +404,7 @@ Apply appropriate professional construction industry language and standards thro
 > 📋 *Document Notes: [list of placeholders to fill in]*
 >
 > ---
-> *This output is generated to assist landlords with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
+> *This output is generated to assist landlords and property managers with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
 
 ---
@@ -392,8 +423,8 @@ Do NOT pressure. Do NOT charge. Move on.
 ## When No Skill Matches
 
 Apply this filter first — only proceed if ALL are true:
-1. The user's question is clearly construction/landlord administration — bids, contracts, scheduling, billing, safety, project documents.
-2. The failed search used terms representing a genuine construction admin topic.
+1. The user's question is clearly landlord/property management administration — leases, tenant notices, rent collection, maintenance, security deposits, fair housing compliance, move-in/move-out, evictions.
+2. The failed search used terms representing a genuine property management topic.
 3. You have not already asked about this same gap in this session.
 
 **If the filter passes:**
@@ -401,7 +432,7 @@ Apply this filter first — only proceed if ALL are true:
 > I don't have a LandlordTasksAI skill for this yet. I can answer from general knowledge (no credits used).
 >
 > 📊 **Help build LandlordTasksAI?**
-> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no project data, no personal information.
+> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no tenant data, no property information.
 > (yes / no)
 
 **If user says yes:**
@@ -411,7 +442,7 @@ Content-Type: application/json
 X-Product-ID: landlord
 
 {
-  "search_terms": ["liquidated damages", "delay penalty", "calculation"],
+  "search_terms": ["habitability", "warranty of habitability", "repair and deduct"],
   "loader_version": "1.0.0"
 }
 ```
@@ -436,7 +467,7 @@ curl -s "{api_base_url}/v1/profile" \
 ```
 
 If `company_name` is empty, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+> "What's your property management company or business name? I'll add it to generated documents automatically."
 
 Save their answer:
 ```
@@ -445,21 +476,21 @@ Authorization: Bearer {license_key}
 X-Product-ID: landlord
 Content-Type: application/json
 
-{"company_name": "ABC Contractors, Inc."}
+{"company_name": "Sunrise Property Management, LLC"}
 ```
 
 ### Profile Fields
 
 | Field | Example | Used For |
 |-------|---------|----------|
-| company_name | ABC Contractors, Inc. | Document headers |
-| contala_name | John Smith | Signatures |
-| title | Project Manager | Documents |
-| address | 123 Main St | Letterhead |
+| company_name | Sunrise Property Management, LLC | Document headers |
+| contact_name | Jane Doe | Signatures |
+| title | Property Manager | Documents |
+| address | 456 Oak Ave | Letterhead |
 | city_state_zip | Denver, CO 80203 | Letterhead |
 | phone | (720) 555-1234 | Letterhead |
-| email | john@abclandlords.com | Letterhead |
-| license_number | CO-GC-12345 | Compliance docs |
+| email | jane@sunrisepm.com | Letterhead |
+| license_number | CO-PM-67890 | Compliance docs |
 
 ---
 
@@ -482,7 +513,7 @@ print(f"Saved to {out_path}")
 
 > **📄 Document Saved**
 > Saved to: `~/Downloads/landlordtasksai-output.docx`
-> Your project data never left your machine.
+> Your tenant and property data never left your machine.
 
 ---
 
@@ -519,14 +550,14 @@ X-Product-ID: landlord
 | ~/.landlordtasksai/triggers.json | Trigger phrases for matching |
 | ~/.landlordtasksai/profile.json | Company profile |
 
-All files are LOCAL. Your project data stays on your machine.
+All files are LOCAL. Your tenant and property data stays on your machine.
 
 ---
 
 ## Example: First-Run Flow
 
 ```
-User: "I need to write a change order for extra excavation work."
+User: "I need to send a lease renewal notice to my tenant at 123 Main St."
 
 Agent: [Checks ~/.landlordtasksai/credentials.json — not found]
 
@@ -543,31 +574,35 @@ Agent: [Validates, saves credentials, downloads catalog]
 
        "Done! Setting up complete.
 
-        I found a matching skill: **Draft Change Order Request** (2 credits).
+        I found a matching skill: **Prepare and Send Lease Renewal Notices** (2 credits).
         You have 50 credits remaining.
 
-        🔒 Everything runs locally — your project data stays on your machine.
+        🔒 Everything runs locally — your tenant and property data stays on your machine.
         Proceed? (yes/no)"
 
 User: "Yes"
 
 Agent: [Fetches schema, applies locally]
 
-       "🏗️ LandlordTasksAI — Draft Change Order Request
+       "🏠 LandlordTasksAI — Prepare and Send Lease Renewal Notices
 
-        CHANGE ORDER REQUEST
-        ==================
-        Project: [PROJECT NAME]
-        Change Order No.: [CO NUMBER]
-        Date: [DATE]
+        LEASE RENEWAL NOTICE
+        ====================
+        Property Address: [PROPERTY ADDRESS]
+        Tenant Name(s): [TENANT NAME(S)]
+        Current Lease Expiration: [CURRENT LEASE END DATE]
+        Proposed Renewal Term: [NEW LEASE START DATE] – [NEW LEASE END DATE]
 
-        DESCRIPTION OF CHANGE:
-        [Detailed description of the extra excavation work...]
+        Dear [TENANT NAME(S)],
 
-        [Full professional change order document...]
+        We are pleased to offer you the opportunity to renew your lease for the
+        above-referenced rental unit. Please review the proposed terms below...
 
-        📋 Document Notes: Fill in [PROJECT NAME], [CO NUMBER], [DATE],
-        [CONTRACTOR NAME], [OWNER NAME] before submitting.
+        [Full professional lease renewal notice...]
+
+        📋 Document Notes: Fill in [PROPERTY ADDRESS], [TENANT NAME(S)],
+        [CURRENT LEASE END DATE], [NEW LEASE START DATE], [NEW LEASE END DATE],
+        [MONTHLY RENT AMOUNT], [RESPONSE DEADLINE] before sending.
 
         — 2 credits used · 48 remaining · Processed locally"
 ```
@@ -577,18 +612,18 @@ Agent: [Fetches schema, applies locally]
 ## Example: Subsequent Use (Fast)
 
 ```
-User: "Draft a daily job log for today."
+User: "Draft a move-out cleaning checklist for a vacating tenant."
 
 Agent: [Credentials + cache exist]
-       [grep -i "daily log\|job log" ~/.landlordtasksai/triggers.json]
-       [Finds: landlord_prepare_daily_job_log]
+       [grep -i "move-out cleaning\|moveout cleaning" ~/.landlordtasksai/triggers.json]
+       [Finds: landlord_prepare_detailed_moveout_cleaning_checklists]
 
-       "LandlordTasksAI **Prepare Daily Job Log** (1 credit).
+       "LandlordTasksAI **Prepare Detailed Move-Out Cleaning Checklists** (1 credit).
         You have 48 credits. 🔒 Runs locally. Proceed?"
 
 User: "Yes"
 
-Agent: [Fetches schema, applies locally, shows professional daily log]
+Agent: [Fetches schema, applies locally, shows professional move-out cleaning checklist]
        "— 1 credit used · 47 remaining"
 ```
 
@@ -598,7 +633,7 @@ Agent: [Fetches schema, applies locally, shows professional daily log]
 
 ### v1.0.0 (2026-03-24)
 - 🚀 Initial release
-- 149 skills across 8 construction administration categories
-- Local execution — project data never leaves your machine
+- 149 skills across 8 property management categories
+- Local execution — tenant and property data never leaves your machine
 - Anonymous gap reporting for skill roadmap
 - Company profile injection for document headers

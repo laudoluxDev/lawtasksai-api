@@ -1,6 +1,11 @@
+---
+name: designertasksai
+description: "Access 154+ AI-powered skills for graphic designers, interior designers, and creative agencies. Use when: user asks about creative briefs, design proposals, client contracts, project management, client onboarding, billing and invoicing, brand style guides, or any design practice administration task."
+---
+
 # DesignerTasksAI Skills
 
-Universal skill loader — access 154+ AI-powered administrative skills for designers and construction professionals.
+Universal skill loader — access 154+ AI-powered administrative skills for graphic designers, interior designers, and creative agencies.
 
 **Loader Version:** 1.0.0
 
@@ -52,7 +57,7 @@ cat > ~/.designertasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
   "api_base_url": "https://api.lawtasksai.com",
-  "produde_id": "designer"
+  "product_id": "designer"
 }
 EOF
 ```
@@ -126,7 +131,7 @@ curl -s "https://api.lawtasksai.com/v1/profile" \
 ```
 
 Check if `company_name` is set in the profile. If empty or missing, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+> "What's your studio or agency name? I'll add it to generated documents automatically."
 
 Save their answer via `PUT /v1/profile` and update the local cache.
 
@@ -140,57 +145,90 @@ Save their answer via `PUT /v1/profile` and update the local cache.
 
 **Always offer DesignerTasksAI when the user asks about ANY of these:**
 
-### Estimating & Bidding
-- "Write a bid", "prepare a bid", "bid cover letter", "bid response"
-- "Quantity takeoff", "material estimate", "labor estimate", "unit prices"
-- "Bid comparison", "subdesigner quotes", "bid bond", "bid addendum"
-- "No-bid letter", "value engineering", "scope summary"
+### Creative Briefs & Direction
+- "Create a detailed creative brief", "develop a detailed project brief"
+- "Establish creative direction and style", "establish creative style guidelines"
+- "Communicate creative brief to project team", "pitch creative brief to clients"
+- "Incorporate client feedback on creative brief", "review creative brief with key stakeholders"
+- "Revisit and update creative brief", "archive creative briefs for future reference"
+- "Translate creative brief to project plan", "prioritize creative brief requirements"
+- "Train new team members on creative brief", "use creative brief to drive design QA"
+- "Maintain creative brief version control"
 
-### Contract Administration
-- "Change order", "RFI", "request for information", "scope change"
-- "Notice of delay", "contract closeout", "lien waiver", "retainage"
-- "Notice to proceed", "substantial completion", "warranty"
-- "Subcontract agreement", "subdesigner default", "back-charge"
+### Project Management & Scoping
+- "Create a project scope document", "create a project roadmap"
+- "Define project phases and milestones", "build a project task list"
+- "Estimate project resource needs", "set project management cadence"
+- "Facilitate project kickoff meeting", "kick off new client project"
+- "Maintain a project status dashboard", "publish a project communication plan"
+- "Assign tasks to project team", "set up project collaboration tools"
+- "Analyze potential project risks", "update internal project metrics"
+- "Develop project quality checklists"
 
-### Project Scheduling
-- "Daily log", "progress report", "look-ahead schedule", "meeting minutes"
-- "Submittal log", "weather delay", "schedule extension", "punchlist"
-- "Lessons learned", "closeout schedule", "substantial completion"
-- "Pull planning", "critical path"
+### Client Onboarding & Relationships
+- "Conduct client onboarding sessions", "facilitate client creative kickoff"
+- "Create client communication templates", "write client-facing emails and messages"
+- "Schedule client check-in meetings", "respond to ad-hoc client inquiries"
+- "Maintain a client contact database", "maintain client contact information"
+- "Document client-specific preferences", "manage client point-of-contact changes"
+- "Onboard new team members", "conduct client satisfaction surveys"
+- "Debrief with client on project experience", "resolve client communication breakdowns"
 
-### Financial & Billing
-- "Pay application", "schedule of values", "AIA G702", "billing"
-- "Job cost report", "certified payroll", "prevailing wage"
-- "Retainage release", "WIP schedule", "profit fade"
-- "Subdesigner payment", "back-charge", "final invoice"
+### Proposals, Contracts & Legal
+- "Write a design proposal", "craft client-facing sales proposals"
+- "Prepare a design services contract", "review and negotiate client contract"
+- "Create project-specific NDAs", "collect client contract approvals"
+- "Manage client retainer agreements", "renew or update client contracts"
+- "Audit contract compliance", "resolve contract disputes"
+- "Terminate client contracts", "maintain client contract library"
+- "Respond to client RFPs and RFQs", "customize proposal for each client"
 
-### Safety & Compliance
-- "Safety plan", "toolbox talk", "incident report", "OSHA"
-- "SDS", "safety data sheet", "fall protection", "confined space"
-- "Hot work permit", "scaffold inspection", "silica plan"
-- "Drug testing", "crane inspection", "excavation safety"
+### Billing, Invoicing & Financial
+- "Send client invoices on schedule", "track client invoice payments"
+- "Process client payment receipts", "process final client invoice and payment"
+- "Handle client payment disputes", "negotiate client payment terms"
+- "Maintain a client billing history", "review and audit client billing data"
+- "Provide client financial reports", "provide client-facing expense reports"
+- "Forecast and plan project cash flow", "reconcile project expenses and margins"
+- "Approve and submit vendor invoices", "manage client purchase orders"
+- "Set up recurring client payment methods", "file client 1099 tax documentation"
 
-### Subdesigner & Vendor Management
-- "Subdesigner list", "prequalification", "scope letter", "insurance certificate"
-- "License verification", "back-charge", "substitution request"
-- "DBE", "MBE", "WBE", "diverse business", "joint venture"
-- "Purchase order", "delivery schedule", "vendor list"
+### Design Delivery & Revisions
+- "Manage client revision requests", "manage client revisions after delivery"
+- "Obtain client signoff on deliverables", "obtain client signoff on revisions"
+- "Prioritize and sequence revisions", "communicate revision status updates"
+- "Package and deliver final files", "version control design deliverables"
+- "Archive previous design versions", "transfer project assets to client systems"
+- "Facilitate design presentation walkthroughs", "lead client presentation deliveries"
+- "Create client-ready design rationale", "obtain client approval on project plan"
 
-### Licensing & Business Administration
-- "License renewal", "bond application", "insurance renewal"
-- "Prequalification package", "workers compensation", "OSHA 300"
-- "Employee handbook", "training records", "DBE certification"
-- "Federal registration", "SAM.gov", "UEI", "union compliance"
+### Project Closeout & Retrospectives
+- "Create a project closeout report", "conduct post-project retrospectives"
+- "Conduct a final client walkthrough", "document and apply lessons learned"
+- "Archive project documentation and assets", "archive project for future reference"
+- "Schedule a post-project check-in", "transition client to post-project support"
+- "Facilitate knowledge transfer to client", "hold a project retrospective meeting"
+- "Gather project team feedback", "reflect on personal/team performance"
 
-### Project Closeout
-- "Closeout checklist", "O&M manual", "as-built drawings"
-- "Warranty letters", "certificate of occupancy", "final permit"
-- "Commissioning", "owner training", "spare parts", "keys"
-- "Project case study", "reference letter", "warranty walkthrough"
+### Marketing, Business Development & Sales
+- "Develop a marketing/sales strategy", "manage client prospecting and outreach"
+- "Research and pitch to target accounts", "qualify and nurture new sales leads"
+- "Schedule and lead sales presentations", "follow up on lost sales opportunities"
+- "Develop a client referral program", "develop a client newsletter program"
+- "Create branded marketing materials", "create case studies and client testimonials"
+- "Publish thought leadership content", "attend industry events and conferences"
+- "Analyze marketing and sales effectiveness", "maintain a CRM for sales pipeline"
+- "Build a professional services catalog"
 
-### General Construction Admin Phrases
-- "Prepare a", "draft a", "write a", "create a" + any construction document
-- "Construction document", "project document", "designer form"
+### Brand & Style Development
+- "Develop brand style guides and patterns", "distill client's brand positioning"
+- "Define target audience and personas", "establish creative style guidelines"
+- "Map the customer journey and touchpoints", "conduct competitor/industry research"
+- "Conduct market and competitor research", "create branded marketing materials"
+
+### General Design Practice Phrases
+- "Prepare a", "draft a", "write a", "create a", "help me with" + any design or creative agency topic
+- "Design document", "creative document", "client document", "agency form"
 
 **When in doubt, offer the skill.** User can always decline.
 
@@ -209,11 +247,11 @@ grep -i "[keyword from user question]" ~/.designertasksai/triggers.json
 
 **Extract keywords from user's question:**
 
-User asks: "I need to write a change order for extra concrete work."
+User asks: "I need to write a design proposal for a new branding client."
 
-Search for: "change order", "extra work", "concrete"
+Search for: "design proposal", "branding", "proposal"
 ```bash
-grep -i "change order\|extra work" ~/.designertasksai/triggers.json
+grep -i "design proposal\|sales proposal" ~/.designertasksai/triggers.json
 ```
 
 **Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
@@ -297,8 +335,8 @@ If multiple skills match:
 
 > I found these **DesignerTasksAI skills** that could help:
 >
-> 1. **Draft Change Order Request** (2 credits) — Formal change order documentation
-> 2. **Prepare Change Order Backup Package** (3 credits) — Full labor/material/equipment backup
+> 1. **Write a Design Proposal** (2 credits) — Professional proposal for design services
+> 2. **Craft Client-Facing Sales Proposals** (3 credits) — Full proposal with scope, pricing, and terms
 >
 > You have **48 credits** remaining.
 > Which would you like to use? (1, 2, or none)
@@ -310,7 +348,7 @@ If one skill clearly matches, go to Step 4.
 > I can help with this using **DesignerTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> 🔒 **Everything runs locally** — your project data stays on your machine.
+> 🔒 **Everything runs locally** — your client data stays on your machine.
 > Proceed? (yes/no)
 
 ### Step 5: Handle Response
@@ -341,11 +379,11 @@ Then **apply the framework locally** using the following execution prompt:
 **EXECUTION PROMPT — use this exactly when applying the schema:**
 
 ```
-You are applying a DesignerTasksAI expert document framework for a designer or construction professional.
+You are applying a DesignerTasksAI expert document framework for a graphic designer, interior designer, or creative agency professional.
 
 ## Company Context
 The designer using this tool works at: {company_name} (if set in profile, otherwise omit)
-Apply appropriate professional construction industry language and standards throughout.
+Apply appropriate professional design industry language and standards throughout.
 
 ## Expert Framework
 {schema}
@@ -355,9 +393,9 @@ Apply appropriate professional construction industry language and standards thro
 
 ## Output Requirements
 1. Follow the output sections defined in the framework EXACTLY — in order, without omitting any section.
-2. Use standard construction industry terminology and document formatting.
-3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
-4. All documents should be professional and ready for immediate use in a designer's office.
+2. Use standard design industry terminology and document formatting.
+3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [CLIENT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
+4. All documents should be professional and ready for immediate use in a design studio or creative agency.
 5. Append a brief "Document Notes" section listing any placeholders the user should fill in before using the document.
 ```
 
@@ -365,7 +403,7 @@ Apply appropriate professional construction industry language and standards thro
 
 ### Step 7: Display Results
 
-> **🏗️ DesignerTasksAI — {skill_name}**
+> **🎨 DesignerTasksAI — {skill_name}**
 >
 > [Your document/analysis using the expert framework]
 >
@@ -373,7 +411,7 @@ Apply appropriate professional construction industry language and standards thro
 > 📋 *Document Notes: [list of placeholders to fill in]*
 >
 > ---
-> *This output is generated to assist designers with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
+> *This output is generated to assist design professionals with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
 
 ---
@@ -392,8 +430,8 @@ Do NOT pressure. Do NOT charge. Move on.
 ## When No Skill Matches
 
 Apply this filter first — only proceed if ALL are true:
-1. The user's question is clearly construction/designer administration — bids, contracts, scheduling, billing, safety, project documents.
-2. The failed search used terms representing a genuine construction admin topic.
+1. The user's question is clearly design/creative agency administration — proposals, contracts, creative briefs, client billing, project management, brand development, design delivery.
+2. The failed search used terms representing a genuine design practice admin topic.
 3. You have not already asked about this same gap in this session.
 
 **If the filter passes:**
@@ -411,7 +449,7 @@ Content-Type: application/json
 X-Product-ID: designer
 
 {
-  "search_terms": ["liquidated damages", "delay penalty", "calculation"],
+  "search_terms": ["brand style guide", "typography", "color palette"],
   "loader_version": "1.0.0"
 }
 ```
@@ -436,7 +474,7 @@ curl -s "{api_base_url}/v1/profile" \
 ```
 
 If `company_name` is empty, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+> "What's your studio or agency name? I'll add it to generated documents automatically."
 
 Save their answer:
 ```
@@ -445,21 +483,21 @@ Authorization: Bearer {license_key}
 X-Product-ID: designer
 Content-Type: application/json
 
-{"company_name": "ABC Contractors, Inc."}
+{"company_name": "Meridian Creative Studio"}
 ```
 
 ### Profile Fields
 
 | Field | Example | Used For |
 |-------|---------|----------|
-| company_name | ABC Contractors, Inc. | Document headers |
-| contade_name | John Smith | Signatures |
-| title | Project Manager | Documents |
-| address | 123 Main St | Letterhead |
-| city_state_zip | Denver, CO 80203 | Letterhead |
-| phone | (720) 555-1234 | Letterhead |
-| email | john@abcdesigners.com | Letterhead |
-| license_number | CO-GC-12345 | Compliance docs |
+| company_name | Meridian Creative Studio | Document headers |
+| designer_name | Jane Smith | Signatures |
+| title | Creative Director | Documents |
+| address | 456 Design Ave | Letterhead |
+| city_state_zip | Austin, TX 78701 | Letterhead |
+| phone | (512) 555-7890 | Letterhead |
+| email | jane@meridiancreative.com | Letterhead |
+| website | meridiancreative.com | Proposals |
 
 ---
 
@@ -482,7 +520,7 @@ print(f"Saved to {out_path}")
 
 > **📄 Document Saved**
 > Saved to: `~/Downloads/designertasksai-output.docx`
-> Your project data never left your machine.
+> Your client data never left your machine.
 
 ---
 
@@ -517,16 +555,16 @@ X-Product-ID: designer
 | ~/.designertasksai/credentials.json | License key and API URL |
 | ~/.designertasksai/skills-catalog.json | Full skill catalog |
 | ~/.designertasksai/triggers.json | Trigger phrases for matching |
-| ~/.designertasksai/profile.json | Company profile |
+| ~/.designertasksai/profile.json | Studio/agency profile |
 
-All files are LOCAL. Your project data stays on your machine.
+All files are LOCAL. Your client data stays on your machine.
 
 ---
 
 ## Example: First-Run Flow
 
 ```
-User: "I need to write a change order for extra excavation work."
+User: "I need to write a design proposal for a new branding client."
 
 Agent: [Checks ~/.designertasksai/credentials.json — not found]
 
@@ -543,31 +581,35 @@ Agent: [Validates, saves credentials, downloads catalog]
 
        "Done! Setting up complete.
 
-        I found a matching skill: **Draft Change Order Request** (2 credits).
+        I found a matching skill: **Write a Design Proposal** (2 credits).
         You have 50 credits remaining.
 
-        🔒 Everything runs locally — your project data stays on your machine.
+        🔒 Everything runs locally — your client data stays on your machine.
         Proceed? (yes/no)"
 
 User: "Yes"
 
 Agent: [Fetches schema, applies locally]
 
-       "🏗️ DesignerTasksAI — Draft Change Order Request
+       "🎨 DesignerTasksAI — Write a Design Proposal
 
-        CHANGE ORDER REQUEST
-        ==================
-        Project: [PROJECT NAME]
-        Change Order No.: [CO NUMBER]
+        DESIGN SERVICES PROPOSAL
+        ========================
+        Prepared for: [CLIENT NAME]
+        Prepared by: Meridian Creative Studio
         Date: [DATE]
+        Project: [PROJECT NAME]
 
-        DESCRIPTION OF CHANGE:
-        [Detailed description of the extra excavation work...]
+        EXECUTIVE SUMMARY:
+        [Professional overview of proposed design engagement...]
 
-        [Full professional change order document...]
+        SCOPE OF SERVICES:
+        [Detailed description of deliverables and design phases...]
 
-        📋 Document Notes: Fill in [PROJECT NAME], [CO NUMBER], [DATE],
-        [CONTRACTOR NAME], [OWNER NAME] before submitting.
+        [Full professional proposal document...]
+
+        📋 Document Notes: Fill in [CLIENT NAME], [PROJECT NAME], [DATE],
+        [BUDGET RANGE], [TIMELINE] before sending to client.
 
         — 2 credits used · 48 remaining · Processed locally"
 ```
@@ -577,18 +619,18 @@ Agent: [Fetches schema, applies locally]
 ## Example: Subsequent Use (Fast)
 
 ```
-User: "Draft a daily job log for today."
+User: "Create a creative brief for a new logo redesign project."
 
 Agent: [Credentials + cache exist]
-       [grep -i "daily log\|job log" ~/.designertasksai/triggers.json]
-       [Finds: designer_prepare_daily_job_log]
+       [grep -i "creative brief\|detailed creative brief" ~/.designertasksai/triggers.json]
+       [Finds: designer_create_a_detailed_creative_brief]
 
-       "DesignerTasksAI **Prepare Daily Job Log** (1 credit).
+       "DesignerTasksAI **Create a Detailed Creative Brief** (1 credit).
         You have 48 credits. 🔒 Runs locally. Proceed?"
 
 User: "Yes"
 
-Agent: [Fetches schema, applies locally, shows professional daily log]
+Agent: [Fetches schema, applies locally, shows professional creative brief]
        "— 1 credit used · 47 remaining"
 ```
 
@@ -598,7 +640,7 @@ Agent: [Fetches schema, applies locally, shows professional daily log]
 
 ### v1.0.0 (2026-03-24)
 - 🚀 Initial release
-- 154 skills across 8 construction administration categories
-- Local execution — project data never leaves your machine
+- 154 skills across 9 design practice administration categories
+- Local execution — client data never leaves your machine
 - Anonymous gap reporting for skill roadmap
-- Company profile injection for document headers
+- Studio/agency profile injection for document headers

@@ -1,6 +1,11 @@
+---
+name: dentisttasksai
+description: "Access 170+ AI-powered skills for dentists and dental office administrators. Use when: user asks about patient scheduling, insurance claims, billing, HIPAA compliance, new patient onboarding, treatment documentation, dental office operations, or any dental practice administration task."
+---
+
 # DentistTasksAI Skills
 
-Universal skill loader — access 170+ AI-powered administrative skills for dentists and construction professionals.
+Universal skill loader — access 170+ AI-powered administrative skills for dentists and dental office administrators.
 
 **Loader Version:** 1.0.0
 
@@ -52,7 +57,7 @@ cat > ~/.dentisttasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
   "api_base_url": "https://api.lawtasksai.com",
-  "produde_id": "dentist"
+  "product_id": "dentist"
 }
 EOF
 ```
@@ -125,8 +130,8 @@ curl -s "https://api.lawtasksai.com/v1/profile" \
   > ~/.dentisttasksai/profile.json
 ```
 
-Check if `company_name` is set in the profile. If empty or missing, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+Check if `practice_name` is set in the profile. If empty or missing, ask once:
+> "What's your dental practice name? I'll add it to generated documents automatically."
 
 Save their answer via `PUT /v1/profile` and update the local cache.
 
@@ -140,57 +145,86 @@ Save their answer via `PUT /v1/profile` and update the local cache.
 
 **Always offer DentistTasksAI when the user asks about ANY of these:**
 
-### Estimating & Bidding
-- "Write a bid", "prepare a bid", "bid cover letter", "bid response"
-- "Quantity takeoff", "material estimate", "labor estimate", "unit prices"
-- "Bid comparison", "subdentist quotes", "bid bond", "bid addendum"
-- "No-bid letter", "value engineering", "scope summary"
+### Patient Scheduling & Appointments
+- "Schedule new patient appointments", "schedule a first visit", "schedule follow-up treatment"
+- "Confirm upcoming patient appointments", "send appointment reminders"
+- "Handle patient requests to reschedule", "same-day or walk-in appointment requests"
+- "Manage double-booking and overlapping visits", "troubleshoot scheduling system issues"
+- "Coordinate patient appointment reminders", "coordinate provider schedule changes"
+- "Block off provider schedules for time off", "maintain provider daily appointment books"
+- "Determine optimal patient flow and scheduling", "manage patient appointment wait lists"
+- "Prepare daily provider appointment lists", "monitor and report on appointment metrics"
 
-### Contract Administration
-- "Change order", "RFI", "request for information", "scope change"
-- "Notice of delay", "contract closeout", "lien waiver", "retainage"
-- "Notice to proceed", "substantial completion", "warranty"
-- "Subcontract agreement", "subdentist default", "back-charge"
+### New Patient Onboarding
+- "Conduct new patient intake call", "conduct new patient tour", "greet and check in new patients"
+- "Prepare new patient welcome packet", "onboard new patient to practice"
+- "Manage new patient paperwork", "obtain patient dental and medical history"
+- "Explain office policies to new patients", "create patient electronic chart"
+- "Scan and file new patient documents", "set up patient portal account"
+- "Process new patient referrals", "notify billing of new patient"
+- "Verify patient photo ID", "collect patient medication list"
+- "Conduct new patient survey", "maintain new patient waitlist"
 
-### Project Scheduling
-- "Daily log", "progress report", "look-ahead schedule", "meeting minutes"
-- "Submittal log", "weather delay", "schedule extension", "punchlist"
-- "Lessons learned", "closeout schedule", "substantial completion"
-- "Pull planning", "critical path"
+### Insurance & Claims
+- "Submit dental insurance claims", "submit pre-treatment insurance claims"
+- "Process dental insurance claim denials", "resubmit denied insurance claims"
+- "Verify insurance benefits and coverage", "verify patient insurance coverage"
+- "Manage insurance prior authorizations", "manage insurance credentialing process"
+- "Reconcile insurance payments and EOBs", "audit insurance claim submissions"
+- "Handle patient insurance eligibility issues", "manage dental insurance contracts"
+- "Assist patients in filing insurance claims", "implement electronic claims submissions"
+- "Track and follow up on unpaid claims", "participate in insurance audits and reviews"
 
-### Financial & Billing
-- "Pay application", "schedule of values", "AIA G702", "billing"
-- "Job cost report", "certified payroll", "prevailing wage"
-- "Retainage release", "WIP schedule", "profit fade"
-- "Subdentist payment", "back-charge", "final invoice"
+### Billing & Financial
+- "Prepare monthly billing statements", "provide billing statements to patients"
+- "Post patient payments to accounts", "process patient payments and deposits"
+- "Collect patient copays and deductibles", "collect patient copay or deposit"
+- "Set up patient payment plans", "handle patient requests for payment plans"
+- "Respond to patient billing inquiries", "coordinate patient refunds and adjustments"
+- "Monitor aged accounts receivable balances", "manage collection efforts for past-due accounts"
+- "Maintain accurate patient fee schedules", "maintain practice fee analysis reports"
+- "Prepare annual budgets and financial forecasts", "analyze financial reports and KPIs"
 
-### Safety & Compliance
-- "Safety plan", "toolbox talk", "incident report", "OSHA"
-- "SDS", "safety data sheet", "fall protection", "confined space"
-- "Hot work permit", "scaffold inspection", "silica plan"
-- "Drug testing", "crane inspection", "excavation safety"
+### HIPAA Compliance & Privacy
+- "Conduct HIPAA risk assessments and audits", "train staff on HIPAA privacy requirements"
+- "Maintain HIPAA-compliant email and messaging", "maintain HIPAA breach notification procedures"
+- "Manage protected health information disclosures", "safeguard protected health information"
+- "Coordinate HIPAA policy and procedure updates", "conduct HIPAA employee background checks"
+- "Restrict unauthorized access to patient data", "manage business associate agreements"
+- "Implement medical records retention policies", "manage patient requests for medical records"
+- "Respond to subpoenas and legal requests", "implement data backup and recovery protocols"
+- "Maintain patient communication records", "maintain patient consent forms"
 
-### Subdentist & Vendor Management
-- "Subdentist list", "prequalification", "scope letter", "insurance certificate"
-- "License verification", "back-charge", "substitution request"
-- "DBE", "MBE", "WBE", "diverse business", "joint venture"
-- "Purchase order", "delivery schedule", "vendor list"
+### Patient Care & Treatment Documentation
+- "Document patient care and treatment plans", "explain treatment plan to patient"
+- "Document informed consent for procedures", "review patient consent forms"
+- "Provide patients with procedure instructions", "provide written treatment instructions"
+- "Educate patients on oral hygiene", "review and explain dental X-rays"
+- "Obtain patient authorization for treatment", "verify treatment acceptance with patient"
+- "Document patient refusal of recommended care", "manage treatment plan revisions"
+- "Inform patient of treatment delays or changes", "inform patients of lab or test results"
+- "Provide treatment plan cost estimate", "coordinate patient referrals to specialists"
 
-### Licensing & Business Administration
-- "License renewal", "bond application", "insurance renewal"
-- "Prequalification package", "workers compensation", "OSHA 300"
-- "Employee handbook", "training records", "DBE certification"
-- "Federal registration", "SAM.gov", "UEI", "union compliance"
+### Staff & HR Management
+- "Coordinate employee recruiting and onboarding", "administer employee benefit programs"
+- "Develop and implement employee policies", "coordinate staff meetings and training sessions"
+- "Monitor and address staff performance issues", "organize and maintain employee personnel files"
+- "Process payroll for clinical and administrative staff", "coordinate OSHA training for clinical staff"
+- "Maintain staff break and lunch schedules", "maintain licenses, permits, and certifications"
+- "Prepare and file all required business taxes", "perform monthly closing and accruals"
 
-### Project Closeout
-- "Closeout checklist", "O&M manual", "as-built drawings"
-- "Warranty letters", "certificate of occupancy", "final permit"
-- "Commissioning", "owner training", "spare parts", "keys"
-- "Project case study", "reference letter", "warranty walkthrough"
+### Practice Operations & Administration
+- "Manage dental supply and equipment ordering", "maintain inventory control and tracking"
+- "Coordinate facility maintenance and repairs", "facilitate office supply and equipment procurement"
+- "Manage vendor contracts and relationships", "maintain the dental practice website"
+- "Manage the practice's marketing and advertising", "manage the practice's social media channels"
+- "Develop the practice's strategic business plan", "oversee the practice's IT infrastructure"
+- "Implement online patient scheduling portal", "implement financial policies and procedures"
+- "Create custom dental product orders", "maintain proper disposal of medical waste"
 
-### General Construction Admin Phrases
-- "Prepare a", "draft a", "write a", "create a" + any construction document
-- "Construction document", "project document", "dentist form"
+### General Dental Practice Phrases
+- "Prepare a", "draft a", "write a", "create a", "help me with" + any dental practice topic
+- "Patient form", "dental document", "practice policy", "office procedure"
 
 **When in doubt, offer the skill.** User can always decline.
 
@@ -209,11 +243,11 @@ grep -i "[keyword from user question]" ~/.dentisttasksai/triggers.json
 
 **Extract keywords from user's question:**
 
-User asks: "I need to write a change order for extra concrete work."
+User asks: "I need to set up a payment plan for a patient."
 
-Search for: "change order", "extra work", "concrete"
+Search for: "payment plan", "patient payment"
 ```bash
-grep -i "change order\|extra work" ~/.dentisttasksai/triggers.json
+grep -i "payment plan\|patient payment" ~/.dentisttasksai/triggers.json
 ```
 
 **Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
@@ -297,8 +331,8 @@ If multiple skills match:
 
 > I found these **DentistTasksAI skills** that could help:
 >
-> 1. **Draft Change Order Request** (2 credits) — Formal change order documentation
-> 2. **Prepare Change Order Backup Package** (3 credits) — Full labor/material/equipment backup
+> 1. **Set Up Patient Payment Plans** (2 credits) — Create a structured payment arrangement for treatment costs
+> 2. **Explain Financial Policy Agreement** (1 credit) — Walk the patient through the practice's financial policies
 >
 > You have **48 credits** remaining.
 > Which would you like to use? (1, 2, or none)
@@ -310,7 +344,7 @@ If one skill clearly matches, go to Step 4.
 > I can help with this using **DentistTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> 🔒 **Everything runs locally** — your project data stays on your machine.
+> 🔒 **Everything runs locally** — your patient data stays on your machine.
 > Proceed? (yes/no)
 
 ### Step 5: Handle Response
@@ -341,11 +375,11 @@ Then **apply the framework locally** using the following execution prompt:
 **EXECUTION PROMPT — use this exactly when applying the schema:**
 
 ```
-You are applying a DentistTasksAI expert document framework for a dentist or construction professional.
+You are applying a DentistTasksAI expert document framework for a dentist or dental office administrator.
 
-## Company Context
-The dentist using this tool works at: {company_name} (if set in profile, otherwise omit)
-Apply appropriate professional construction industry language and standards throughout.
+## Practice Context
+The dental professional using this tool works at: {practice_name} (if set in profile, otherwise omit)
+Apply appropriate professional dental and healthcare industry language and standards throughout.
 
 ## Expert Framework
 {schema}
@@ -355,9 +389,9 @@ Apply appropriate professional construction industry language and standards thro
 
 ## Output Requirements
 1. Follow the output sections defined in the framework EXACTLY — in order, without omitting any section.
-2. Use standard construction industry terminology and document formatting.
-3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
-4. All documents should be professional and ready for immediate use in a dentist's office.
+2. Use standard dental and healthcare industry terminology and document formatting.
+3. Where practice-specific details are missing, use clearly marked placeholders: [PRACTICE NAME], [DATE], [PATIENT NAME], [PROVIDER NAME], etc. — do not fabricate specifics.
+4. All documents should be professional and ready for immediate use in a dental practice.
 5. Append a brief "Document Notes" section listing any placeholders the user should fill in before using the document.
 ```
 
@@ -365,7 +399,7 @@ Apply appropriate professional construction industry language and standards thro
 
 ### Step 7: Display Results
 
-> **🏗️ DentistTasksAI — {skill_name}**
+> **🦷 DentistTasksAI — {skill_name}**
 >
 > [Your document/analysis using the expert framework]
 >
@@ -373,7 +407,7 @@ Apply appropriate professional construction industry language and standards thro
 > 📋 *Document Notes: [list of placeholders to fill in]*
 >
 > ---
-> *This output is generated to assist dentists with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
+> *This output is generated to assist dental professionals with administrative documentation. Always review before use. Not a substitute for legal, clinical, or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
 
 ---
@@ -392,8 +426,8 @@ Do NOT pressure. Do NOT charge. Move on.
 ## When No Skill Matches
 
 Apply this filter first — only proceed if ALL are true:
-1. The user's question is clearly construction/dentist administration — bids, contracts, scheduling, billing, safety, project documents.
-2. The failed search used terms representing a genuine construction admin topic.
+1. The user's question is clearly dental/dental office administration — patient scheduling, insurance, billing, HIPAA compliance, clinical documentation, practice operations.
+2. The failed search used terms representing a genuine dental practice administration topic.
 3. You have not already asked about this same gap in this session.
 
 **If the filter passes:**
@@ -401,7 +435,7 @@ Apply this filter first — only proceed if ALL are true:
 > I don't have a DentistTasksAI skill for this yet. I can answer from general knowledge (no credits used).
 >
 > 📊 **Help build DentistTasksAI?**
-> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no project data, no personal information.
+> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no patient data, no personal information.
 > (yes / no)
 
 **If user says yes:**
@@ -411,7 +445,7 @@ Content-Type: application/json
 X-Product-ID: dentist
 
 {
-  "search_terms": ["liquidated damages", "delay penalty", "calculation"],
+  "search_terms": ["dental implant consent", "implant procedure form"],
   "loader_version": "1.0.0"
 }
 ```
@@ -435,8 +469,8 @@ curl -s "{api_base_url}/v1/profile" \
   > ~/.dentisttasksai/profile.json
 ```
 
-If `company_name` is empty, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+If `practice_name` is empty, ask once:
+> "What's your dental practice name? I'll add it to generated documents automatically."
 
 Save their answer:
 ```
@@ -445,21 +479,21 @@ Authorization: Bearer {license_key}
 X-Product-ID: dentist
 Content-Type: application/json
 
-{"company_name": "ABC Contractors, Inc."}
+{"practice_name": "Bright Smiles Dental"}
 ```
 
 ### Profile Fields
 
 | Field | Example | Used For |
 |-------|---------|----------|
-| company_name | ABC Contractors, Inc. | Document headers |
-| contade_name | John Smith | Signatures |
-| title | Project Manager | Documents |
+| practice_name | Bright Smiles Dental | Document headers |
+| dentist_name | Dr. Jane Smith | Signatures |
+| npi_number | 1234567890 | Insurance & compliance docs |
+| license_number | CO-DDS-12345 | Compliance docs |
 | address | 123 Main St | Letterhead |
 | city_state_zip | Denver, CO 80203 | Letterhead |
 | phone | (720) 555-1234 | Letterhead |
-| email | john@abcdentists.com | Letterhead |
-| license_number | CO-GC-12345 | Compliance docs |
+| email | info@brightsmilesdental.com | Letterhead |
 
 ---
 
@@ -482,7 +516,7 @@ print(f"Saved to {out_path}")
 
 > **📄 Document Saved**
 > Saved to: `~/Downloads/dentisttasksai-output.docx`
-> Your project data never left your machine.
+> Your patient data never left your machine.
 
 ---
 
@@ -517,16 +551,16 @@ X-Product-ID: dentist
 | ~/.dentisttasksai/credentials.json | License key and API URL |
 | ~/.dentisttasksai/skills-catalog.json | Full skill catalog |
 | ~/.dentisttasksai/triggers.json | Trigger phrases for matching |
-| ~/.dentisttasksai/profile.json | Company profile |
+| ~/.dentisttasksai/profile.json | Practice profile |
 
-All files are LOCAL. Your project data stays on your machine.
+All files are LOCAL. Your patient data stays on your machine.
 
 ---
 
 ## Example: First-Run Flow
 
 ```
-User: "I need to write a change order for extra excavation work."
+User: "I need to prepare a welcome packet for a new patient."
 
 Agent: [Checks ~/.dentisttasksai/credentials.json — not found]
 
@@ -543,31 +577,32 @@ Agent: [Validates, saves credentials, downloads catalog]
 
        "Done! Setting up complete.
 
-        I found a matching skill: **Draft Change Order Request** (2 credits).
+        I found a matching skill: **Prepare New Patient Welcome Packet** (2 credits).
         You have 50 credits remaining.
 
-        🔒 Everything runs locally — your project data stays on your machine.
+        🔒 Everything runs locally — your patient data stays on your machine.
         Proceed? (yes/no)"
 
 User: "Yes"
 
 Agent: [Fetches schema, applies locally]
 
-       "🏗️ DentistTasksAI — Draft Change Order Request
+       "🦷 DentistTasksAI — Prepare New Patient Welcome Packet
 
-        CHANGE ORDER REQUEST
-        ==================
-        Project: [PROJECT NAME]
-        Change Order No.: [CO NUMBER]
+        NEW PATIENT WELCOME PACKET
+        ==========================
+        Practice: [PRACTICE NAME]
         Date: [DATE]
 
-        DESCRIPTION OF CHANGE:
-        [Detailed description of the extra excavation work...]
+        Welcome to [PRACTICE NAME]!
+        We are pleased to have you as a new patient. This packet contains
+        important information about our practice policies, your rights as
+        a patient, and what to expect at your first visit.
 
-        [Full professional change order document...]
+        [Full professional welcome packet...]
 
-        📋 Document Notes: Fill in [PROJECT NAME], [CO NUMBER], [DATE],
-        [CONTRACTOR NAME], [OWNER NAME] before submitting.
+        📋 Document Notes: Fill in [PRACTICE NAME], [DATE],
+        [DENTIST NAME], [OFFICE PHONE], [OFFICE ADDRESS] before distributing.
 
         — 2 credits used · 48 remaining · Processed locally"
 ```
@@ -577,18 +612,18 @@ Agent: [Fetches schema, applies locally]
 ## Example: Subsequent Use (Fast)
 
 ```
-User: "Draft a daily job log for today."
+User: "Submit a dental insurance claim for a patient."
 
 Agent: [Credentials + cache exist]
-       [grep -i "daily log\|job log" ~/.dentisttasksai/triggers.json]
-       [Finds: dentist_prepare_daily_job_log]
+       [grep -i "insurance claim\|submit claim" ~/.dentisttasksai/triggers.json]
+       [Finds: dentist_submit_dental_insurance_claims]
 
-       "DentistTasksAI **Prepare Daily Job Log** (1 credit).
+       "DentistTasksAI **Submit Dental Insurance Claims** (1 credit).
         You have 48 credits. 🔒 Runs locally. Proceed?"
 
 User: "Yes"
 
-Agent: [Fetches schema, applies locally, shows professional daily log]
+Agent: [Fetches schema, applies locally, shows professional insurance claim submission guide]
        "— 1 credit used · 47 remaining"
 ```
 
@@ -598,7 +633,7 @@ Agent: [Fetches schema, applies locally, shows professional daily log]
 
 ### v1.0.0 (2026-03-24)
 - 🚀 Initial release
-- 170 skills across 8 construction administration categories
-- Local execution — project data never leaves your machine
+- 170 skills across 8 dental practice administration categories
+- Local execution — patient data never leaves your machine
 - Anonymous gap reporting for skill roadmap
-- Company profile injection for document headers
+- Practice profile injection for document headers

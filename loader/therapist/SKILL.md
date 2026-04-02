@@ -1,6 +1,11 @@
+---
+name: therapisttasksai
+description: "Access 155+ AI-powered skills for therapists, counselors, and mental health professionals. Use when: user asks about client intake, treatment plans, progress notes, HIPAA compliance, insurance billing, crisis safety planning, telehealth administration, or any therapy practice administration task."
+---
+
 # TherapistTasksAI Skills
 
-Universal skill loader — access 155+ AI-powered administrative skills for therapists and construction professionals.
+Universal skill loader — access 155+ AI-powered administrative skills for therapists, counselors, social workers, and mental health professionals.
 
 **Loader Version:** 1.0.0
 
@@ -52,7 +57,7 @@ cat > ~/.therapisttasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
   "api_base_url": "https://api.lawtasksai.com",
-  "produth_id": "therapist"
+  "product_id": "therapist"
 }
 EOF
 ```
@@ -125,8 +130,8 @@ curl -s "https://api.lawtasksai.com/v1/profile" \
   > ~/.therapisttasksai/profile.json
 ```
 
-Check if `company_name` is set in the profile. If empty or missing, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+Check if `practice_name` is set in the profile. If empty or missing, ask once:
+> "What's your practice name? I'll add it to generated documents automatically."
 
 Save their answer via `PUT /v1/profile` and update the local cache.
 
@@ -140,57 +145,72 @@ Save their answer via `PUT /v1/profile` and update the local cache.
 
 **Always offer TherapistTasksAI when the user asks about ANY of these:**
 
-### Estimating & Bidding
-- "Write a bid", "prepare a bid", "bid cover letter", "bid response"
-- "Quantity takeoff", "material estimate", "labor estimate", "unit prices"
-- "Bid comparison", "subtherapist quotes", "bid bond", "bid addendum"
-- "No-bid letter", "value engineering", "scope summary"
+### Client Intake & Consent
+- "Client intake interview", "intake assessment questionnaire", "psychosocial assessment"
+- "Collect client signature on intake forms", "secure client consent for treatment"
+- "Obtain client demographic information", "review client medical history"
+- "Document informed consent for telehealth", "gather substance use history"
+- "Client rights", "summarize intake session", "social support system"
+- "Cultural and linguistic needs", "document client permission"
 
-### Contract Administration
-- "Change order", "RFI", "request for information", "scope change"
-- "Notice of delay", "contract closeout", "lien waiver", "retainage"
-- "Notice to proceed", "substantial completion", "warranty"
-- "Subcontract agreement", "subtherapist default", "back-charge"
+### Progress Notes & Clinical Documentation
+- "Write a therapy progress note", "SOAP note", "DAP note", "session note"
+- "Progress report for a client", "session closure note", "group therapy note"
+- "Complete EMR documentation", "electronic medical record"
+- "Document presenting problem", "mental health history", "trauma history"
+- "Termination summary", "letter of medical necessity", "clinical consultation"
+- "Document crisis intervention", "document family session", "contact log"
+- "Prepare client records for transfer", "organize client files for audit"
 
-### Project Scheduling
-- "Daily log", "progress report", "look-ahead schedule", "meeting minutes"
-- "Submittal log", "weather delay", "schedule extension", "punchlist"
-- "Lessons learned", "closeout schedule", "substantial completion"
-- "Pull planning", "critical path"
+### Treatment Plan Administration
+- "Create a treatment plan", "initial treatment plan", "update treatment plan"
+- "Treatment plan review", "strengths-based treatment plan"
+- "Trauma-informed treatment plan", "culturally responsive treatment plan"
+- "Treatment plan for cognitive impairments", "treatment preferences"
+- "Integrate family into treatment plan", "advance directive", "WRAP plan"
+- "Transition to higher level of care", "schedule treatment plan review"
 
-### Financial & Billing
-- "Pay application", "schedule of values", "AIA G702", "billing"
-- "Job cost report", "certified payroll", "prevailing wage"
-- "Retainage release", "WIP schedule", "profit fade"
-- "Subtherapist payment", "back-charge", "final invoice"
+### HIPAA Compliance & Documentation
+- "HIPAA compliance", "HIPAA security risk assessment", "business associate agreement"
+- "Notice of privacy practices", "HIPAA breach response plan"
+- "HIPAA compliance policy manual", "HIPAA training log"
+- "Record retention policy", "mandatory reporting", "release of information"
+- "Subpoena", "court order for client records", "redact client information"
+- "Physical safeguards for records", "clean desk policy"
 
-### Safety & Compliance
-- "Safety plan", "toolbox talk", "incident report", "OSHA"
-- "SDS", "safety data sheet", "fall protection", "confined space"
-- "Hot work permit", "scaffold inspection", "silica plan"
-- "Drug testing", "crane inspection", "excavation safety"
+### Crisis & Safety Planning Documentation
+- "Safety plan", "client safety plan", "crisis intervention plan"
+- "Lethality assessment", "risk assessment", "suicide risk assessment"
+- "Crisis response plan", "warning signs", "crisis hotline"
+- "Risk factors", "client discharge plan for crisis"
+- "Emergency contact information", "emergency evacuation plan"
+- "Record of client restraint or seclusion", "crisis services"
 
-### Subtherapist & Vendor Management
-- "Subtherapist list", "prequalification", "scope letter", "insurance certificate"
-- "License verification", "back-charge", "substitution request"
-- "DBE", "MBE", "WBE", "diverse business", "joint venture"
-- "Purchase order", "delivery schedule", "vendor list"
+### Insurance & Billing Administration
+- "Superbill", "insurance billing", "submit a claim", "prior authorization"
+- "Insurance eligibility", "benefits check", "insurance credentialing"
+- "CPT codes", "ICD codes", "diagnosis and procedure codes"
+- "Sliding scale fee", "client statement", "accounts receivable"
+- "EOB", "explanation of benefits", "insurance audit", "underpayment"
+- "Telehealth billing", "profit and loss report", "financial hardship"
 
-### Licensing & Business Administration
-- "License renewal", "bond application", "insurance renewal"
-- "Prequalification package", "workers compensation", "OSHA 300"
-- "Employee handbook", "training records", "DBE certification"
-- "Federal registration", "SAM.gov", "UEI", "union compliance"
+### Practice Management
+- "Appointment scheduling", "appointment reminders", "cancellation log"
+- "Waitlist for new clients", "client scheduling system"
+- "Discharge summary", "community resources", "referral list"
+- "Client satisfaction survey", "collateral contacts"
+- "Telehealth policies", "telehealth no-shows", "reschedule appointments"
+- "Quarterly tax estimates", "electronic client files", "record access request"
 
-### Project Closeout
-- "Closeout checklist", "O&M manual", "as-built drawings"
-- "Warranty letters", "certificate of occupancy", "final permit"
-- "Commissioning", "owner training", "spare parts", "keys"
-- "Project case study", "reference letter", "warranty walkthrough"
+### Telehealth Administration
+- "Telehealth platform", "telehealth technology", "virtual session"
+- "Telehealth security requirements", "telehealth equipment"
+- "Telehealth orientation for staff", "troubleshoot telehealth"
+- "Virtual therapy", "telehealth policies", "telehealth supervision"
 
-### General Construction Admin Phrases
-- "Prepare a", "draft a", "write a", "create a" + any construction document
-- "Construction document", "project document", "therapist form"
+### General Mental Health Practice Phrases
+- "Prepare a", "draft a", "write a", "create a", "help me with" + any therapy or mental health topic
+- "Therapy document", "clinical document", "mental health form", "counseling record"
 
 **When in doubt, offer the skill.** User can always decline.
 
@@ -209,11 +229,11 @@ grep -i "[keyword from user question]" ~/.therapisttasksai/triggers.json
 
 **Extract keywords from user's question:**
 
-User asks: "I need to write a change order for extra concrete work."
+User asks: "I need to write a progress note for today's session."
 
-Search for: "change order", "extra work", "concrete"
+Search for: "progress note", "session note", "therapy note"
 ```bash
-grep -i "change order\|extra work" ~/.therapisttasksai/triggers.json
+grep -i "progress note\|session note" ~/.therapisttasksai/triggers.json
 ```
 
 **Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
@@ -297,8 +317,8 @@ If multiple skills match:
 
 > I found these **TherapistTasksAI skills** that could help:
 >
-> 1. **Draft Change Order Request** (2 credits) — Formal change order documentation
-> 2. **Prepare Change Order Backup Package** (3 credits) — Full labor/material/equipment backup
+> 1. **Write a Therapy Progress Note** (2 credits) — Document a therapy session using SOAP or DAP format
+> 2. **Generate a Progress Report for a Client** (2 credits) — Summarize a client's treatment journey and current status
 >
 > You have **48 credits** remaining.
 > Which would you like to use? (1, 2, or none)
@@ -310,7 +330,7 @@ If one skill clearly matches, go to Step 4.
 > I can help with this using **TherapistTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> 🔒 **Everything runs locally** — your project data stays on your machine.
+> 🔒 **Everything runs locally** — your client data stays on your machine.
 > Proceed? (yes/no)
 
 ### Step 5: Handle Response
@@ -341,11 +361,11 @@ Then **apply the framework locally** using the following execution prompt:
 **EXECUTION PROMPT — use this exactly when applying the schema:**
 
 ```
-You are applying a TherapistTasksAI expert document framework for a therapist or construction professional.
+You are applying a TherapistTasksAI expert document framework for a therapist, counselor, or mental health professional.
 
-## Company Context
-The therapist using this tool works at: {company_name} (if set in profile, otherwise omit)
-Apply appropriate professional construction industry language and standards throughout.
+## Practice Context
+The clinician using this tool works at: {practice_name} (if set in profile, otherwise omit)
+Apply appropriate professional mental health and clinical terminology throughout.
 
 ## Expert Framework
 {schema}
@@ -355,9 +375,9 @@ Apply appropriate professional construction industry language and standards thro
 
 ## Output Requirements
 1. Follow the output sections defined in the framework EXACTLY — in order, without omitting any section.
-2. Use standard construction industry terminology and document formatting.
-3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
-4. All documents should be professional and ready for immediate use in a therapist's office.
+2. Use standard mental health and clinical documentation terminology and formatting.
+3. Where client-specific details are missing, use clearly marked placeholders: [CLIENT NAME], [DATE], [SESSION NUMBER], [DIAGNOSIS], etc. — do not fabricate specifics.
+4. All documents should be professional and ready for immediate use in a therapy practice.
 5. Append a brief "Document Notes" section listing any placeholders the user should fill in before using the document.
 ```
 
@@ -365,7 +385,7 @@ Apply appropriate professional construction industry language and standards thro
 
 ### Step 7: Display Results
 
-> **🏗️ TherapistTasksAI — {skill_name}**
+> **🧠 TherapistTasksAI — {skill_name}**
 >
 > [Your document/analysis using the expert framework]
 >
@@ -373,7 +393,7 @@ Apply appropriate professional construction industry language and standards thro
 > 📋 *Document Notes: [list of placeholders to fill in]*
 >
 > ---
-> *This output is generated to assist therapists with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
+> *This output is generated to assist mental health professionals with administrative documentation. Always review before use. Not a substitute for clinical supervision or legal advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
 
 ---
@@ -392,8 +412,8 @@ Do NOT pressure. Do NOT charge. Move on.
 ## When No Skill Matches
 
 Apply this filter first — only proceed if ALL are true:
-1. The user's question is clearly construction/therapist administration — bids, contracts, scheduling, billing, safety, project documents.
-2. The failed search used terms representing a genuine construction admin topic.
+1. The user's question is clearly therapy/mental health practice administration — intake, clinical notes, treatment plans, billing, HIPAA, crisis documentation.
+2. The failed search used terms representing a genuine mental health practice admin topic.
 3. You have not already asked about this same gap in this session.
 
 **If the filter passes:**
@@ -401,7 +421,7 @@ Apply this filter first — only proceed if ALL are true:
 > I don't have a TherapistTasksAI skill for this yet. I can answer from general knowledge (no credits used).
 >
 > 📊 **Help build TherapistTasksAI?**
-> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no project data, no personal information.
+> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no client data, no personal information.
 > (yes / no)
 
 **If user says yes:**
@@ -411,7 +431,7 @@ Content-Type: application/json
 X-Product-ID: therapist
 
 {
-  "search_terms": ["liquidated damages", "delay penalty", "calculation"],
+  "search_terms": ["couples therapy", "gottman method", "session note"],
   "loader_version": "1.0.0"
 }
 ```
@@ -435,8 +455,8 @@ curl -s "{api_base_url}/v1/profile" \
   > ~/.therapisttasksai/profile.json
 ```
 
-If `company_name` is empty, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+If `practice_name` is empty, ask once:
+> "What's your practice name? I'll add it to generated documents automatically."
 
 Save their answer:
 ```
@@ -445,21 +465,22 @@ Authorization: Bearer {license_key}
 X-Product-ID: therapist
 Content-Type: application/json
 
-{"company_name": "ABC Contractors, Inc."}
+{"practice_name": "Sunrise Counseling Center"}
 ```
 
 ### Profile Fields
 
 | Field | Example | Used For |
 |-------|---------|----------|
-| company_name | ABC Contractors, Inc. | Document headers |
-| contath_name | John Smith | Signatures |
-| title | Project Manager | Documents |
+| practice_name | Sunrise Counseling Center | Document headers |
+| therapist_name | Dr. Jane Smith, LCSW | Signatures |
+| title | Licensed Clinical Social Worker | Documents |
+| license_number | LCSW-12345 | Compliance docs |
+| npi_number | 1234567890 | Insurance billing |
 | address | 123 Main St | Letterhead |
 | city_state_zip | Denver, CO 80203 | Letterhead |
 | phone | (720) 555-1234 | Letterhead |
-| email | john@abctherapists.com | Letterhead |
-| license_number | CO-GC-12345 | Compliance docs |
+| email | jane@sunrisecounseling.com | Letterhead |
 
 ---
 
@@ -482,7 +503,7 @@ print(f"Saved to {out_path}")
 
 > **📄 Document Saved**
 > Saved to: `~/Downloads/therapisttasksai-output.docx`
-> Your project data never left your machine.
+> Your client data never left your machine.
 
 ---
 
@@ -517,16 +538,16 @@ X-Product-ID: therapist
 | ~/.therapisttasksai/credentials.json | License key and API URL |
 | ~/.therapisttasksai/skills-catalog.json | Full skill catalog |
 | ~/.therapisttasksai/triggers.json | Trigger phrases for matching |
-| ~/.therapisttasksai/profile.json | Company profile |
+| ~/.therapisttasksai/profile.json | Practice profile |
 
-All files are LOCAL. Your project data stays on your machine.
+All files are LOCAL. Your client data stays on your machine.
 
 ---
 
 ## Example: First-Run Flow
 
 ```
-User: "I need to write a change order for extra excavation work."
+User: "I need to write a progress note for today's therapy session."
 
 Agent: [Checks ~/.therapisttasksai/credentials.json — not found]
 
@@ -543,31 +564,41 @@ Agent: [Validates, saves credentials, downloads catalog]
 
        "Done! Setting up complete.
 
-        I found a matching skill: **Draft Change Order Request** (2 credits).
+        I found a matching skill: **Write a Therapy Progress Note** (2 credits).
         You have 50 credits remaining.
 
-        🔒 Everything runs locally — your project data stays on your machine.
+        🔒 Everything runs locally — your client data stays on your machine.
         Proceed? (yes/no)"
 
 User: "Yes"
 
 Agent: [Fetches schema, applies locally]
 
-       "🏗️ TherapistTasksAI — Draft Change Order Request
+       "🧠 TherapistTasksAI — Write a Therapy Progress Note
 
-        CHANGE ORDER REQUEST
-        ==================
-        Project: [PROJECT NAME]
-        Change Order No.: [CO NUMBER]
-        Date: [DATE]
+        THERAPY PROGRESS NOTE
+        =====================
+        Client: [CLIENT NAME]
+        Session Date: [DATE]
+        Session Number: [SESSION NUMBER]
+        Therapist: [THERAPIST NAME], [CREDENTIALS]
 
-        DESCRIPTION OF CHANGE:
-        [Detailed description of the extra excavation work...]
+        SUBJECTIVE:
+        [Client's reported concerns, mood, and experience this session...]
 
-        [Full professional change order document...]
+        OBJECTIVE:
+        [Clinician observations, affect, behavior, engagement...]
 
-        📋 Document Notes: Fill in [PROJECT NAME], [CO NUMBER], [DATE],
-        [CONTRACTOR NAME], [OWNER NAME] before submitting.
+        ASSESSMENT:
+        [Clinical impression, progress toward treatment goals...]
+
+        PLAN:
+        [Interventions for next session, homework, referrals...]
+
+        [Full professional progress note...]
+
+        📋 Document Notes: Fill in [CLIENT NAME], [DATE], [SESSION NUMBER],
+        [THERAPIST NAME], [CREDENTIALS] before filing.
 
         — 2 credits used · 48 remaining · Processed locally"
 ```
@@ -577,19 +608,19 @@ Agent: [Fetches schema, applies locally]
 ## Example: Subsequent Use (Fast)
 
 ```
-User: "Draft a daily job log for today."
+User: "Help me create a safety plan for a client."
 
 Agent: [Credentials + cache exist]
-       [grep -i "daily log\|job log" ~/.therapisttasksai/triggers.json]
-       [Finds: therapist_prepare_daily_job_log]
+       [grep -i "safety plan" ~/.therapisttasksai/triggers.json]
+       [Finds: therapist-develop-a-client-safety-plan]
 
-       "TherapistTasksAI **Prepare Daily Job Log** (1 credit).
+       "TherapistTasksAI **Develop a Client Safety Plan** (3 credits).
         You have 48 credits. 🔒 Runs locally. Proceed?"
 
 User: "Yes"
 
-Agent: [Fetches schema, applies locally, shows professional daily log]
-       "— 1 credit used · 47 remaining"
+Agent: [Fetches schema, applies locally, shows professional safety plan]
+       "— 3 credits used · 45 remaining"
 ```
 
 ---
@@ -598,7 +629,7 @@ Agent: [Fetches schema, applies locally, shows professional daily log]
 
 ### v1.0.0 (2026-03-24)
 - 🚀 Initial release
-- 155 skills across 8 construction administration categories
-- Local execution — project data never leaves your machine
+- 155 skills across 8 mental health practice administration categories
+- Local execution — client data never leaves your machine
 - Anonymous gap reporting for skill roadmap
-- Company profile injection for document headers
+- Practice profile injection for document headers

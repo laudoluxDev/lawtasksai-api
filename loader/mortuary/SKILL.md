@@ -1,6 +1,11 @@
-# MortuaryTasksAI Skills
+---
+name: mortuarytasksai
+description: "Access 127+ AI-powered skills for mortuary science professionals and funeral home staff. Use when: user asks about death certificates, cremation authorization, embalming documentation, preneed planning, funeral licensing, case management, family notifications, or any mortuary or funeral home administration task."
+---
 
-Universal skill loader — access 127+ AI-powered administrative skills for mortuarys and construction professionals.
+# MorticiaryTasksAI Skills
+
+Universal skill loader — access 127+ AI-powered administrative skills for mortuary science professionals and funeral home staff.
 
 **Loader Version:** 1.0.0
 
@@ -27,9 +32,9 @@ If found and NOT "YOUR_LICENSE_KEY_HERE", use it.
 
 **1c. No license found — prompt user:**
 
-> **MortuaryTasksAI Setup Required**
+> **MorticiaryTasksAI Setup Required**
 >
-> I need a license key to access MortuaryTasksAI skills. You can:
+> I need a license key to access MorticiaryTasksAI skills. You can:
 > 1. Enter your license key (starts with `mo_`)
 > 2. Enter the email you used to purchase (I'll recover your license)
 > 3. Visit **mortuarytasksai.com** to purchase credits
@@ -52,7 +57,7 @@ cat > ~/.mortuarytasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
   "api_base_url": "https://api.lawtasksai.com",
-  "produmo_id": "mortuary"
+  "product_id": "mortuary"
 }
 EOF
 ```
@@ -73,7 +78,7 @@ X-Product-ID: mortuary
 **If `already_current` is `false`:** the response contains `skill_md` — write it to this skill's own file:
 
 ```bash
-SKILL_PATH=$(find ~/.openclaw/skills -name "SKILL.md" | xargs grep -l "MortuaryTasksAI Skills" 2>/dev/null | head -1)
+SKILL_PATH=$(find ~/.openclaw/skills -name "SKILL.md" | xargs grep -l "MorticiaryTasksAI Skills" 2>/dev/null | head -1)
 cat > "$SKILL_PATH" << 'NEWSKILL'
 {skill_md content from API response}
 NEWSKILL
@@ -81,7 +86,7 @@ NEWSKILL
 
 Then tell the user:
 
-> ✨ **MortuaryTasksAI updated to v{version}**
+> ✨ **MorticiaryTasksAI updated to v{version}**
 > Continuing with your request...
 
 Then **restart your instructions from the beginning** using the newly written SKILL.md.
@@ -99,7 +104,7 @@ ls ~/.mortuarytasksai/skills-catalog.json 2>/dev/null
 
 **If cache doesn't exist:**
 
-> "Setting up MortuaryTasksAI for first use... caching skill catalog locally."
+> "Setting up MorticiaryTasksAI for first use... caching skill catalog locally."
 
 ```bash
 curl -s "https://api.lawtasksai.com/v1/skills" \
@@ -125,8 +130,8 @@ curl -s "https://api.lawtasksai.com/v1/profile" \
   > ~/.mortuarytasksai/profile.json
 ```
 
-Check if `company_name` is set in the profile. If empty or missing, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+Check if `funeral_home_name` is set in the profile. If empty or missing, ask once:
+> "What's your funeral home name? I'll add it to generated documents automatically."
 
 Save their answer via `PUT /v1/profile` and update the local cache.
 
@@ -138,59 +143,94 @@ Save their answer via `PUT /v1/profile` and update the local cache.
 
 ## WHEN TO TRIGGER
 
-**Always offer MortuaryTasksAI when the user asks about ANY of these:**
+**Always offer MorticiaryTasksAI when the user asks about ANY of these:**
 
-### Estimating & Bidding
-- "Write a bid", "prepare a bid", "bid cover letter", "bid response"
-- "Quantity takeoff", "material estimate", "labor estimate", "unit prices"
-- "Bid comparison", "submortuary quotes", "bid bond", "bid addendum"
-- "No-bid letter", "value engineering", "scope summary"
+### Case Intake & Decedent Records
+- "Prepare case intake record", "case file for storage", "prepare a case file"
+- "Compile decedent medical history", "verify identification of decedent"
+- "Catalog decedent clothing and belongings", "inventory decedent personal effects"
+- "Photograph decedent for case file", "photograph identification of remains"
+- "Prepare decedent identification bracelet", "gather family contact information"
+- "Notify family of death and next steps", "schedule in-person arrangements meeting"
+- "Update electronic case management system", "scan and digitize paper case records"
+- "Transfer case file to archival storage"
 
-### Contract Administration
-- "Change order", "RFI", "request for information", "scope change"
-- "Notice of delay", "contract closeout", "lien waiver", "retainage"
-- "Notice to proceed", "substantial completion", "warranty"
-- "Subcontract agreement", "submortuary default", "back-charge"
+### Death Certificates & Legal Documents
+- "Complete death certificate", "submit fetal death certificate"
+- "Provide certified copies of death certificate", "file permit for disposition of remains"
+- "Obtain burial-transit permits", "obtain permits for scattering of ashes"
+- "File paperwork for cremation authorization", "prepare cremation authorization paperwork"
+- "Obtain authorization for cremation", "maintain log of cremation authorizations"
+- "Submit body donation consent forms", "report communicable disease deaths"
+- "Provide copies of authorization to family"
 
-### Project Scheduling
-- "Daily log", "progress report", "look-ahead schedule", "meeting minutes"
-- "Submittal log", "weather delay", "schedule extension", "punchlist"
-- "Lessons learned", "closeout schedule", "substantial completion"
-- "Pull planning", "critical path"
+### Embalming & Preparation
+- "Document embalming procedure", "review embalming and preparation plans"
+- "Maintain embalming room logbook", "perform final quality check of preparation"
+- "Implement infection control protocols", "implement quality assurance procedures"
+- "Maintain temperature-controlled storage", "document infectious waste manifests"
+- "Ensure proper storage of hazardous materials"
 
-### Financial & Billing
-- "Pay application", "schedule of values", "AIA G702", "billing"
-- "Job cost report", "certified payroll", "prevailing wage"
-- "Retainage release", "WIP schedule", "profit fade"
-- "Submortuary payment", "back-charge", "final invoice"
+### Cremation Services
+- "Document cremation process details", "supervise placement into cremation chamber"
+- "Prepare cremated remains for return", "coordinate return of cremated remains"
+- "Deliver cremated remains to family", "document receipt of cremated remains"
+- "Conduct random audits of cremation records", "retain cremation records permanently"
+- "Maintain chain of custody records", "obtain authorization for cremation"
 
-### Safety & Compliance
-- "Safety plan", "toolbox talk", "incident report", "OSHA"
-- "SDS", "safety data sheet", "fall protection", "confined space"
-- "Hot work permit", "scaffold inspection", "silica plan"
-- "Drug testing", "crane inspection", "excavation safety"
+### Transportation & Shipping
+- "Arrange for transfer of remains to airport", "complete shipping manifest for air transport"
+- "Complete shipping paperwork for air transport", "dispatch drivers for removal of remains"
+- "Document chain of custody during transport", "schedule ground transport for local service"
+- "Notify airline of hazardous materials", "obtain authorization for international transport"
+- "Arrange specialty transport for oversized caskets", "manage third-party transport providers"
+- "Schedule organ/tissue donor transport", "confirm receipt of remains at destination"
+- "Arrange for removal of personal effects", "procure eco-friendly transport options"
 
-### Submortuary & Vendor Management
-- "Submortuary list", "prequalification", "scope letter", "insurance certificate"
-- "License verification", "back-charge", "substitution request"
-- "DBE", "MBE", "WBE", "diverse business", "joint venture"
-- "Purchase order", "delivery schedule", "vendor list"
+### Family Services & Arrangements
+- "Assist with selection of casket or urn", "collect biographical information for obituary"
+- "Present estimate of funeral service costs", "prepare price lists for services"
+- "Explain options for final disposition", "coordinate with clergy for religious services"
+- "Offer grief counseling resources", "provide bereavement support resources"
+- "Provide guidance on flowers and memorabilia", "process payments from families"
+- "Follow up on outstanding payments"
 
-### Licensing & Business Administration
-- "License renewal", "bond application", "insurance renewal"
-- "Prequalification package", "workers compensation", "OSHA 300"
-- "Employee handbook", "training records", "DBE certification"
-- "Federal registration", "SAM.gov", "UEI", "union compliance"
+### Licensing, Compliance & Regulatory
+- "Maintain licenses for funeral directors", "renew funeral director licenses"
+- "Track continuing education credits", "prepare for state board inspections"
+- "Submit reports to state funeral board", "submit monthly reports to regulators"
+- "Comply with HIPAA privacy regulations", "comply with state preneed funeral laws"
+- "Comply with charitable solicitation laws", "ensure compliance with ADA accessibility"
+- "Maintain controlled substance licenses", "participate in industry accreditation"
+- "Conduct OSHA safety inspections", "provide OSHA training for staff"
 
-### Project Closeout
-- "Closeout checklist", "O&M manual", "as-built drawings"
-- "Warranty letters", "certificate of occupancy", "final permit"
-- "Commissioning", "owner training", "spare parts", "keys"
-- "Project case study", "reference letter", "warranty walkthrough"
+### Preneed & Financial Planning
+- "Manage preneed funeral trust funds", "comply with state preneed funeral laws"
+- "Prepare monthly financial statements", "prepare annual business tax returns"
+- "File quarterly payroll tax returns", "maintain general ledger accounting"
+- "Reconcile bank and credit card accounts", "manage accounts receivable collections"
+- "Process payroll for hourly employees", "arrange financing for capital projects"
+- "Analyze operational performance metrics"
 
-### General Construction Admin Phrases
-- "Prepare a", "draft a", "write a", "create a" + any construction document
-- "Construction document", "project document", "mortuary form"
+### Business & Staff Administration
+- "Manage human resources and staffing", "conduct employee background checks"
+- "Document staff training and competency", "manage employee health insurance plans"
+- "Oversee workers' compensation insurance", "maintain business liability policies"
+- "Manage vendor and supplier relationships", "manage inventory of supplies and goods"
+- "Maintain fleet of funeral home vehicles", "track mileage and fuel usage for fleet"
+- "Oversee vehicle fleet and equipment", "coordinate facilities maintenance projects"
+- "Develop strategic business plans", "develop emergency preparedness plans"
+- "Implement process improvement initiatives"
+
+### Marketing & Community Outreach
+- "Produce marketing and advertising materials", "develop and maintain website content"
+- "Manage social media accounts and profiles", "coordinate community outreach programs"
+- "Conduct market research and analysis", "develop and launch new service offerings"
+- "Implement customer relationship software", "develop policies for customer refunds"
+
+### General Mortuary & Funeral Home Phrases
+- "Prepare a", "draft a", "write a", "create a", "help me with" + any funeral home or mortuary topic
+- "Funeral home document", "mortuary form", "case record", "arrangement paperwork"
 
 **When in doubt, offer the skill.** User can always decline.
 
@@ -209,11 +249,11 @@ grep -i "[keyword from user question]" ~/.mortuarytasksai/triggers.json
 
 **Extract keywords from user's question:**
 
-User asks: "I need to write a change order for extra concrete work."
+User asks: "I need to complete a death certificate for a family."
 
-Search for: "change order", "extra work", "concrete"
+Search for: "death certificate", "decedent", "family"
 ```bash
-grep -i "change order\|extra work" ~/.mortuarytasksai/triggers.json
+grep -i "death certificate\|decedent" ~/.mortuarytasksai/triggers.json
 ```
 
 **Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
@@ -237,24 +277,24 @@ X-Product-ID: mortuary
 
 ### Update Requests
 
-When user asks about updating MortuaryTasksAI:
+When user asks about updating MorticiaryTasksAI:
 
-> **MortuaryTasksAI Loader Update**
+> **MorticiaryTasksAI Loader Update**
 >
 > **Current Version:** 1.0.0
 >
 > **To upgrade:**
 > 1. Visit **mortuarytasksai.com** and log in with your purchase email
 > 2. Download the latest loader to your Downloads folder
-> 3. Tell me: *"Install MortuaryTasksAI from the downloads folder"*
+> 3. Tell me: *"Install MorticiaryTasksAI from the downloads folder"*
 >
 > Your license key and credits automatically transfer — no setup needed.
 
 ### Removal Requests
 
-When user asks about removing MortuaryTasksAI:
+When user asks about removing MorticiaryTasksAI:
 
-> **⚠️ Remove MortuaryTasksAI?**
+> **⚠️ Remove MorticiaryTasksAI?**
 >
 > - **Complete removal:** Delete skill + cache + credentials
 > - **Keep credentials:** Delete skill but preserve license key
@@ -295,10 +335,10 @@ Use grep as described above. Do NOT call the API for matching.
 ### Step 3: Present Options
 If multiple skills match:
 
-> I found these **MortuaryTasksAI skills** that could help:
+> I found these **MorticiaryTasksAI skills** that could help:
 >
-> 1. **Draft Change Order Request** (2 credits) — Formal change order documentation
-> 2. **Prepare Change Order Backup Package** (3 credits) — Full labor/material/equipment backup
+> 1. **Complete Death Certificate** (2 credits) — Official death certificate documentation
+> 2. **Prepare Case Intake Record** (2 credits) — Full decedent intake and case setup
 >
 > You have **48 credits** remaining.
 > Which would you like to use? (1, 2, or none)
@@ -307,10 +347,10 @@ If one skill clearly matches, go to Step 4.
 
 ### Step 4: Ask for Confirmation
 
-> I can help with this using **MortuaryTasksAI [Skill Name]** (**[cost] credits**).
+> I can help with this using **MorticiaryTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> 🔒 **Everything runs locally** — your project data stays on your machine.
+> 🔒 **Everything runs locally** — your case data stays on your machine.
 > Proceed? (yes/no)
 
 ### Step 5: Handle Response
@@ -341,11 +381,11 @@ Then **apply the framework locally** using the following execution prompt:
 **EXECUTION PROMPT — use this exactly when applying the schema:**
 
 ```
-You are applying a MortuaryTasksAI expert document framework for a mortuary or construction professional.
+You are applying a MorticiaryTasksAI expert document framework for a mortuary science professional or funeral home staff member.
 
 ## Company Context
-The mortuary using this tool works at: {company_name} (if set in profile, otherwise omit)
-Apply appropriate professional construction industry language and standards throughout.
+The funeral home using this tool is: {funeral_home_name} (if set in profile, otherwise omit)
+Apply appropriate professional mortuary science and funeral service industry language and standards throughout.
 
 ## Expert Framework
 {schema}
@@ -355,9 +395,9 @@ Apply appropriate professional construction industry language and standards thro
 
 ## Output Requirements
 1. Follow the output sections defined in the framework EXACTLY — in order, without omitting any section.
-2. Use standard construction industry terminology and document formatting.
-3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
-4. All documents should be professional and ready for immediate use in a mortuary's office.
+2. Use standard mortuary science and funeral service industry terminology and document formatting.
+3. Where case-specific details are missing, use clearly marked placeholders: [DECEDENT NAME], [DATE OF DEATH], [LICENSE NUMBER], etc. — do not fabricate specifics.
+4. All documents should be professional and ready for immediate use in a funeral home or mortuary office.
 5. Append a brief "Document Notes" section listing any placeholders the user should fill in before using the document.
 ```
 
@@ -365,7 +405,7 @@ Apply appropriate professional construction industry language and standards thro
 
 ### Step 7: Display Results
 
-> **🏗️ MortuaryTasksAI — {skill_name}**
+> **🕯️ MorticiaryTasksAI — {skill_name}**
 >
 > [Your document/analysis using the expert framework]
 >
@@ -373,7 +413,7 @@ Apply appropriate professional construction industry language and standards thro
 > 📋 *Document Notes: [list of placeholders to fill in]*
 >
 > ---
-> *This output is generated to assist mortuarys with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
+> *This output is generated to assist mortuary science professionals with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
 
 ---
@@ -392,16 +432,16 @@ Do NOT pressure. Do NOT charge. Move on.
 ## When No Skill Matches
 
 Apply this filter first — only proceed if ALL are true:
-1. The user's question is clearly construction/mortuary administration — bids, contracts, scheduling, billing, safety, project documents.
-2. The failed search used terms representing a genuine construction admin topic.
+1. The user's question is clearly mortuary science or funeral home administration — case records, death certificates, cremation, embalming, licensing, family services, preneed planning.
+2. The failed search used terms representing a genuine mortuary administration topic.
 3. You have not already asked about this same gap in this session.
 
 **If the filter passes:**
 
-> I don't have a MortuaryTasksAI skill for this yet. I can answer from general knowledge (no credits used).
+> I don't have a MorticiaryTasksAI skill for this yet. I can answer from general knowledge (no credits used).
 >
-> 📊 **Help build MortuaryTasksAI?**
-> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no project data, no personal information.
+> 📊 **Help build MorticiaryTasksAI?**
+> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no case data, no personal information.
 > (yes / no)
 
 **If user says yes:**
@@ -411,7 +451,7 @@ Content-Type: application/json
 X-Product-ID: mortuary
 
 {
-  "search_terms": ["liquidated damages", "delay penalty", "calculation"],
+  "search_terms": ["scattering permit", "ashes", "disposition"],
   "loader_version": "1.0.0"
 }
 ```
@@ -435,8 +475,8 @@ curl -s "{api_base_url}/v1/profile" \
   > ~/.mortuarytasksai/profile.json
 ```
 
-If `company_name` is empty, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+If `funeral_home_name` is empty, ask once:
+> "What's your funeral home name? I'll add it to generated documents automatically."
 
 Save their answer:
 ```
@@ -445,21 +485,21 @@ Authorization: Bearer {license_key}
 X-Product-ID: mortuary
 Content-Type: application/json
 
-{"company_name": "ABC Contractors, Inc."}
+{"funeral_home_name": "Riverside Memorial Chapel"}
 ```
 
 ### Profile Fields
 
 | Field | Example | Used For |
 |-------|---------|----------|
-| company_name | ABC Contractors, Inc. | Document headers |
-| contamo_name | John Smith | Signatures |
-| title | Project Manager | Documents |
-| address | 123 Main St | Letterhead |
+| funeral_home_name | Riverside Memorial Chapel | Document headers |
+| director_name | Jane Smith | Signatures |
+| title | Licensed Funeral Director | Documents |
+| license_number | FD-CO-45678 | Compliance docs |
+| address | 456 Elm Street | Letterhead |
 | city_state_zip | Denver, CO 80203 | Letterhead |
-| phone | (720) 555-1234 | Letterhead |
-| email | john@abcmortuarys.com | Letterhead |
-| license_number | CO-GC-12345 | Compliance docs |
+| phone | (720) 555-5678 | Letterhead |
+| email | jane@riversidememorial.com | Letterhead |
 
 ---
 
@@ -482,7 +522,7 @@ print(f"Saved to {out_path}")
 
 > **📄 Document Saved**
 > Saved to: `~/Downloads/mortuarytasksai-output.docx`
-> Your project data never left your machine.
+> Your case data never left your machine.
 
 ---
 
@@ -517,22 +557,22 @@ X-Product-ID: mortuary
 | ~/.mortuarytasksai/credentials.json | License key and API URL |
 | ~/.mortuarytasksai/skills-catalog.json | Full skill catalog |
 | ~/.mortuarytasksai/triggers.json | Trigger phrases for matching |
-| ~/.mortuarytasksai/profile.json | Company profile |
+| ~/.mortuarytasksai/profile.json | Funeral home profile |
 
-All files are LOCAL. Your project data stays on your machine.
+All files are LOCAL. Your case data stays on your machine.
 
 ---
 
 ## Example: First-Run Flow
 
 ```
-User: "I need to write a change order for extra excavation work."
+User: "I need to complete a death certificate for a family we're serving."
 
 Agent: [Checks ~/.mortuarytasksai/credentials.json — not found]
 
-       "MortuaryTasksAI Setup Required
+       "MorticiaryTasksAI Setup Required
 
-        I need a license key to access MortuaryTasksAI skills. You can:
+        I need a license key to access MorticiaryTasksAI skills. You can:
         1. Enter your license key (starts with mo_)
         2. Enter the email you used to purchase
         3. Visit mortuarytasksai.com to purchase credits"
@@ -543,31 +583,34 @@ Agent: [Validates, saves credentials, downloads catalog]
 
        "Done! Setting up complete.
 
-        I found a matching skill: **Draft Change Order Request** (2 credits).
+        I found a matching skill: **Complete Death Certificate** (2 credits).
         You have 50 credits remaining.
 
-        🔒 Everything runs locally — your project data stays on your machine.
+        🔒 Everything runs locally — your case data stays on your machine.
         Proceed? (yes/no)"
 
 User: "Yes"
 
 Agent: [Fetches schema, applies locally]
 
-       "🏗️ MortuaryTasksAI — Draft Change Order Request
+       "🕯️ MorticiaryTasksAI — Complete Death Certificate
 
-        CHANGE ORDER REQUEST
-        ==================
-        Project: [PROJECT NAME]
-        Change Order No.: [CO NUMBER]
-        Date: [DATE]
+        DEATH CERTIFICATE DOCUMENTATION
+        ================================
+        Decedent Name: [DECEDENT NAME]
+        Date of Death: [DATE OF DEATH]
+        Place of Death: [PLACE OF DEATH]
+        Cause of Death: [CAUSE OF DEATH]
 
-        DESCRIPTION OF CHANGE:
-        [Detailed description of the extra excavation work...]
+        CERTIFYING INFORMATION:
+        Funeral Director: [DIRECTOR NAME]
+        License Number: [LICENSE NUMBER]
 
-        [Full professional change order document...]
+        [Full professional death certificate documentation...]
 
-        📋 Document Notes: Fill in [PROJECT NAME], [CO NUMBER], [DATE],
-        [CONTRACTOR NAME], [OWNER NAME] before submitting.
+        📋 Document Notes: Fill in [DECEDENT NAME], [DATE OF DEATH],
+        [PLACE OF DEATH], [CAUSE OF DEATH], [DIRECTOR NAME], and
+        [LICENSE NUMBER] before filing.
 
         — 2 credits used · 48 remaining · Processed locally"
 ```
@@ -577,19 +620,19 @@ Agent: [Fetches schema, applies locally]
 ## Example: Subsequent Use (Fast)
 
 ```
-User: "Draft a daily job log for today."
+User: "I need to prepare cremation authorization paperwork."
 
 Agent: [Credentials + cache exist]
-       [grep -i "daily log\|job log" ~/.mortuarytasksai/triggers.json]
-       [Finds: mortuary_prepare_daily_job_log]
+       [grep -i "cremation authorization" ~/.mortuarytasksai/triggers.json]
+       [Finds: mortuary_prepare_cremation_authorization_paperwork]
 
-       "MortuaryTasksAI **Prepare Daily Job Log** (1 credit).
+       "MorticiaryTasksAI **Prepare Cremation Authorization Paperwork** (2 credits).
         You have 48 credits. 🔒 Runs locally. Proceed?"
 
 User: "Yes"
 
-Agent: [Fetches schema, applies locally, shows professional daily log]
-       "— 1 credit used · 47 remaining"
+Agent: [Fetches schema, applies locally, shows professional cremation authorization form]
+       "— 2 credits used · 46 remaining"
 ```
 
 ---
@@ -598,7 +641,7 @@ Agent: [Fetches schema, applies locally, shows professional daily log]
 
 ### v1.0.0 (2026-03-24)
 - 🚀 Initial release
-- 127 skills across 8 construction administration categories
-- Local execution — project data never leaves your machine
+- 127 skills across 10 mortuary science and funeral home administration categories
+- Local execution — case data never leaves your machine
 - Anonymous gap reporting for skill roadmap
-- Company profile injection for document headers
+- Funeral home profile injection for document headers

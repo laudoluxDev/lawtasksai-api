@@ -1,6 +1,11 @@
+---
+name: pastortasksai
+description: "Access 182+ AI-powered skills for pastors, ministers, and church leaders. Use when: user asks about sermon preparation, pastoral counseling, ceremony administration, congregant engagement, church communications, contributions and stewardship, board governance, or staff and volunteer management."
+---
+
 # PastorTasksAI Skills
 
-Universal skill loader — access 182+ AI-powered administrative skills for pastors and construction professionals.
+Universal skill loader — access 182+ AI-powered administrative skills for pastors, ministers, and church leaders.
 
 **Loader Version:** 1.0.0
 
@@ -52,7 +57,7 @@ cat > ~/.pastortasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
   "api_base_url": "https://api.lawtasksai.com",
-  "produpa_id": "pastor"
+  "product_id": "pastor"
 }
 EOF
 ```
@@ -125,8 +130,8 @@ curl -s "https://api.lawtasksai.com/v1/profile" \
   > ~/.pastortasksai/profile.json
 ```
 
-Check if `company_name` is set in the profile. If empty or missing, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+Check if `church_name` is set in the profile. If empty or missing, ask once:
+> "What's your church name? I'll add it to generated documents automatically."
 
 Save their answer via `PUT /v1/profile` and update the local cache.
 
@@ -140,57 +145,83 @@ Save their answer via `PUT /v1/profile` and update the local cache.
 
 **Always offer PastorTasksAI when the user asks about ANY of these:**
 
-### Estimating & Bidding
-- "Write a bid", "prepare a bid", "bid cover letter", "bid response"
-- "Quantity takeoff", "material estimate", "labor estimate", "unit prices"
-- "Bid comparison", "subpastor quotes", "bid bond", "bid addendum"
-- "No-bid letter", "value engineering", "scope summary"
+### Sermon Preparation & Delivery
+- "Create a preaching schedule", "prepare sermon outline template", "sermon series planning"
+- "Write sermon discussion guides", "sermon series announcements", "sermon illustration library"
+- "Review sermon manuscripts", "digitize historical sermons", "record sermon audio/video"
+- "Document sermon writing process", "sermon prep checklists", "repurpose sermon content"
+- "Analyze sermon delivery data", "implement sermon archiving", "sermon feedback system"
+- "Sermon topic calendar", "sermon series graphics", "manage sermon copyright permissions"
 
-### Contract Administration
-- "Change order", "RFI", "request for information", "scope change"
-- "Notice of delay", "contract closeout", "lien waiver", "retainage"
-- "Notice to proceed", "substantial completion", "warranty"
-- "Subcontract agreement", "subpastor default", "back-charge"
+### Ceremony Administration
+- "Coordinate ceremony scheduling", "create ceremony program templates", "ceremony checklists"
+- "Develop ceremony protocols", "ceremony training", "document ceremony procedures"
+- "Ceremony signage", "organize ceremony rehearsals", "coordinate ceremony music"
+- "Manage ceremony decorations", "manage ceremony equipment", "ceremony livestreams"
+- "Distribute ceremony instructions", "distribute ceremony reminders", "handle ceremony RSVPs"
+- "Coordinate off-site ceremonies", "collect ceremony feedback", "preserve ceremony archives"
 
-### Project Scheduling
-- "Daily log", "progress report", "look-ahead schedule", "meeting minutes"
-- "Submittal log", "weather delay", "schedule extension", "punchlist"
-- "Lessons learned", "closeout schedule", "substantial completion"
-- "Pull planning", "critical path"
+### Congregant & Member Engagement
+- "Maintain congregant database", "produce congregant directories", "respond to congregant inquiries"
+- "Develop new member onboarding", "write member onboarding guides", "write member-facing policies"
+- "Handle member lifecycle changes", "manage member engagement data", "facilitate member feedback"
+- "Craft congregant newsletters", "implement congregant messaging", "optimize congregant touchpoints"
+- "Operate congregant helpdesk", "manage congregant data privacy", "produce member testimonials"
+- "Analyze member demographics", "produce weekly announcements"
 
-### Financial & Billing
-- "Pay application", "schedule of values", "AIA G702", "billing"
-- "Job cost report", "certified payroll", "prevailing wage"
-- "Retainage release", "WIP schedule", "profit fade"
-- "Subpastor payment", "back-charge", "final invoice"
+### Pastoral Counseling
+- "Develop counseling intake forms", "document counseling session notes", "counseling workflows"
+- "Schedule counseling appointments", "handle counseling referrals", "counseling resources"
+- "Organize counseling case files", "conduct case file audits", "manage counseling feedback"
+- "Track counseling metrics", "analyze counseling trends", "optimize counseling workflows"
+- "Maintain client confidentiality", "maintain counselor credentials", "facilitate counselor meetings"
+- "Write counseling policy manual", "manage client communication"
 
-### Safety & Compliance
-- "Safety plan", "toolbox talk", "incident report", "OSHA"
-- "SDS", "safety data sheet", "fall protection", "confined space"
-- "Hot work permit", "scaffold inspection", "silica plan"
-- "Drug testing", "crane inspection", "excavation safety"
+### Church Community Outreach
+- "Develop community engagement plans", "community engagement KPIs", "community impact reports"
+- "Coordinate community service projects", "facilitate community partnerships", "community referrals"
+- "Analyze community demographics", "analyze community needs assessments"
+- "Distribute community resource guides", "produce community newsletters"
+- "Promote church community involvement", "promote community charity drives"
+- "Implement community communication", "implement community feedback loops"
+- "Distribute emergency alerts", "facilitate community advisory board"
 
-### Subpastor & Vendor Management
-- "Subpastor list", "prequalification", "scope letter", "insurance certificate"
-- "License verification", "back-charge", "substitution request"
-- "DBE", "MBE", "WBE", "diverse business", "joint venture"
-- "Purchase order", "delivery schedule", "vendor list"
+### Contributions & Stewardship
+- "Administer contribution receipts", "implement contribution tracking", "process member contributions"
+- "Manage contribution campaigns", "manage contribution designated funds"
+- "Facilitate contribution methods", "facilitate recurring contributions"
+- "Manage contribution acknowledgments", "distribute donor acknowledgments"
+- "Analyze contribution trends", "coordinate contribution audits", "coordinate stewardship education"
+- "Provide contribution tax guidance", "implement contribution tax compliance"
+- "Produce stewardship impact reports", "operate contribution management system"
 
-### Licensing & Business Administration
-- "License renewal", "bond application", "insurance renewal"
-- "Prequalification package", "workers compensation", "OSHA 300"
-- "Employee handbook", "training records", "DBE certification"
-- "Federal registration", "SAM.gov", "UEI", "union compliance"
+### Staff & Volunteer Management
+- "Coordinate church volunteer teams", "coordinate staff/volunteer schedules", "staff/volunteer events"
+- "Handle staff/volunteer onboarding", "develop staff/volunteer succession planning"
+- "Facilitate staff/volunteer training", "facilitate staff/volunteer team-building"
+- "Produce staff/volunteer performance reviews", "handle staff/volunteer disciplinary issues"
+- "Manage staff/volunteer communications", "staff/volunteer recognition", "volunteer communications"
+- "Optimize staff/volunteer recruitment/retention", "maintain staff/volunteer handbooks"
+- "Produce staff/volunteer directories", "implement staff/volunteer portal/hub"
 
-### Project Closeout
-- "Closeout checklist", "O&M manual", "as-built drawings"
-- "Warranty letters", "certificate of occupancy", "final permit"
-- "Commissioning", "owner training", "spare parts", "keys"
-- "Project case study", "reference letter", "warranty walkthrough"
+### Board Governance
+- "Produce board meeting agendas", "take board meeting minutes", "distribute board meeting materials"
+- "Coordinate board meeting logistics", "facilitate board strategic planning", "board retreats"
+- "Administer board elections", "onboard new board members", "board member transitions"
+- "Develop board training curriculum", "conduct board self-assessments", "analyze board effectiveness"
+- "Implement board decision tracking", "implement board document management", "board portal/dashboard"
+- "Maintain board policy manual", "maintain board governance calendar", "board communications"
 
-### General Construction Admin Phrases
-- "Prepare a", "draft a", "write a", "create a" + any construction document
-- "Construction document", "project document", "pastor form"
+### Church Communications & Marketing
+- "Coordinate social media posts", "coordinate external marketing", "manage church website content"
+- "Manage church mobile app", "produce sermon series graphics", "craft congregant newsletters"
+- "Implement virtual events", "manage church event registration", "manage special event logistics"
+- "Organize church-hosted events", "manage church facility rentals", "manage community prayer requests"
+- "Maintain clergy calendar", "manage community event calendar", "produce community impact reports"
+
+### General Church Administration Phrases
+- "Prepare a", "draft a", "write a", "create a", "help me with" + any church or ministry topic
+- "Church document", "ministry document", "pastoral form", "congregation"
 
 **When in doubt, offer the skill.** User can always decline.
 
@@ -209,11 +240,11 @@ grep -i "[keyword from user question]" ~/.pastortasksai/triggers.json
 
 **Extract keywords from user's question:**
 
-User asks: "I need to write a change order for extra concrete work."
+User asks: "I need to write a sermon outline for our Easter series."
 
-Search for: "change order", "extra work", "concrete"
+Search for: "sermon outline", "preaching schedule", "sermon series"
 ```bash
-grep -i "change order\|extra work" ~/.pastortasksai/triggers.json
+grep -i "sermon outline\|sermon series" ~/.pastortasksai/triggers.json
 ```
 
 **Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
@@ -297,8 +328,8 @@ If multiple skills match:
 
 > I found these **PastorTasksAI skills** that could help:
 >
-> 1. **Draft Change Order Request** (2 credits) — Formal change order documentation
-> 2. **Prepare Change Order Backup Package** (3 credits) — Full labor/material/equipment backup
+> 1. **Prepare Sermon Outline Template** (2 credits) — Structured outline framework for sermon preparation
+> 2. **Manage Sermon Series Planning** (3 credits) — Full series arc, themes, and scheduling
 >
 > You have **48 credits** remaining.
 > Which would you like to use? (1, 2, or none)
@@ -310,7 +341,7 @@ If one skill clearly matches, go to Step 4.
 > I can help with this using **PastorTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> 🔒 **Everything runs locally** — your project data stays on your machine.
+> 🔒 **Everything runs locally** — your congregation data stays on your machine.
 > Proceed? (yes/no)
 
 ### Step 5: Handle Response
@@ -341,11 +372,11 @@ Then **apply the framework locally** using the following execution prompt:
 **EXECUTION PROMPT — use this exactly when applying the schema:**
 
 ```
-You are applying a PastorTasksAI expert document framework for a pastor or construction professional.
+You are applying a PastorTasksAI expert document framework for a pastor, minister, or church leader.
 
-## Company Context
-The pastor using this tool works at: {company_name} (if set in profile, otherwise omit)
-Apply appropriate professional construction industry language and standards throughout.
+## Church Context
+The pastor using this tool serves at: {church_name} (if set in profile, otherwise omit)
+Apply appropriate professional pastoral and church administration language and standards throughout.
 
 ## Expert Framework
 {schema}
@@ -355,9 +386,9 @@ Apply appropriate professional construction industry language and standards thro
 
 ## Output Requirements
 1. Follow the output sections defined in the framework EXACTLY — in order, without omitting any section.
-2. Use standard construction industry terminology and document formatting.
-3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
-4. All documents should be professional and ready for immediate use in a pastor's office.
+2. Use standard pastoral ministry and church administration terminology and document formatting.
+3. Where church-specific details are missing, use clearly marked placeholders: [CHURCH NAME], [DATE], [PASTOR NAME], etc. — do not fabricate specifics.
+4. All documents should be professional and ready for immediate use in a church or ministry setting.
 5. Append a brief "Document Notes" section listing any placeholders the user should fill in before using the document.
 ```
 
@@ -365,7 +396,7 @@ Apply appropriate professional construction industry language and standards thro
 
 ### Step 7: Display Results
 
-> **🏗️ PastorTasksAI — {skill_name}**
+> **✝️ PastorTasksAI — {skill_name}**
 >
 > [Your document/analysis using the expert framework]
 >
@@ -373,7 +404,7 @@ Apply appropriate professional construction industry language and standards thro
 > 📋 *Document Notes: [list of placeholders to fill in]*
 >
 > ---
-> *This output is generated to assist pastors with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
+> *This output is generated to assist pastors and church leaders with administrative documentation. Always review before use. Not a substitute for legal, financial, or licensed professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
 
 ---
@@ -392,8 +423,8 @@ Do NOT pressure. Do NOT charge. Move on.
 ## When No Skill Matches
 
 Apply this filter first — only proceed if ALL are true:
-1. The user's question is clearly construction/pastor administration — bids, contracts, scheduling, billing, safety, project documents.
-2. The failed search used terms representing a genuine construction admin topic.
+1. The user's question is clearly church or pastoral administration — sermons, ceremonies, counseling, congregant engagement, contributions, board governance, or ministry documents.
+2. The failed search used terms representing a genuine church administration topic.
 3. You have not already asked about this same gap in this session.
 
 **If the filter passes:**
@@ -401,7 +432,7 @@ Apply this filter first — only proceed if ALL are true:
 > I don't have a PastorTasksAI skill for this yet. I can answer from general knowledge (no credits used).
 >
 > 📊 **Help build PastorTasksAI?**
-> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no project data, no personal information.
+> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no congregation data, no personal information.
 > (yes / no)
 
 **If user says yes:**
@@ -411,7 +442,7 @@ Content-Type: application/json
 X-Product-ID: pastor
 
 {
-  "search_terms": ["liquidated damages", "delay penalty", "calculation"],
+  "search_terms": ["memorial service", "bereavement", "grief support"],
   "loader_version": "1.0.0"
 }
 ```
@@ -435,8 +466,8 @@ curl -s "{api_base_url}/v1/profile" \
   > ~/.pastortasksai/profile.json
 ```
 
-If `company_name` is empty, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+If `church_name` is empty, ask once:
+> "What's your church name? I'll add it to generated documents automatically."
 
 Save their answer:
 ```
@@ -445,21 +476,21 @@ Authorization: Bearer {license_key}
 X-Product-ID: pastor
 Content-Type: application/json
 
-{"company_name": "ABC Contractors, Inc."}
+{"church_name": "Grace Community Church"}
 ```
 
 ### Profile Fields
 
 | Field | Example | Used For |
 |-------|---------|----------|
-| company_name | ABC Contractors, Inc. | Document headers |
-| contapa_name | John Smith | Signatures |
-| title | Project Manager | Documents |
+| church_name | Grace Community Church | Document headers |
+| pastor_name | Rev. John Smith | Signatures |
+| title | Senior Pastor | Documents |
 | address | 123 Main St | Letterhead |
 | city_state_zip | Denver, CO 80203 | Letterhead |
 | phone | (720) 555-1234 | Letterhead |
-| email | john@abcpastors.com | Letterhead |
-| license_number | CO-GC-12345 | Compliance docs |
+| email | pastor@gracechurch.org | Letterhead |
+| denomination | Baptist | Context docs |
 
 ---
 
@@ -482,7 +513,7 @@ print(f"Saved to {out_path}")
 
 > **📄 Document Saved**
 > Saved to: `~/Downloads/pastortasksai-output.docx`
-> Your project data never left your machine.
+> Your congregation data never left your machine.
 
 ---
 
@@ -517,16 +548,16 @@ X-Product-ID: pastor
 | ~/.pastortasksai/credentials.json | License key and API URL |
 | ~/.pastortasksai/skills-catalog.json | Full skill catalog |
 | ~/.pastortasksai/triggers.json | Trigger phrases for matching |
-| ~/.pastortasksai/profile.json | Company profile |
+| ~/.pastortasksai/profile.json | Church profile |
 
-All files are LOCAL. Your project data stays on your machine.
+All files are LOCAL. Your congregation data stays on your machine.
 
 ---
 
 ## Example: First-Run Flow
 
 ```
-User: "I need to write a change order for extra excavation work."
+User: "I need to create a preaching schedule for the next quarter."
 
 Agent: [Checks ~/.pastortasksai/credentials.json — not found]
 
@@ -543,31 +574,34 @@ Agent: [Validates, saves credentials, downloads catalog]
 
        "Done! Setting up complete.
 
-        I found a matching skill: **Draft Change Order Request** (2 credits).
+        I found a matching skill: **Create Preaching Schedule** (2 credits).
         You have 50 credits remaining.
 
-        🔒 Everything runs locally — your project data stays on your machine.
+        🔒 Everything runs locally — your congregation data stays on your machine.
         Proceed? (yes/no)"
 
 User: "Yes"
 
 Agent: [Fetches schema, applies locally]
 
-       "🏗️ PastorTasksAI — Draft Change Order Request
+       "✝️ PastorTasksAI — Create Preaching Schedule
 
-        CHANGE ORDER REQUEST
-        ==================
-        Project: [PROJECT NAME]
-        Change Order No.: [CO NUMBER]
-        Date: [DATE]
+        QUARTERLY PREACHING SCHEDULE
+        ============================
+        Church: [CHURCH NAME]
+        Pastor: [PASTOR NAME]
+        Quarter: [QUARTER / DATE RANGE]
 
-        DESCRIPTION OF CHANGE:
-        [Detailed description of the extra excavation work...]
+        SERIES OVERVIEW:
+        [Sermon series title and thematic arc...]
 
-        [Full professional change order document...]
+        WEEKLY BREAKDOWN:
+        [Week-by-week sermon titles, texts, and themes...]
 
-        📋 Document Notes: Fill in [PROJECT NAME], [CO NUMBER], [DATE],
-        [CONTRACTOR NAME], [OWNER NAME] before submitting.
+        [Full professional preaching schedule document...]
+
+        📋 Document Notes: Fill in [CHURCH NAME], [PASTOR NAME],
+        [QUARTER], [SERMON TITLES], and [SCRIPTURE REFERENCES] before use.
 
         — 2 credits used · 48 remaining · Processed locally"
 ```
@@ -577,18 +611,18 @@ Agent: [Fetches schema, applies locally]
 ## Example: Subsequent Use (Fast)
 
 ```
-User: "Draft a daily job log for today."
+User: "Help me write sermon discussion guides for our small groups."
 
 Agent: [Credentials + cache exist]
-       [grep -i "daily log\|job log" ~/.pastortasksai/triggers.json]
-       [Finds: pastor_prepare_daily_job_log]
+       [grep -i "sermon discussion\|discussion guide" ~/.pastortasksai/triggers.json]
+       [Finds: pastor_write_sermon_discussion_guides]
 
-       "PastorTasksAI **Prepare Daily Job Log** (1 credit).
+       "PastorTasksAI **Write Sermon Discussion Guides** (1 credit).
         You have 48 credits. 🔒 Runs locally. Proceed?"
 
 User: "Yes"
 
-Agent: [Fetches schema, applies locally, shows professional daily log]
+Agent: [Fetches schema, applies locally, shows professional discussion guide]
        "— 1 credit used · 47 remaining"
 ```
 
@@ -598,7 +632,7 @@ Agent: [Fetches schema, applies locally, shows professional daily log]
 
 ### v1.0.0 (2026-03-24)
 - 🚀 Initial release
-- 182 skills across 8 construction administration categories
-- Local execution — project data never leaves your machine
+- 182 skills across 9 church and pastoral administration categories
+- Local execution — congregation data never leaves your machine
 - Anonymous gap reporting for skill roadmap
-- Company profile injection for document headers
+- Church profile injection for document headers

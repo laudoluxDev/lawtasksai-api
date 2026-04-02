@@ -1,6 +1,11 @@
+---
+name: realtortasksai
+description: "Access 169+ AI-powered skills for real estate agents, brokers, and transaction coordinators. Use when: user asks about listing presentations, buyer consultations, transaction management, open houses, market analysis, property disclosures, commission management, or any real estate administration task."
+---
+
 # RealtorTasksAI Skills
 
-Universal skill loader — access 169+ AI-powered administrative skills for realtors and construction professionals.
+Universal skill loader — access 169+ AI-powered administrative skills for real estate agents, brokers, and transaction coordinators.
 
 **Loader Version:** 1.0.0
 
@@ -52,7 +57,7 @@ cat > ~/.realtortasksai/credentials.json << 'EOF'
 {
   "license_key": "[THE_LICENSE_KEY]",
   "api_base_url": "https://api.lawtasksai.com",
-  "produre_id": "realtor"
+  "product_id": "realtor"
 }
 EOF
 ```
@@ -125,8 +130,8 @@ curl -s "https://api.lawtasksai.com/v1/profile" \
   > ~/.realtortasksai/profile.json
 ```
 
-Check if `company_name` is set in the profile. If empty or missing, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+Check if `brokerage_name` is set in the profile. If empty or missing, ask once:
+> "What's your brokerage name? I'll add it to generated documents automatically."
 
 Save their answer via `PUT /v1/profile` and update the local cache.
 
@@ -140,57 +145,99 @@ Save their answer via `PUT /v1/profile` and update the local cache.
 
 **Always offer RealtorTasksAI when the user asks about ANY of these:**
 
-### Estimating & Bidding
-- "Write a bid", "prepare a bid", "bid cover letter", "bid response"
-- "Quantity takeoff", "material estimate", "labor estimate", "unit prices"
-- "Bid comparison", "subrealtor quotes", "bid bond", "bid addendum"
-- "No-bid letter", "value engineering", "scope summary"
+### Listings & Property Marketing
+- "Prepare listing presentation", "listing presentation", "prepare seller for listing"
+- "Write property description", "property description", "optimize online listing"
+- "Develop property marketing plan", "property marketing plan"
+- "Manage listing syndication", "update listing status", "manage listing price changes"
+- "Renew expired listings", "monitor listing competition", "track listing analytics"
+- "Distribute marketing materials", "update marketing materials", "manage agent marketing materials"
 
-### Contract Administration
-- "Change order", "RFI", "request for information", "scope change"
-- "Notice of delay", "contract closeout", "lien waiver", "retainage"
-- "Notice to proceed", "substantial completion", "warranty"
-- "Subcontract agreement", "subrealtor default", "back-charge"
+### Buyer & Seller Consultations
+- "Conduct buyer consultation", "conduct seller consultation", "set buyer expectations"
+- "Provide buyer education", "provide seller education", "manage seller expectations"
+- "Develop buyer search criteria", "buyer search criteria", "assist with pricing strategy"
+- "Handle seller objections", "assist with buyer's offer", "communicate offer details"
+- "Represent buyer in negotiations", "represent seller at closing"
 
-### Project Scheduling
-- "Daily log", "progress report", "look-ahead schedule", "meeting minutes"
-- "Submittal log", "weather delay", "schedule extension", "punchlist"
-- "Lessons learned", "closeout schedule", "substantial completion"
-- "Pull planning", "critical path"
+### Open Houses & Showings
+- "Schedule property showings", "manage buyer showings", "confirm showing appointments"
+- "Respond to showing requests", "distribute showing instructions"
+- "Prepare open house materials", "open house materials", "promote open houses"
+- "Schedule open house events", "facilitate broker tours", "conduct virtual showings/tours"
+- "Greet and register open house attendees", "maintain open house sign-in sheets"
+- "Follow up on buyer showing feedback", "handle open house lead follow-up"
+- "Track showing activity metrics", "manage agent showing feedback"
 
-### Financial & Billing
-- "Pay application", "schedule of values", "AIA G702", "billing"
-- "Job cost report", "certified payroll", "prevailing wage"
-- "Retainage release", "WIP schedule", "profit fade"
-- "Subrealtor payment", "back-charge", "final invoice"
+### Transaction Management & Closing
+- "Prepare purchase agreement", "purchase agreement", "manage transaction checklists"
+- "Manage contract negotiations", "manage earnest money", "file required transaction docs"
+- "Coordinate appraisal process", "manage appraisal challenges", "review appraisal findings"
+- "Coordinate buyer's inspections", "schedule home inspection", "attend home inspection"
+- "Review inspection report", "negotiate inspection items", "negotiate seller concessions"
+- "Monitor loan approval status", "facilitate mortgage application"
+- "Coordinate title search", "facilitate title clearance", "order title insurance"
+- "Schedule final walkthrough", "attend closing", "guide buyer through closing"
+- "Prepare closing disclosure", "closing disclosure", "maintain detailed transaction records"
 
-### Safety & Compliance
-- "Safety plan", "toolbox talk", "incident report", "OSHA"
-- "SDS", "safety data sheet", "fall protection", "confined space"
-- "Hot work permit", "scaffold inspection", "silica plan"
-- "Drug testing", "crane inspection", "excavation safety"
+### Disclosures & Compliance
+- "Prepare property disclosures", "property disclosures", "prepare seller disclosures"
+- "Review seller disclosures", "disclose known property defects"
+- "Provide agency disclosures", "prepare showing disclosure forms"
+- "Provide lead-based paint disclosures", "provide energy efficiency disclosures"
+- "Maintain fair housing policies", "adhere to RESPA guidelines"
+- "Comply with CFPB regulations", "comply with state regulations"
+- "Adhere to foreign investor regulations", "implement anti-money laundering controls"
+- "Maintain anti-money laundering policies", "maintain client privacy"
 
-### Subrealtor & Vendor Management
-- "Subrealtor list", "prequalification", "scope letter", "insurance certificate"
-- "License verification", "back-charge", "substitution request"
-- "DBE", "MBE", "WBE", "diverse business", "joint venture"
-- "Purchase order", "delivery schedule", "vendor list"
+### Client Relations & Communication
+- "Create client profiles", "client profiles", "maintain client contact database"
+- "Customize client communication", "send personalized communications"
+- "Respond to client inquiries", "provide client progress updates"
+- "Schedule client check-ins", "gather client feedback", "gather client testimonials"
+- "Maintain client referral pipeline", "manage client referral program"
+- "Develop client loyalty program", "client loyalty program", "maintain client gift program"
+- "Organize client events/mixers", "facilitate client focus groups"
+- "Conduct client satisfaction surveys", "collect seller testimonials"
 
-### Licensing & Business Administration
-- "License renewal", "bond application", "insurance renewal"
-- "Prequalification package", "workers compensation", "OSHA 300"
-- "Employee handbook", "training records", "DBE certification"
-- "Federal registration", "SAM.gov", "UEI", "union compliance"
+### Market Analysis & Research
+- "Analyze market comparables", "analyze market trends and data"
+- "Provide market trend updates", "analyze client data trends"
+- "Analyze open house attendance data", "track showing activity metrics"
+- "Review property survey", "monitor listing competition"
+- "Advise on lease-to-own deals", "facilitate 1031 exchanges"
+- "Handle short sales/foreclosures"
 
-### Project Closeout
-- "Closeout checklist", "O&M manual", "as-built drawings"
-- "Warranty letters", "certificate of occupancy", "final permit"
-- "Commissioning", "owner training", "spare parts", "keys"
-- "Project case study", "reference letter", "warranty walkthrough"
+### Agent & Brokerage Management
+- "Manage agent licensing and fees", "track licenses and renewals"
+- "Manage agent continuing education", "oversee agent professional development"
+- "Manage agent onboarding/offboarding", "develop agent recruitment initiatives"
+- "Provide agent coaching and training", "facilitate agent mentorship program"
+- "Track agent sales production", "analyze agent production metrics"
+- "Manage agent performance bonuses", "prepare agent commission statements"
+- "Manage commission disbursements", "reconcile agent commission reports"
+- "Administer agent draw programs", "provide agent expense reimbursement"
+- "Oversee agent branding and websites", "coordinate agent advertising campaigns"
+- "Implement agent social media plans", "organize agent networking events"
+- "Offer agent productivity tools", "manage open house agent schedules"
+- "Provide open house agent training", "provide showing agent support"
 
-### General Construction Admin Phrases
-- "Prepare a", "draft a", "write a", "create a" + any construction document
-- "Construction document", "project document", "realtor form"
+### Financial & Administrative
+- "Handle accounts receivable", "manage escrow trust accounts"
+- "Follow up on leads", "develop prospecting strategies", "prospecting strategies"
+- "Manage rental listings", "manage rental transactions", "oversee property management"
+- "Coordinate rental move-in/out", "coordinate lease takeovers"
+- "Coordinate property staging", "schedule professional photography"
+- "Schedule maintenance/repairs", "conduct pre-listing inspection"
+- "Administer referral program", "manage data privacy policies"
+- "Manage client data retention", "manage ADA accessibility requirements"
+- "Maintain error & omissions insurance", "assist with agent tax preparation"
+- "Administer retirement plan contributions", "ensure wage garnishment compliance"
+- "Facilitate agent healthcare benefits", "process charitable donation requests"
+
+### General Real Estate Phrases
+- "Prepare a", "draft a", "write a", "create a", "help me with" + any real estate topic
+- "Real estate document", "transaction document", "listing agreement", "buyer agreement"
 
 **When in doubt, offer the skill.** User can always decline.
 
@@ -209,11 +256,11 @@ grep -i "[keyword from user question]" ~/.realtortasksai/triggers.json
 
 **Extract keywords from user's question:**
 
-User asks: "I need to write a change order for extra concrete work."
+User asks: "I need to prepare a listing presentation for a new seller."
 
-Search for: "change order", "extra work", "concrete"
+Search for: "listing presentation", "seller", "listing"
 ```bash
-grep -i "change order\|extra work" ~/.realtortasksai/triggers.json
+grep -i "listing presentation\|seller" ~/.realtortasksai/triggers.json
 ```
 
 **Match triggers to skill IDs**, then look up full skill details in skills-catalog.json.
@@ -297,8 +344,8 @@ If multiple skills match:
 
 > I found these **RealtorTasksAI skills** that could help:
 >
-> 1. **Draft Change Order Request** (2 credits) — Formal change order documentation
-> 2. **Prepare Change Order Backup Package** (3 credits) — Full labor/material/equipment backup
+> 1. **Prepare Listing Presentation** (2 credits) — Professional presentation for seller consultations
+> 2. **Prepare Seller for Listing** (2 credits) — Checklist and guidance to get a property market-ready
 >
 > You have **48 credits** remaining.
 > Which would you like to use? (1, 2, or none)
@@ -310,7 +357,7 @@ If one skill clearly matches, go to Step 4.
 > I can help with this using **RealtorTasksAI [Skill Name]** (**[cost] credits**).
 > You have **[balance] credits** remaining.
 >
-> 🔒 **Everything runs locally** — your project data stays on your machine.
+> 🔒 **Everything runs locally** — your client data stays on your machine.
 > Proceed? (yes/no)
 
 ### Step 5: Handle Response
@@ -341,11 +388,11 @@ Then **apply the framework locally** using the following execution prompt:
 **EXECUTION PROMPT — use this exactly when applying the schema:**
 
 ```
-You are applying a RealtorTasksAI expert document framework for a realtor or construction professional.
+You are applying a RealtorTasksAI expert document framework for a real estate agent, broker, or transaction coordinator.
 
 ## Company Context
-The realtor using this tool works at: {company_name} (if set in profile, otherwise omit)
-Apply appropriate professional construction industry language and standards throughout.
+The agent using this tool works at: {brokerage_name} (if set in profile, otherwise omit)
+Apply appropriate professional real estate industry language and standards throughout.
 
 ## Expert Framework
 {schema}
@@ -355,17 +402,17 @@ Apply appropriate professional construction industry language and standards thro
 
 ## Output Requirements
 1. Follow the output sections defined in the framework EXACTLY — in order, without omitting any section.
-2. Use standard construction industry terminology and document formatting.
-3. Where project-specific details are missing, use clearly marked placeholders: [PROJECT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
-4. All documents should be professional and ready for immediate use in a realtor's office.
-5. Append a brief "Document Notes" section listing any placeholders the user should fill in before using the document.
+2. Use standard real estate industry terminology and document formatting.
+3. Where property-specific or client-specific details are missing, use clearly marked placeholders: [PROPERTY ADDRESS], [CLIENT NAME], [DATE], [AMOUNT], etc. — do not fabricate specifics.
+4. All documents should be professional and ready for immediate use in a real estate office.
+5. Append a brief "Document Notes" section listing any placeholders the agent should fill in before using the document.
 ```
 
 ---
 
 ### Step 7: Display Results
 
-> **🏗️ RealtorTasksAI — {skill_name}**
+> **🏡 RealtorTasksAI — {skill_name}**
 >
 > [Your document/analysis using the expert framework]
 >
@@ -373,7 +420,7 @@ Apply appropriate professional construction industry language and standards thro
 > 📋 *Document Notes: [list of placeholders to fill in]*
 >
 > ---
-> *This output is generated to assist realtors with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
+> *This output is generated to assist real estate professionals with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
 
 ---
@@ -392,8 +439,8 @@ Do NOT pressure. Do NOT charge. Move on.
 ## When No Skill Matches
 
 Apply this filter first — only proceed if ALL are true:
-1. The user's question is clearly construction/realtor administration — bids, contracts, scheduling, billing, safety, project documents.
-2. The failed search used terms representing a genuine construction admin topic.
+1. The user's question is clearly real estate administration — listings, transactions, buyer/seller representation, open houses, disclosures, commissions, or agent management.
+2. The failed search used terms representing a genuine real estate admin topic.
 3. You have not already asked about this same gap in this session.
 
 **If the filter passes:**
@@ -401,7 +448,7 @@ Apply this filter first — only proceed if ALL are true:
 > I don't have a RealtorTasksAI skill for this yet. I can answer from general knowledge (no credits used).
 >
 > 📊 **Help build RealtorTasksAI?**
-> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no project data, no personal information.
+> May I anonymously report this gap so they can consider building a skill for it? Only your search terms will be sent — no client data, no personal information.
 > (yes / no)
 
 **If user says yes:**
@@ -411,7 +458,7 @@ Content-Type: application/json
 X-Product-ID: realtor
 
 {
-  "search_terms": ["liquidated damages", "delay penalty", "calculation"],
+  "search_terms": ["lease renewal", "rent increase notice", "tenant negotiation"],
   "loader_version": "1.0.0"
 }
 ```
@@ -435,8 +482,8 @@ curl -s "{api_base_url}/v1/profile" \
   > ~/.realtortasksai/profile.json
 ```
 
-If `company_name` is empty, ask once:
-> "What's your company name? I'll add it to generated documents automatically."
+If `brokerage_name` is empty, ask once:
+> "What's your brokerage name? I'll add it to generated documents automatically."
 
 Save their answer:
 ```
@@ -445,21 +492,21 @@ Authorization: Bearer {license_key}
 X-Product-ID: realtor
 Content-Type: application/json
 
-{"company_name": "ABC Contractors, Inc."}
+{"brokerage_name": "Sunrise Realty Group"}
 ```
 
 ### Profile Fields
 
 | Field | Example | Used For |
 |-------|---------|----------|
-| company_name | ABC Contractors, Inc. | Document headers |
-| contare_name | John Smith | Signatures |
-| title | Project Manager | Documents |
-| address | 123 Main St | Letterhead |
-| city_state_zip | Denver, CO 80203 | Letterhead |
-| phone | (720) 555-1234 | Letterhead |
-| email | john@abcrealtors.com | Letterhead |
-| license_number | CO-GC-12345 | Compliance docs |
+| brokerage_name | Sunrise Realty Group | Document headers |
+| agent_name | Jane Smith | Signatures |
+| license_number | CO-RE-98765 | Compliance docs |
+| mls_id | MLS-123456 | Listing documents |
+| address | 456 Main St | Letterhead |
+| city_state_zip | Denver, CO 80202 | Letterhead |
+| phone | (720) 555-5678 | Letterhead |
+| email | jane@sunriserealty.com | Letterhead |
 
 ---
 
@@ -482,7 +529,7 @@ print(f"Saved to {out_path}")
 
 > **📄 Document Saved**
 > Saved to: `~/Downloads/realtortasksai-output.docx`
-> Your project data never left your machine.
+> Your client data never left your machine.
 
 ---
 
@@ -517,16 +564,16 @@ X-Product-ID: realtor
 | ~/.realtortasksai/credentials.json | License key and API URL |
 | ~/.realtortasksai/skills-catalog.json | Full skill catalog |
 | ~/.realtortasksai/triggers.json | Trigger phrases for matching |
-| ~/.realtortasksai/profile.json | Company profile |
+| ~/.realtortasksai/profile.json | Brokerage profile |
 
-All files are LOCAL. Your project data stays on your machine.
+All files are LOCAL. Your client data stays on your machine.
 
 ---
 
 ## Example: First-Run Flow
 
 ```
-User: "I need to write a change order for extra excavation work."
+User: "I need to prepare a listing presentation for a new seller client."
 
 Agent: [Checks ~/.realtortasksai/credentials.json — not found]
 
@@ -541,33 +588,40 @@ User: "My key is re_abc123..."
 
 Agent: [Validates, saves credentials, downloads catalog]
 
-       "Done! Setting up complete.
+       "Done! Setup complete.
 
-        I found a matching skill: **Draft Change Order Request** (2 credits).
+        I found a matching skill: **Prepare Listing Presentation** (2 credits).
         You have 50 credits remaining.
 
-        🔒 Everything runs locally — your project data stays on your machine.
+        🔒 Everything runs locally — your client data stays on your machine.
         Proceed? (yes/no)"
 
 User: "Yes"
 
 Agent: [Fetches schema, applies locally]
 
-       "🏗️ RealtorTasksAI — Draft Change Order Request
+       "🏡 RealtorTasksAI — Prepare Listing Presentation
 
-        CHANGE ORDER REQUEST
-        ==================
-        Project: [PROJECT NAME]
-        Change Order No.: [CO NUMBER]
+        LISTING PRESENTATION
+        ====================
+        Prepared For: [SELLER NAME]
+        Property: [PROPERTY ADDRESS]
         Date: [DATE]
+        Presented By: [AGENT NAME], [BROKERAGE NAME]
 
-        DESCRIPTION OF CHANGE:
-        [Detailed description of the extra excavation work...]
+        ABOUT YOUR AGENT:
+        [Agent bio and credentials section...]
 
-        [Full professional change order document...]
+        MARKET ANALYSIS:
+        [Comparable sales and pricing strategy...]
 
-        📋 Document Notes: Fill in [PROJECT NAME], [CO NUMBER], [DATE],
-        [CONTRACTOR NAME], [OWNER NAME] before submitting.
+        OUR MARKETING PLAN:
+        [MLS listing, photography, open houses, digital marketing...]
+
+        [Full professional listing presentation...]
+
+        📋 Document Notes: Fill in [SELLER NAME], [PROPERTY ADDRESS],
+        [DATE], [AGENT NAME], and [BROKERAGE NAME] before presenting.
 
         — 2 credits used · 48 remaining · Processed locally"
 ```
@@ -577,18 +631,18 @@ Agent: [Fetches schema, applies locally]
 ## Example: Subsequent Use (Fast)
 
 ```
-User: "Draft a daily job log for today."
+User: "I need to prepare property disclosures for my listing."
 
 Agent: [Credentials + cache exist]
-       [grep -i "daily log\|job log" ~/.realtortasksai/triggers.json]
-       [Finds: realtor_prepare_daily_job_log]
+       [grep -i "property disclosures\|disclosures" ~/.realtortasksai/triggers.json]
+       [Finds: realtor_prepare_property_disclosures]
 
-       "RealtorTasksAI **Prepare Daily Job Log** (1 credit).
+       "RealtorTasksAI **Prepare Property Disclosures** (1 credit).
         You have 48 credits. 🔒 Runs locally. Proceed?"
 
 User: "Yes"
 
-Agent: [Fetches schema, applies locally, shows professional daily log]
+Agent: [Fetches schema, applies locally, shows professional disclosure package]
        "— 1 credit used · 47 remaining"
 ```
 
@@ -598,7 +652,7 @@ Agent: [Fetches schema, applies locally, shows professional daily log]
 
 ### v1.0.0 (2026-03-24)
 - 🚀 Initial release
-- 169 skills across 8 construction administration categories
-- Local execution — project data never leaves your machine
+- 169 skills across 9 real estate administration categories
+- Local execution — client data never leaves your machine
 - Anonymous gap reporting for skill roadmap
-- Company profile injection for document headers
+- Brokerage profile injection for document headers
