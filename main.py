@@ -2139,10 +2139,10 @@ async def _build_loader_zip(license_key: str, product_id: str, db: AsyncSession)
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
         # Add config.json
-        zf.writestr('openclaw/config.json', json.dumps(config, indent=2))
+        zf.writestr('config.json', json.dumps(config, indent=2))
         
         # Add SKILL.md
-        zf.writestr('openclaw/SKILL.md', loader_skill_md)
+        zf.writestr('SKILL.md', loader_skill_md)
 
         # Add README
         readme = f'''# {prod_name} Skills
@@ -2194,7 +2194,7 @@ Skills run entirely locally on your machine. Your data never leaves your compute
 - Email: {prod_support_email}
 - Website: https://{prod_domain}
 '''
-        zf.writestr('openclaw/README.md', readme)
+        zf.writestr('README.md', readme)
     
         # =========================================
         # Add MCP Server for Claude Desktop/Cursor
@@ -3828,6 +3828,7 @@ async def run_migration_001(db: AsyncSession = Depends(get_db)):
 
     # Step 5: seed pricing tiers for all 27 products
     tiers = [
+        ("tryit", "Try It", 2, 500),
         ("starter", "Starter", 15, 2900),
         ("pro", "Pro", 60, 9900),
         ("business", "Business", 150, 19900),
