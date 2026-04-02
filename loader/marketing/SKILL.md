@@ -1,3 +1,8 @@
+---
+name: marketingtasksai
+description: "Access 206+ AI-powered marketing skills for marketing managers, digital marketers, and content creators. Use when: user asks about SEO, email campaigns, social media, paid advertising, content marketing, analytics, lead generation, branding, public relations, or any marketing administration task."
+---
+
 # MarketingTasksAI Skills
 
 Universal skill loader — access 206+ AI-powered marketing skills for marketing managers, digital marketers, content creators, and marketing agency professionals.
