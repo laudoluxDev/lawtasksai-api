@@ -865,8 +865,12 @@ async def register(
     # Resolve product_id: body field takes priority (explicit), then dependency (header/query/default)
     resolved_product_id = user_data.product_id or product_id
 
+    # Generate user ID explicitly so it's available for license FK before flush
+    user_id = uuid.uuid4()
+
     # Create user
     user = User(
+        id=user_id,
         email=user_data.email,
         password_hash=hash_password(user_data.password),
         name=user_data.name,
@@ -875,12 +879,11 @@ async def register(
         product_id=resolved_product_id,
     )
     db.add(user)
-    await db.flush()  # populate user.id before creating license
-    
+
     # Create trial license
     license = License(
         license_key=generate_license_key(),
-        user_id=user.id,
+        user_id=user_id,
         type="trial",
         valid_until=datetime.utcnow() + timedelta(days=14),
         credits_purchased=5,
