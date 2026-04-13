@@ -875,6 +875,7 @@ async def register(
         product_id=resolved_product_id,
     )
     db.add(user)
+    await db.flush()  # populate user.id before creating license
     
     # Create trial license
     license = License(
