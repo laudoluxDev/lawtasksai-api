@@ -871,7 +871,7 @@ async def register(
         password_hash=hash_password(user_data.password),
         name=user_data.name,
         firm_name=user_data.firm_name,
-        credits_balance=50,  # Free trial credits
+        credits_balance=5,  # Free signup credits
         product_id=resolved_product_id,
     )
     db.add(user)
@@ -882,8 +882,8 @@ async def register(
         user_id=user.id,
         type="trial",
         valid_until=datetime.utcnow() + timedelta(days=14),
-        credits_purchased=50,
-        credits_remaining=50
+        credits_purchased=5,
+        credits_remaining=5
     )
     db.add(license)
     
