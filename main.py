@@ -54,7 +54,7 @@ except ImportError:
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/lawtasksai")
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.lawtasksai.com")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.taskvaultai.com")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://lawtasksai.com")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
@@ -1905,7 +1905,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
         # Send confirmation email via Zoho SMTP or SendGrid
         try:
-            download_url = f"https://api.lawtasksai.com/download/loader?session_id={session['id']}"
+            download_url = f"https://api.taskvaultai.com/download/loader?session_id={session['id']}"
             success_url = f"https://{purchase_product_domain}/success?session_id={session['id']}"
             email_subject = f"Your {purchase_product_name} license key and download link"
             email_body = f"""Thank you for purchasing {purchase_product_name}!
@@ -2226,7 +2226,7 @@ from mcp.types import GetPromptResult
 
 load_dotenv()
 
-API_BASE = os.getenv("{env_prefix}_API_BASE", "https://api.lawtasksai.com")
+API_BASE = os.getenv("{env_prefix}_API_BASE", "https://api.taskvaultai.com")
 LICENSE_KEY = os.getenv("{env_prefix}_LICENSE_KEY", "")
 
 if not LICENSE_KEY:
@@ -3919,7 +3919,7 @@ async def admin_provision_user(
         "product_id": product_id,
         "license_key": license.license_key,
         "credits": license.credits_remaining,
-        "download_url": f"https://api.lawtasksai.com/download/loader/{license.license_key}",
+        "download_url": f"https://api.taskvaultai.com/download/loader/{license.license_key}",
     }
 
 
