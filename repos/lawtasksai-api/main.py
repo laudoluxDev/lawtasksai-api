@@ -1303,6 +1303,78 @@ async def get_credit_balance(
         valid_until=license.valid_until
     )
 
+# ── Vertical metadata keyed by license key prefix ──────────────────────────
+# Derived from verticals.json. This is the single source of truth for
+# per-vertical MCP configuration delivered to the client at startup.
+_VERTICAL_BY_PREFIX = {
+    "lt_":  {"product_id": "law",            "product_name": "LawTasksAI",           "display_name": "Law Tasks AI",           "tool_prefix": "lawtasksai",      "occupation": "attorneys and legal professionals",                        "support_email": "hello@lawtasksai.com",           "domain": "lawtasksai.com"},
+    "ct_":  {"product_id": "contractor",      "product_name": "ContractorTasksAI",     "display_name": "Contractor Tasks AI",   "tool_prefix": "contractortasksai", "occupation": "general contractors, subcontractors, and construction professionals", "support_email": "hello@contractortasksai.com",  "domain": "contractortasksai.com"},
+    "rt_":  {"product_id": "realtor",          "product_name": "RealtorTasksAI",        "display_name": "Realtor Tasks AI",      "tool_prefix": "realtortasksai",   "occupation": "real estate agents, brokers, and realtors",                   "support_email": "hello@realtortasksai.com",     "domain": "realtortasksai.com"},
+    "ac_":  {"product_id": "accounting",       "product_name": "AccountingTasksAI",     "display_name": "Accounting Tasks AI",   "tool_prefix": "accountingtasksai", "occupation": "accountants, bookkeepers, and financial professionals",        "support_email": "hello@accountingtasksai.com",  "domain": "accountingtasksai.com"},
+    "ch_":  {"product_id": "chiropractor",     "product_name": "ChiropractorTasksAI",   "display_name": "Chiropractor Tasks AI", "tool_prefix": "chirotasksai",     "occupation": "chiropractors and chiropractic office staff",                  "support_email": "hello@chiropractortasksai.com", "domain": "chiropractortasksai.com"},
+    "ca_":  {"product_id": "church",           "product_name": "ChurchAdminTasksAI",    "display_name": "Church Admin Tasks AI", "tool_prefix": "churchtasksai",    "occupation": "church administrators and ministry staff",                    "support_email": "hello@churchadmintasksai.com",  "domain": "churchadmintasksai.com"},
+    "dt_":  {"product_id": "dentist",          "product_name": "DentistTasksAI",        "display_name": "Dentist Tasks AI",      "tool_prefix": "dentisttasksai",   "occupation": "dentists and dental office administrators",                   "support_email": "hello@dentisttasksai.com",     "domain": "dentisttasksai.com"},
+    "ds_":  {"product_id": "designer",         "product_name": "DesignerTasksAI",       "display_name": "Designer Tasks AI",     "tool_prefix": "designertasksai",  "occupation": "designers and creative professionals",                        "support_email": "hello@designertasksai.com",    "domain": "designertasksai.com"},
+    "el_":  {"product_id": "electrician",      "product_name": "ElectricianTasksAI",    "display_name": "Electrician Tasks AI",  "tool_prefix": "electasksai",      "occupation": "electricians and electrical contractors",                     "support_email": "hello@electriciantasksai.com", "domain": "electriciantasksai.com"},
+    "ep_":  {"product_id": "eventplanner",     "product_name": "EventPlannerTasksAI",   "display_name": "Event Planner Tasks AI","tool_prefix": "eventtasksai",     "occupation": "event planners and event management professionals",            "support_email": "hello@eventplannertasksai.com","domain": "eventplannertasksai.com"},
+    "fa_":  {"product_id": "farmer",           "product_name": "FarmerTasksAI",         "display_name": "Farmer Tasks AI",       "tool_prefix": "farmertasksai",    "occupation": "farmers, ranchers, and agricultural professionals",            "support_email": "hello@farmertasksai.com",      "domain": "farmertasksai.com"},
+    "fu_":  {"product_id": "funeral",          "product_name": "FuneralTasksAI",        "display_name": "Funeral Tasks AI",      "tool_prefix": "funeraltasksai",   "occupation": "funeral directors and mortuary professionals",                 "support_email": "hello@funeraltasksai.com",     "domain": "funeraltasksai.com"},
+    "hr_":  {"product_id": "hr",               "product_name": "HRTasksAI",             "display_name": "HR Tasks AI",           "tool_prefix": "hrtasksai",        "occupation": "human resources professionals and HR managers",               "support_email": "hello@hrtasksai.com",          "domain": "hrtasksai.com"},
+    "in_":  {"product_id": "insurance",        "product_name": "InsuranceTasksAI",      "display_name": "Insurance Tasks AI",    "tool_prefix": "insurancetasksai", "occupation": "insurance agents and insurance office staff",                 "support_email": "hello@insurancetasksai.com",   "domain": "insurancetasksai.com"},
+    "ll_":  {"product_id": "landlord",         "product_name": "LandlordTasksAI",       "display_name": "Landlord Tasks AI",     "tool_prefix": "landlordtasksai",  "occupation": "landlords, property managers, and rental property owners",     "support_email": "hello@landlordtasksai.com",    "domain": "landlordtasksai.com"},
+    "ms_":  {"product_id": "militaryspouse",   "product_name": "MilitarySpouseTasksAI", "display_name": "Military Spouse Tasks AI","tool_prefix": "militarytasksai", "occupation": "military spouses managing businesses and households",           "support_email": "hello@militaryspousetasksai.com","domain": "militaryspousetasksai.com"},
+    "mo_":  {"product_id": "mortgage",         "product_name": "MortgageTasksAI",       "display_name": "Mortgage Tasks AI",     "tool_prefix": "mortgagetasksai",  "occupation": "mortgage brokers, loan officers, and mortgage professionals",  "support_email": "hello@mortgagetasksai.com",    "domain": "mortgagetasksai.com"},
+    "mr_":  {"product_id": "mortuary",         "product_name": "MortuaryTasksAI",       "display_name": "Mortuary Tasks AI",     "tool_prefix": "mortuarytasksai",  "occupation": "morticians, funeral home directors, and mortuary professionals","support_email": "hello@mortuarytasksai.com",    "domain": "mortuarytasksai.com"},
+    "nu_":  {"product_id": "nutritionist",     "product_name": "NutritionistTasksAI",   "display_name": "Nutritionist Tasks AI", "tool_prefix": "nutritiontasksai", "occupation": "nutritionists, dietitians, and nutrition professionals",       "support_email": "hello@nutritionisttasksai.com", "domain": "nutritionisttasksai.com"},
+    "pa_":  {"product_id": "pastor",           "product_name": "PastorTasksAI",         "display_name": "Pastor Tasks AI",       "tool_prefix": "pastortasksai",    "occupation": "pastors, ministers, and church leaders",                      "support_email": "hello@pastortasksai.com",      "domain": "pastortasksai.com"},
+    "pt_":  {"product_id": "personaltrainer",  "product_name": "PersonalTrainerTasksAI","display_name": "Personal Trainer Tasks AI","tool_prefix": "trainertasksai",  "occupation": "personal trainers, fitness coaches, and gym professionals",    "support_email": "hello@personaltrainertasksai.com","domain": "personaltrainertasksai.com"},
+    "pl_":  {"product_id": "plumber",          "product_name": "PlumberTasksAI",        "display_name": "Plumber Tasks AI",      "tool_prefix": "plumbertasksai",   "occupation": "plumbers and plumbing contractors",                           "support_email": "hello@plumbertasksai.com",     "domain": "plumbertasksai.com"},
+    "pr_":  {"product_id": "principal",        "product_name": "PrincipalTasksAI",      "display_name": "Principal Tasks AI",    "tool_prefix": "principaltasksai", "occupation": "school principals, vice principals, and school administrators", "support_email": "hello@principaltasksai.com",   "domain": "principaltasksai.com"},
+    "rs_":  {"product_id": "restaurant",       "product_name": "RestaurantTasksAI",     "display_name": "Restaurant Tasks AI",   "tool_prefix": "restauranttasksai","occupation": "restaurant owners, managers, and food service professionals",  "support_email": "hello@restauranttasksai.com",  "domain": "restauranttasksai.com"},
+    "sl_":  {"product_id": "salon",            "product_name": "SalonTasksAI",          "display_name": "Salon Tasks AI",        "tool_prefix": "salontasksai",     "occupation": "salon owners, stylists, and beauty professionals",             "support_email": "hello@salontasksai.com",       "domain": "salontasksai.com"},
+    "tc_":  {"product_id": "teacher",          "product_name": "TeacherTasksAI",        "display_name": "Teacher Tasks AI",      "tool_prefix": "teachertasksai",   "occupation": "teachers, educators, and instructional staff",                 "support_email": "hello@teachertasksai.com",     "domain": "teachertasksai.com"},
+    "th_":  {"product_id": "therapist",        "product_name": "TherapistTasksAI",      "display_name": "Therapist Tasks AI",    "tool_prefix": "therapisttasksai", "occupation": "therapists, counselors, and mental health professionals",       "support_email": "hello@therapisttasksai.com",   "domain": "therapisttasksai.com"},
+    "ta_":  {"product_id": "travelagent",      "product_name": "TravelAgentTasksAI",    "display_name": "Travel Agent Tasks AI", "tool_prefix": "traveltasksai",    "occupation": "travel agents, travel advisors, and tourism professionals",    "support_email": "hello@travelagenttasksai.com", "domain": "travelagenttasksai.com"},
+    "vt_":  {"product_id": "vet",              "product_name": "VetTasksAI",            "display_name": "Vet Tasks AI",          "tool_prefix": "vettasksai",       "occupation": "veterinarians, vet technicians, and veterinary office staff",   "support_email": "hello@vettasksai.com",         "domain": "vettasksai.com"},
+    "mkt_": {"product_id": "marketing",        "product_name": "MarketingTasksAI",      "display_name": "Marketing Tasks AI",    "tool_prefix": "marketingtasksai", "occupation": "marketing professionals, digital marketers, and marketing managers","support_email": "hello@marketingtasksai.com",  "domain": "marketingtasksai.com"},
+}
+
+def _vertical_from_key(license_key: str) -> dict:
+    """Derive vertical metadata from a license key prefix."""
+    # mkt_ is 4 chars — check longer prefixes first
+    for prefix in sorted(_VERTICAL_BY_PREFIX.keys(), key=len, reverse=True):
+        if license_key.startswith(prefix):
+            return _VERTICAL_BY_PREFIX[prefix]
+    # Unknown prefix — return law as safe default (backward compat)
+    return _VERTICAL_BY_PREFIX["lt_"]
+
+
+@app.get("/me")
+@app.get("/v1/me")
+async def get_me(
+    license: License = Depends(get_current_license),
+):
+    """Return vertical metadata for the authenticated license key.
+
+    Used by the MCP server on startup to self-configure tool names,
+    system prompt, and abbreviation maps for the correct vertical.
+    Privacy note: returns only static vertical metadata — never
+    stores or logs what the user is searching for.
+    """
+    v = _vertical_from_key(license.license_key)
+    return {
+        "product_id":    v["product_id"],
+        "product_name":  v["product_name"],
+        "display_name":  v["display_name"],
+        "tool_prefix":   v["tool_prefix"],
+        "occupation":    v["occupation"],
+        "support_email": v["support_email"],
+        "domain":        v["domain"],
+        "license_type":  license.type,
+        "credits_remaining": license.credits_remaining,
+    }
+
+
 @app.post("/credits/purchase")
 async def purchase_credits(
     request: PurchaseCreditsRequest,
