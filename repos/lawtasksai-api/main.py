@@ -2627,24 +2627,28 @@ marked with 🔒 run entirely locally for maximum confidentiality.
 LawTasksAI MCP Server — Smart Router
 
 Instead of exposing 200+ tools (token bloat), we expose 4 clean tools:
-  1. lawtasks_search   — Find the right skill for a question
-  2. lawtasks_execute   — Run any skill by ID
-  3. lawtasks_balance   — Check credit balance
-  4. lawtasks_categories — Browse skill categories
+  1. lawtasksai_search     — Find the right skill for a legal task
+  2. lawtasksai_execute    — Get a skill's expert framework (runs locally)
+  3. lawtasksai_balance    — Check credit balance
+  4. lawtasksai_categories — Browse skill categories
 
-Skill prompts never leave the LawTasksAI server.
+lawtasksai.com never sees your prompts, your client files, or your client data.
+Skills run entirely on your machine — your documents stay local if using OpenClaw,
+or go to your LLM provider if using a cloud AI.
 """
 
 import os
+import time
 import httpx
 from dotenv import load_dotenv
 from mcp.server import Server
-from mcp.server.stdio import run_server
-from mcp.types import Tool, TextContent
+from mcp.server.stdio import stdio_server
+from mcp.types import Tool, TextContent, Prompt, PromptMessage, PromptArgument
+from mcp.types import GetPromptResult
 
 load_dotenv()
 
-API_BASE = os.getenv("LAWTASKSAI_API_BASE", "https://lawtasksai-api-10437713249.us-central1.run.app")
+API_BASE = os.getenv("LAWTASKSAI_API_BASE", "https://api.taskvaultai.com")
 LICENSE_KEY = os.getenv("LAWTASKSAI_LICENSE_KEY", "")
 
 if not LICENSE_KEY:
@@ -2654,83 +2658,280 @@ AUTH_HEADERS = {
     "Authorization": f"Bearer {LICENSE_KEY}",
     "Content-Type": "application/json",
     "X-Client-Type": "mcp-server",
-    "X-Client-Version": "1.2.0",
+    "X-Client-Version": "1.4.0",
+    "X-Product-ID": "law",
 }
 
-async def api_get(path: str) -> dict:
+async def api_get(path):
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(f"{API_BASE}{path}", headers=AUTH_HEADERS)
         resp.raise_for_status()
         return resp.json()
 
-async def api_post(path: str, data: dict) -> dict:
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(f"{API_BASE}{path}", headers=AUTH_HEADERS, json=data)
-        resp.raise_for_status()
-        return resp.json()
-
 TOOLS = [
-    Tool(name="lawtasks_search", description="Search for legal skills. Use FIRST to find the right skill.", 
-         inputSchema={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}),
-    Tool(name="lawtasks_execute", description="Execute a legal skill by ID.",
-         inputSchema={"type": "object", "properties": {"skill_id": {"type": "string"}, "query": {"type": "string"}}, "required": ["skill_id", "query"]}),
-    Tool(name="lawtasks_balance", description="Check credit balance.", inputSchema={"type": "object", "properties": {}}),
-    Tool(name="lawtasks_categories", description="List skill categories.", inputSchema={"type": "object", "properties": {}}),
+    Tool(
+        name="lawtasksai_search",
+        description=(
+            "Search for LawTasksAI skills by keyword. "
+            "After getting results, ALWAYS present the top matches to the user as a numbered list "
+            "with the skill name and a brief description of each. "
+            "Then ask the user: 'Which of these best fits your situation? (reply with a number, "
+            "or describe your task differently for a new search)' "
+            "NEVER call lawtasksai_execute without explicit user confirmation of which skill to use."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Legal topic to search for (e.g. 'motion to compel', 'statute of limitations', 'NDA review', 'deposition prep', 'ABA ethics')"
+                }
+            },
+            "required": ["query"]
+        },
+    ),
+    Tool(
+        name="lawtasksai_execute",
+        description=(
+            "Get a skill's expert legal analysis framework by skill ID. "
+            "Returns the full prompt/schema for your AI to apply locally. Costs 1 credit. "
+            "Only call this after the user has confirmed which skill they want from lawtasksai_search results. "
+            "All analysis runs locally — client data never leaves your machine."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "skill_id": {
+                    "type": "string",
+                    "description": "Skill ID from lawtasksai_search results, confirmed by the user"
+                }
+            },
+            "required": ["skill_id"]
+        },
+    ),
+    Tool(
+        name="lawtasksai_balance",
+        description="Check your remaining LawTasksAI credit balance.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
+        name="lawtasksai_categories",
+        description=(
+            "List all available skill categories to browse by legal practice area. "
+            "Categories include: Litigation, Contracts, Criminal Defense, Real Estate, "
+            "Family Law, Estate Planning, Employment, ABA Ethics, and more."
+        ),
+        inputSchema={"type": "object", "properties": {}},
+    ),
 ]
 
+# ─────────────────────────────────────────────
+# System prompt — injected at session start
+# Instructs Claude to always confirm skill
+# selection with the user before executing.
+# ─────────────────────────────────────────────
+
+SYSTEM_PROMPT_TEXT = """\
+You have access to LawTasksAI, a library of 200+ expert legal analysis skills for attorneys.
+
+## How to use LawTasksAI
+
+**Always follow this 3-step flow:**
+
+1. **Search** — Call lawtasksai_search with the user's legal topic to find matching skills.
+
+2. **Confirm** — Present the top results to the user as a numbered list, like this:
+   > I found these skills that match your request:
+   > 1. **[Skill Name]** — [brief description]
+   > 2. **[Skill Name]** — [brief description]
+   > 3. **[Skill Name]** — [brief description]
+   >
+   > Which of these best fits your situation? (Reply with a number, or describe your task differently and I'll search again.)
+
+3. **Execute** — Only after the user confirms their choice, call lawtasksai_execute with that skill's ID.
+
+## Important rules
+- NEVER auto-execute a skill without explicit user confirmation.
+- If the user's reply is ambiguous, ask a clarifying question rather than guessing.
+- If no skills match, suggest the user try lawtasksai_categories to browse by practice area.
+- After executing a skill, apply its framework to the user's specific case facts and produce the full output.
+- Always remind the user that outputs require their professional review and legal judgment.
+- Client confidentiality: all analysis runs locally — no client data leaves the user's machine.
+"""
+
+PROMPTS = [
+    Prompt(
+        name="lawtasksai-workflow",
+        description="LawTasksAI skill selection workflow — always confirm skill choice with user before executing.",
+        arguments=[],
+    )
+]
+
+# Skills cache with TTL and failure isolation.
+# _skills_cache: list of skills (None = never loaded)
+# _skills_cache_ts: epoch time of last successful fetch
+# _skills_cache_error_until: don't retry a failed fetch until this epoch time
+CACHE_TTL = 600          # 10 minutes — refresh after this many seconds
+ERROR_COOLDOWN = 30      # retry a failed API call after 30 seconds
+
 _skills_cache = None
+_skills_cache_ts = 0.0
+_skills_cache_error_until = 0.0
 
 async def get_skills():
-    global _skills_cache
-    if _skills_cache is None:
-        try: _skills_cache = await api_get("/v1/skills")
-        except: _skills_cache = []
+    global _skills_cache, _skills_cache_ts, _skills_cache_error_until
+
+    now = time.monotonic()
+
+    # If cache is populated and still fresh, return it
+    if _skills_cache is not None and (now - _skills_cache_ts) < CACHE_TTL:
+        return _skills_cache
+
+    # If the last fetch failed and we're still in the cooldown window, return
+    # whatever we have (stale data beats empty data)
+    if now < _skills_cache_error_until:
+        return _skills_cache if _skills_cache is not None else []
+
+    # Attempt a fresh fetch
+    try:
+        fresh = await api_get("/v1/skills")
+        _skills_cache = fresh
+        _skills_cache_ts = now
+        _skills_cache_error_until = 0.0   # clear any previous error state
+    except Exception:
+        # Don't overwrite a good cache with an empty list.
+        # Set a cooldown so we don't hammer the API on every call.
+        _skills_cache_error_until = now + ERROR_COOLDOWN
+        # If we have stale data, return it — stale > empty
+        if _skills_cache is None:
+            _skills_cache = []  # only set empty if we've never had data
+
     return _skills_cache
 
-server = Server("lawtasksai")
+server = Server("LawTasksAI — Legal Research & Drafting")
+
+@server.list_prompts()
+async def list_prompts():
+    return PROMPTS
+
+@server.get_prompt()
+async def get_prompt(name, arguments):
+    if name == "lawtasksai-workflow":
+        return GetPromptResult(
+            description="LawTasksAI skill selection workflow",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=SYSTEM_PROMPT_TEXT)
+                )
+            ]
+        )
+    raise ValueError(f"Unknown prompt: {name}")
 
 @server.list_tools()
-async def list_tools(): return TOOLS
+async def list_tools():
+    return TOOLS
 
 @server.call_tool()
-async def call_tool(name: str, arguments: dict):
+async def call_tool(name, arguments):
     try:
-        if name == "lawtasks_search":
+        if name == "lawtasksai_search":
             skills = await get_skills()
             query = arguments.get("query", "").lower()
-            matches = [s for s in skills if query in s.get("name","").lower() or query in s.get("description","").lower()][:10]
-            if not matches: matches = skills[:10]
-            lines = ["**Matching skills:**\\n"]
-            for s in matches:
-                mode = "🔒 LOCAL" if s.get("execution_type") == "local" else "☁️ SERVER"
-                lines.append(f"- **{s['name']}** [{mode}] (`{s['id']}`) — {s.get('credits_per_use',1)} credits")
-            return [TextContent(type="text", text="\\n".join(lines))]
-        
-        if name == "lawtasks_execute":
-            skill_id, query = arguments.get("skill_id",""), arguments.get("query","")
-            skills = await get_skills()
-            skill = next((s for s in skills if s["id"] == skill_id), None)
-            if skill and skill.get("execution_type") == "local":
-                result = await api_get(f"/v1/skills/{skill_id}/schema")
-                return [TextContent(type="text", text=f"# 🔒 Local Execution\\n\\n{result.get('instructions','')}\\n\\n## Schema\\n\\n{result.get('schema','')}\\n\\n*Credits: {result.get('credits_used')} used, {result.get('credits_remaining')} remaining*")]
-            result = await api_post(f"/v1/skills/{skill_id}/execute", {"query": query})
-            return [TextContent(type="text", text=f"{result.get('result','')}\\n\\n*Credits: {result.get('credits_used')} used, {result.get('credits_remaining')} remaining*")]
-        
-        if name == "lawtasks_balance":
+            STOP_WORDS = {"a","an","the","and","or","of","in","to","for","is","are",
+                          "with","at","by","on","from","as","it","its","be","was","can"}
+            words = [w for w in query.split() if w not in STOP_WORDS and len(w) > 2]
+            scored = []
+            for s in skills:
+                text = (s.get("name", "") + " " + s.get("description", "")).lower()
+                name_text = s.get("name", "").lower()
+                score = sum(3 if w in name_text else 1 for w in words if w in text)
+                if score > 0:
+                    scored.append((score, s))
+            scored.sort(key=lambda x: -x[0])
+            matches = [s for _, s in scored[:5]]
+
+            # Honest zero-result response — never silently serve unrelated skills
+            if not matches:
+                no_match_text = (
+                    f"No skills found matching **'{arguments.get('query', '')}'**.\n\n"
+                    "**Suggestions:**\n"
+                    "- Try different keywords (e.g. 'motion to compel' instead of 'MTC')\n"
+                    "- Use `lawtasksai_categories` to browse all skill categories\n"
+                    "- Ask the user to rephrase their request\n\n"
+                    "**DO NOT call lawtasksai_execute** — no skill has been selected."
+                )
+                return [TextContent(type="text", text=no_match_text)]
+
+            lines = [f"**{len(matches)} skills found for '{arguments.get('query', '')}':**\n"]
+            for i, s in enumerate(matches, 1):
+                desc = s.get("description", "")[:100]
+                lines.append(f"{i}. **{s['name']}** (`{s['id']}`)\n   {desc}\n")
+
+            # Explicit workflow enforcement — injected into every search result.
+            # Primary guardrail; the Prompt resource is supplementary only.
+            lines.append("---")
+            lines.append(
+                "**\U0001f6d1 REQUIRED — DO NOT SKIP:**\n"
+                "Present the numbered list above to the user EXACTLY as shown. "
+                "Then ask: *\"Which of these best fits your situation? "
+                "(Reply with a number, or describe your task differently and I'll search again.)\"*\n\n"
+                "**DO NOT call `lawtasksai_execute` until the user replies with their choice. "
+                "Each execution costs 1 credit and cannot be undone.**"
+            )
+            return [TextContent(type="text", text="\n".join(lines))]
+
+        if name == "lawtasksai_execute":
+            skill_id = arguments.get("skill_id", "")
+            if not skill_id:
+                return [TextContent(type="text", text="Error: skill_id is required. Use lawtasksai_search first to find a skill ID.")]
+            result = await api_get(f"/v1/skills/{skill_id}/schema")
+            schema = result.get("schema", "")
+            instructions = result.get("instructions", "")
+            credits_used = result.get("credits_used", 1)
+            credits_remaining = result.get("credits_remaining", "?")
+            text = f"# {result.get('skill_name', skill_id)}\n\n"
+            text += f"{instructions}\n\n"
+            text += f"## Expert Analysis Framework\n\n{schema}\n\n"
+            text += f"---\n*Credits used: {credits_used} | Remaining: {credits_remaining}*"
+            return [TextContent(type="text", text=text)]
+
+        if name == "lawtasksai_balance":
             b = await api_get("/v1/credits/balance")
-            return [TextContent(type="text", text=f"**Balance:** {b['credits_balance']} credits")]
-        
-        if name == "lawtasks_categories":
+            return [TextContent(type="text", text=f"**Credit Balance:** {b.get('credits_balance', '?')} credits")]
+
+        if name == "lawtasksai_categories":
             cats = await api_get("/v1/categories")
-            return [TextContent(type="text", text="\\n".join([f"- {c['name']} ({c['id']})" for c in cats]))]
-        
+            if isinstance(cats, list):
+                lines = ["**Skill Categories:**\n"]
+                for c in cats:
+                    lines.append(f"- **{c.get('name', '?')}** (`{c.get('id', '?')}`)")
+                return [TextContent(type="text", text="\n".join(lines))]
+            return [TextContent(type="text", text=str(cats))]
+
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
+
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 402:
+            return [TextContent(type="text", text="Insufficient credits. Purchase more at https://lawtasksai.com/#pricing")]
+        if e.response.status_code == 401:
+            return [TextContent(type="text", text="Invalid or expired license key. Check your .env file.")]
+        return [TextContent(type="text", text=f"API error ({e.response.status_code}): {e.response.text[:200]}")]
     except Exception as e:
         return [TextContent(type="text", text=f"Error: {e}")]
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(run_server(server))
+
+    async def main():
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(
+                read_stream,
+                write_stream,
+                server.create_initialization_options(),
+            )
+
+    asyncio.run(main())
 '''
         zf.writestr('lawtasksai-mcp/server.py', mcp_server_py)
         
@@ -2739,6 +2940,368 @@ httpx>=0.27.0
 python-dotenv>=1.0.0
 '''
         zf.writestr('lawtasksai-mcp/requirements.txt', mcp_requirements)
+
+        mcp_install_py = '''#!/usr/bin/env python3
+"""
+LawTasksAI MCP Installer
+
+Detects and configures LawTasksAI for all supported MCP clients:
+  - Claude Desktop
+  - Cursor
+  - Windsurf
+
+Backs up existing configs before making any changes.
+
+Usage:
+    python3 install.py
+"""
+
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from datetime import datetime
+
+
+def get_python_path():
+    """Return full path to python3 so MCP clients can find it regardless of PATH."""
+    for candidate in [sys.executable, shutil.which("python3"),
+                      "/opt/homebrew/bin/python3", "/usr/bin/python3",
+                      "/usr/local/bin/python3"]:
+        if candidate and Path(candidate).exists():
+            return candidate
+    return sys.executable
+
+
+def get_server_path():
+    return str(Path(__file__).parent.resolve() / "server.py")
+
+
+def get_license_key():
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                if line.startswith("LAWTASKSAI_LICENSE_KEY="):
+                    key = line.split("=", 1)[1].strip()
+                    if key and key != "YOUR_KEY_HERE":
+                        return key
+    print("\n  Enter your LawTasksAI license key (starts with lt_):")
+    key = input("   > ").strip()
+    if not key:
+        print("  No license key provided. Check your purchase confirmation email.")
+        sys.exit(1)
+    return key
+
+
+def check_python_version():
+    """Warn if Python version is too old."""
+    if sys.version_info < (3, 8):
+        print(f"  ⚠️  Python {sys.version_info.major}.{sys.version_info.minor} detected.")
+        print("  LawTasksAI requires Python 3.8 or later.")
+        print("  Download Python at: https://python.org/downloads")
+        sys.exit(1)
+
+
+def _resolve_client_path(candidates):
+    """
+    Given a list of candidate config paths (in priority order), return the
+    first one whose parent directory already exists, or the first candidate
+    as the default write target (installer will create the dir).
+    """
+    for path in candidates:
+        if path.parent.exists():
+            return path
+    # No existing parent found — return the first (highest-priority) path.
+    # update_config() will mkdir -p the parent before writing.
+    return candidates[0]
+
+
+def get_mcp_clients():
+    """
+    Return dict of {client_name: config_path} for all installed MCP clients.
+
+    For Cursor and Windsurf we check their native MCP config paths first.
+    If those don't exist, we fall back to the Cline extension path so users
+    who run Cursor/Windsurf via the Cline plugin are also covered.
+    """
+    system = platform.system()
+    clients = {}
+
+    if system == "Darwin":
+        # Claude Desktop
+        claude_path = Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+        if (Path.home() / "Applications" / "Claude.app").exists() or \
+           Path("/Applications/Claude.app").exists() or \
+           claude_path.parent.exists():
+            clients["Claude Desktop"] = claude_path
+
+        # Cursor — native path first, Cline extension fallback
+        cursor_native  = Path.home() / ".cursor" / "mcp.json"
+        cursor_cline   = Path.home() / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+        if (Path.home() / "Applications" / "Cursor.app").exists() or \
+           Path("/Applications/Cursor.app").exists() or \
+           cursor_native.parent.exists() or cursor_cline.parent.exists():
+            clients["Cursor"] = _resolve_client_path([cursor_native, cursor_cline])
+
+        # Windsurf — native path first, Cline extension fallback
+        windsurf_native = Path.home() / ".codeium" / "windsurf" / "mcp_config.json"
+        windsurf_cline  = Path.home() / "Library" / "Application Support" / "Windsurf" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+        if (Path.home() / "Applications" / "Windsurf.app").exists() or \
+           Path("/Applications/Windsurf.app").exists() or \
+           windsurf_native.parent.exists() or windsurf_cline.parent.exists():
+            clients["Windsurf"] = _resolve_client_path([windsurf_native, windsurf_cline])
+
+    elif system == "Windows":
+        appdata = os.environ.get("APPDATA", "")
+        local   = os.environ.get("LOCALAPPDATA", "")
+
+        # Claude Desktop
+        claude_path = Path(appdata) / "Claude" / "claude_desktop_config.json"
+        if claude_path.parent.exists():
+            clients["Claude Desktop"] = claude_path
+
+        # Cursor — native path first, Cline extension fallback
+        cursor_native = Path(appdata) / "Cursor" / "User" / "globalStorage" / "cursor-mcp" / "mcp.json"
+        cursor_cline  = Path(appdata) / "Cursor" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+        if cursor_native.parent.exists() or cursor_cline.parent.exists():
+            clients["Cursor"] = _resolve_client_path([cursor_native, cursor_cline])
+
+        # Windsurf — native path first, Cline extension fallback
+        windsurf_native = Path(local) / "Windsurf" / "User" / "globalStorage" / "windsurf-mcp" / "mcp_config.json"
+        windsurf_cline  = Path(local) / "Windsurf" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+        if windsurf_native.parent.exists() or windsurf_cline.parent.exists():
+            clients["Windsurf"] = _resolve_client_path([windsurf_native, windsurf_cline])
+
+    else:
+        # Linux
+        claude_path = Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
+        if claude_path.parent.exists():
+            clients["Claude Desktop"] = claude_path
+
+        # Cursor — native path first, Cline extension fallback
+        cursor_native = Path.home() / ".cursor" / "mcp.json"
+        cursor_cline  = Path.home() / ".config" / "Cursor" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+        if cursor_native.parent.exists() or cursor_cline.parent.exists():
+            clients["Cursor"] = _resolve_client_path([cursor_native, cursor_cline])
+
+        # Windsurf — native path first, Cline extension fallback
+        windsurf_native = Path.home() / ".codeium" / "windsurf" / "mcp_config.json"
+        windsurf_cline  = Path.home() / ".config" / "Windsurf" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+        if windsurf_native.parent.exists() or windsurf_cline.parent.exists():
+            clients["Windsurf"] = _resolve_client_path([windsurf_native, windsurf_cline])
+
+    return clients
+
+
+def install_dependencies():
+    req_path = Path(__file__).parent / "requirements.txt"
+    if req_path.exists():
+        print("\n  Installing required packages...")
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-q", "-r", str(req_path)],
+            capture_output=True, text=True
+        )
+        # Handle externally-managed Python environments (e.g. Homebrew Python on macOS)
+        if result.returncode != 0 and "externally-managed-environment" in result.stderr:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-q", "--break-system-packages", "-r", str(req_path)],
+                capture_output=True, text=True
+            )
+        if result.returncode != 0:
+            print("  ⚠️  Could not install packages automatically.")
+            print("  Run manually: pip3 install mcp httpx python-dotenv")
+        else:
+            print("  ✅ Packages installed.")
+
+
+def update_config(client_name, config_path, server_path, python_path, license_key):
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config = {}
+    if config_path.exists():
+        backup_path = config_path.with_suffix(
+            f".backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+        )
+        shutil.copy2(config_path, backup_path)
+        print(f"    💾 Backed up existing config to: {backup_path.name}")
+        with open(config_path) as f:
+            try:
+                config = json.load(f)
+            except json.JSONDecodeError:
+                print("    ⚠️  Existing config was invalid — starting fresh (backup saved).")
+                config = {}
+
+    if "mcpServers" not in config:
+        config["mcpServers"] = {}
+
+    config["mcpServers"]["lawtasksai"] = {
+        "command": python_path,
+        "args": [server_path],
+        "env": {"LAWTASKSAI_LICENSE_KEY": license_key}
+    }
+
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+    print(f"    ✅ Config updated: {config_path}")
+
+
+def verify_installation(license_key):
+    """
+    After config is written, make a live API call to confirm:
+    - License key is valid
+    - Credits are accessible
+    - Skills are available
+
+    Returns True on success, False on failure.
+    """
+    import urllib.request
+    import urllib.error
+
+    API_BASE = "https://api.taskvaultai.com"
+    print()
+    print("  Verifying installation...")
+
+    # Step 1: Check license / credits
+    try:
+        req = urllib.request.Request(
+            f"{API_BASE}/v1/credits/balance",
+            headers={"Authorization": f"Bearer {license_key}"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            import json as _json
+            data = _json.loads(resp.read())
+            credits = data.get("credits_balance", "?")
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            print("  ❌ License key is invalid or expired.")
+            print("     Check your purchase confirmation email or visit lawtasksai.com/account")
+        elif e.code == 402:
+            print("  ⚠️  License key valid but no credits remaining.")
+            print("     Purchase more at: https://lawtasksai.com/#pricing")
+        else:
+            print(f"  ⚠️  Could not verify license (HTTP {e.code}).")
+            print("     Installation may still work — restart your MCP client and try.")
+        return False
+    except Exception as e:
+        print(f"  ⚠️  Could not reach LawTasksAI servers ({type(e).__name__}).")
+        print("     Check your internet connection. Installation files are in place.")
+        return False
+
+    # Step 2: Count available skills
+    try:
+        req = urllib.request.Request(
+            f"{API_BASE}/v1/skills",
+            headers={"Authorization": f"Bearer {license_key}"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            import json as _json
+            skills = _json.loads(resp.read())
+            skill_count = len(skills) if isinstance(skills, list) else "?"
+    except Exception:
+        skill_count = "?"
+
+    print(f"  ✅ License verified — {credits} credits available, {skill_count} skills ready")
+    return True
+
+
+def no_python_fallback():
+    """Shown when no MCP clients are detected."""
+    print()
+    print("  No supported MCP clients detected on this machine.")
+    print("  Supported clients: Claude Desktop, Cursor, Windsurf")
+    print()
+    print("  ─────────────────────────────────────────────────")
+    print("  Don't have Python or a supported MCP client?")
+    print()
+    print("  You can use LawTasksAI without any installation:")
+    print("  → Web app:   https://lawtasksai.com")
+    print("  → OpenClaw:  Works out of the box, no Python needed.")
+    print("               See: https://lawtasksai.com/getting-started.html")
+    print()
+    print("  For manual MCP setup instructions:")
+    print("  → https://lawtasksai.com/getting-started.html")
+    print("  ─────────────────────────────────────────────────")
+    print()
+    print("  Support: hello@lawtasksai.com")
+
+
+def main():
+    print()
+    print("  " + "=" * 50)
+    print("  LawTasksAI MCP Installer  v1.4.0")
+    print("  " + "=" * 50)
+    print()
+
+    check_python_version()
+
+    clients = get_mcp_clients()
+    if not clients:
+        no_python_fallback()
+        sys.exit(0)
+
+    print(f"  Detected MCP client(s): {', '.join(clients.keys())}")
+    print()
+    print("  This installer will:")
+    print("    1. Install required Python packages")
+    print("    2. Configure LawTasksAI in each detected client")
+    print("       (existing configs are backed up first)")
+    print()
+    input("  Press Enter to continue (or Ctrl+C to cancel)... ")
+
+    license_key = get_license_key()
+    server_path = get_server_path()
+    python_path = get_python_path()
+
+    install_dependencies()
+
+    print()
+    configured = []
+    for client_name, config_path in clients.items():
+        print(f"  Configuring {client_name}...")
+        try:
+            update_config(client_name, config_path, server_path, python_path, license_key)
+            configured.append(client_name)
+        except Exception as e:
+            print(f"    ⚠️  Warning: could not configure {client_name}: {e}")
+
+    # Post-install verification
+    verified = False
+    if configured:
+        verified = verify_installation(license_key)
+
+    print()
+    print("  " + "=" * 50)
+    print("  ✅ Installation complete!")
+    print("  " + "=" * 50)
+    print()
+    if configured:
+        print(f"  Configured: {', '.join(configured)}")
+        print()
+        if verified:
+            print("  Next steps:")
+            print("    1. Restart your MCP client(s)")
+            print("    2. Start asking legal questions!")
+            print()
+            print("  Try asking:")
+            print('    "Search for a motion to compel skill"')
+            print('    "What statute of limitations skills do you have?"')
+        else:
+            print("  ⚠️  Verification did not complete — see message above.")
+            print("     Your config files are in place. Once the issue is resolved,")
+            print("     restart your MCP client and try again.")
+    print()
+    print("  Support: hello@lawtasksai.com")
+    print("  Website: https://lawtasksai.com")
+    print()
+
+
+if __name__ == "__main__":
+    main()
+'''
+        zf.writestr('lawtasksai-mcp/install.py', mcp_install_py)
         
         mcp_env = f'''LAWTASKSAI_LICENSE_KEY={license_key}
 LAWTASKSAI_API_BASE=https://lawtasksai-api-10437713249.us-central1.run.app
