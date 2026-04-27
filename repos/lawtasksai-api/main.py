@@ -2638,6 +2638,7 @@ or go to your LLM provider if using a cloud AI.
 """
 
 import os
+import re
 import time
 import httpx
 from dotenv import load_dotenv
@@ -2767,46 +2768,157 @@ PROMPTS = [
     )
 ]
 
-# Skills cache with TTL and failure isolation.
-# _skills_cache: list of skills (None = never loaded)
-# _skills_cache_ts: epoch time of last successful fetch
-# _skills_cache_error_until: don't retry a failed fetch until this epoch time
-CACHE_TTL = 600          # 10 minutes — refresh after this many seconds
-ERROR_COOLDOWN = 30      # retry a failed API call after 30 seconds
+# ── Cache configuration ─────────────────────────────────────────────────────
+CACHE_TTL      = 600   # 10 minutes — refresh skills + triggers after this
+ERROR_COOLDOWN = 30    # retry a failed API call after 30 seconds
 
-_skills_cache = None
-_skills_cache_ts = 0.0
-_skills_cache_error_until = 0.0
+# ── Skills cache ─────────────────────────────────────────────────────────────
+_skills_cache         = None
+_skills_cache_ts      = 0.0
+_skills_cache_err_until = 0.0
+
+# ── Triggers cache ───────────────────────────────────────────────────────────
+# Shape: { skill_id: ["phrase1", "phrase2", ...], ... }
+# Fetched from /v1/skills/triggers — does NOT send attorney queries to server.
+# Privacy note: only skill metadata (phrases) is fetched, never query text.
+_triggers_cache       = None
+_triggers_cache_ts    = 0.0
+_triggers_cache_err_until = 0.0
+
 
 async def get_skills():
-    global _skills_cache, _skills_cache_ts, _skills_cache_error_until
-
+    global _skills_cache, _skills_cache_ts, _skills_cache_err_until
     now = time.monotonic()
-
-    # If cache is populated and still fresh, return it
     if _skills_cache is not None and (now - _skills_cache_ts) < CACHE_TTL:
         return _skills_cache
-
-    # If the last fetch failed and we're still in the cooldown window, return
-    # whatever we have (stale data beats empty data)
-    if now < _skills_cache_error_until:
+    if now < _skills_cache_err_until:
         return _skills_cache if _skills_cache is not None else []
-
-    # Attempt a fresh fetch
     try:
-        fresh = await api_get("/v1/skills")
-        _skills_cache = fresh
+        _skills_cache = await api_get("/v1/skills")
         _skills_cache_ts = now
-        _skills_cache_error_until = 0.0   # clear any previous error state
+        _skills_cache_err_until = 0.0
     except Exception:
-        # Don't overwrite a good cache with an empty list.
-        # Set a cooldown so we don't hammer the API on every call.
-        _skills_cache_error_until = now + ERROR_COOLDOWN
-        # If we have stale data, return it — stale > empty
+        _skills_cache_err_until = now + ERROR_COOLDOWN
         if _skills_cache is None:
-            _skills_cache = []  # only set empty if we've never had data
-
+            _skills_cache = []
     return _skills_cache
+
+
+async def get_triggers():
+    """Return trigger phrases dict {skill_id: [phrase, ...]}.
+    Fetches once then caches for CACHE_TTL seconds.
+    Fails silently — search still works without triggers, just less smart.
+    """
+    global _triggers_cache, _triggers_cache_ts, _triggers_cache_err_until
+    now = time.monotonic()
+    if _triggers_cache is not None and (now - _triggers_cache_ts) < CACHE_TTL:
+        return _triggers_cache
+    if now < _triggers_cache_err_until:
+        return _triggers_cache if _triggers_cache is not None else {}
+    try:
+        raw = await api_get("/v1/skills/triggers")
+        # Normalise: {skill_id: {"triggers": [...]}} → {skill_id: [phrase.lower(), ...]}
+        _triggers_cache = {
+            skill_id: [p.lower() for p in v.get("triggers", [])]
+            for skill_id, v in raw.items()
+        }
+        _triggers_cache_ts = now
+        _triggers_cache_err_until = 0.0
+    except Exception:
+        _triggers_cache_err_until = now + ERROR_COOLDOWN
+        if _triggers_cache is None:
+            _triggers_cache = {}
+    return _triggers_cache
+
+
+# Common legal abbreviations not yet in the trigger phrase database.
+# Expands the query before matching so 'MTC' finds motion-to-compel skills.
+# Add entries here as gaps are identified; the long-term fix is adding them
+# to the trigger phrases in the DB via the admin UI.
+LEGAL_ABBREVS = {
+    "mtc":   "motion to compel",
+    "rogs":  "interrogatories",
+    "rog":   "interrogatory",
+    "rfa":   "request for admission",
+    "rfp":   "request for production",
+    "tro":   "temporary restraining order",
+    "pi":    "personal injury",
+    "msj":   "motion for summary judgment",
+    "msk":   "motion to strike",
+    "sj":    "summary judgment",
+    "jnov":  "judgment notwithstanding verdict",
+    "mil":   "motion in limine",
+    "roe":   "rules of evidence",
+    "frcp":  "federal rules civil procedure",
+    "fre":   "federal rules evidence",
+    "aff":   "affidavit",
+    "decl":  "declaration",
+    "depo":  "deposition",
+    "deps":  "depositions",
+    "compl": "complaint",
+    "ans":   "answer",
+    "countercl": "counterclaim",
+    "xc":    "cross complaint",
+    "sol":   "statute of limitations",
+    "atty":  "attorney",
+    "p/i":   "personal injury",
+    "d/c":   "dismissal",
+}
+
+
+def expand_query(query):
+    """Expand legal abbreviations in a query string.
+    Preserves the original query and appends expansions.
+    e.g. 'MTC discovery' -> 'MTC discovery motion to compel'
+    """
+    words = query.lower().split()
+    expansions = []
+    for w in words:
+        clean = w.strip('.,;:?!')
+        if clean in LEGAL_ABBREVS:
+            expansions.append(LEGAL_ABBREVS[clean])
+    if expansions:
+        return query + " " + " ".join(expansions)
+    return query
+
+
+def _word_in_text(word, text):
+    """True if `word` appears as a whole word in `text` (word-boundary aware)."""
+    return bool(re.search(r'(?<!\w)' + re.escape(word) + r'(?!\w)', text))
+
+
+def score_skill(skill, query_lower, query_words, triggers):
+    """Score a single skill against a query.
+
+    Scoring tiers (highest wins):
+      10 — query matches a trigger phrase (whole-word, bidirectional substring)
+       3 — query word appears as whole word in skill name
+       1 — query word appears as whole word in skill description
+
+    Trigger matching is whole-word to prevent 'sol' matching 'resolve'.
+    Short all-caps terms (e.g. MTC, SOL, ROGs) bypass the length filter.
+    """
+    skill_id   = skill.get("id", "")
+    name_text  = skill.get("name", "").lower()
+    desc_text  = skill.get("description", "").lower()
+    full_text  = name_text + " " + desc_text
+
+    # Tier 1 — trigger phrase match (whole-word, bidirectional)
+    # 'phrase in query' catches: query='just got served', phrase='got served'
+    # 'query in phrase' catches: query='MTC', phrase='run the MTC'
+    # Whole-word check prevents 'sol' matching 'resolve', 'solicits' etc.
+    skill_triggers = triggers.get(skill_id, [])
+    for phrase in skill_triggers:
+        if _word_in_text(phrase, query_lower) or _word_in_text(query_lower, phrase):
+            return 10
+
+    # Tier 2 — keyword match on name/description (whole-word)
+    keyword_score = sum(
+        3 if _word_in_text(w, name_text) else 1
+        for w in query_words
+        if _word_in_text(w, full_text)
+    )
+    return keyword_score
 
 server = Server("LawTasksAI — Legal Research & Drafting")
 
@@ -2836,18 +2948,22 @@ async def list_tools():
 async def call_tool(name, arguments):
     try:
         if name == "lawtasksai_search":
-            skills = await get_skills()
-            query = arguments.get("query", "").lower()
+            skills, triggers = await get_skills(), await get_triggers()
+            query = expand_query(arguments.get("query", ""))
+            query_lower = query.lower()
             STOP_WORDS = {"a","an","the","and","or","of","in","to","for","is","are",
                           "with","at","by","on","from","as","it","its","be","was","can"}
-            words = [w for w in query.split() if w not in STOP_WORDS and len(w) > 2]
+            # Keep words that are either >2 chars OR all-caps abbreviations (MTC, SOL, TRO, etc.)
+            raw_words = query.split()  # preserve original case for caps check
+            query_words = [
+                w_lower for w_orig, w_lower in zip(raw_words, query_lower.split())
+                if w_lower not in STOP_WORDS and (len(w_lower) > 2 or w_orig.isupper())
+            ]
             scored = []
             for s in skills:
-                text = (s.get("name", "") + " " + s.get("description", "")).lower()
-                name_text = s.get("name", "").lower()
-                score = sum(3 if w in name_text else 1 for w in words if w in text)
-                if score > 0:
-                    scored.append((score, s))
+                sc = score_skill(s, query_lower, query_words, triggers)
+                if sc > 0:
+                    scored.append((sc, s))
             scored.sort(key=lambda x: -x[0])
             matches = [s for _, s in scored[:5]]
 
