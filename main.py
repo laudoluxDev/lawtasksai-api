@@ -1258,6 +1258,127 @@ async def get_credit_balance(
         valid_until=license.valid_until
     )
 
+# ============================================
+# Routes: Identity (GET /v1/me)
+# ============================================
+
+# Map license key prefixes → product metadata
+# Longest prefix first so "mkt_" wins over hypothetical "m_" etc.
+_VERTICAL_BY_PREFIX: list[tuple[str, dict]] = sorted([
+    ("lt_",   {"product_id": "law",           "product_name": "LawTasksAI",           "display_name": "LawTasksAI",           "tool_prefix": "lawtasksai",       "occupation": "attorney",             "support_email": "support@lawtasksai.com"}),
+    ("ct_",   {"product_id": "contractor",    "product_name": "ContractorTasksAI",   "display_name": "ContractorTasksAI",   "tool_prefix": "contractortasksai", "occupation": "contractor",           "support_email": "support@contractortasksai.com"}),
+    ("rt_",   {"product_id": "realtor",       "product_name": "RealtorTasksAI",      "display_name": "RealtorTasksAI",      "tool_prefix": "realtortasksai",    "occupation": "real estate agent",   "support_email": "support@realtortasksai.com"}),
+    ("mkt_",  {"product_id": "marketing",     "product_name": "MarketingTasksAI",    "display_name": "MarketingTasksAI",    "tool_prefix": "marketingtasksai",  "occupation": "marketer",            "support_email": "support@marketingtasksai.com"}),
+    ("ft_",   {"product_id": "farmer",        "product_name": "FarmerTasksAI",       "display_name": "FarmerTasksAI",       "tool_prefix": "farmertasksai",     "occupation": "farmer",              "support_email": "support@farmertasksai.com"}),
+    ("pt_",   {"product_id": "pastor",        "product_name": "PastorTasksAI",       "display_name": "PastorTasksAI",       "tool_prefix": "pastortasksai",     "occupation": "pastor",              "support_email": "support@pastortasksai.com"}),
+    ("st_",   {"product_id": "salon",         "product_name": "SalonTasksAI",        "display_name": "SalonTasksAI",        "tool_prefix": "salontasksai",      "occupation": "salon owner",         "support_email": "support@salontasksai.com"}),
+    ("tt_",   {"product_id": "teacher",       "product_name": "TeacherTasksAI",      "display_name": "TeacherTasksAI",      "tool_prefix": "teachertasksai",    "occupation": "teacher",             "support_email": "support@teachertasksai.com"}),
+    ("tht_",  {"product_id": "therapist",     "product_name": "TherapistTasksAI",    "display_name": "TherapistTasksAI",    "tool_prefix": "therapisttasksai",  "occupation": "therapist",           "support_email": "support@therapisttasksai.com"}),
+    ("ht_",   {"product_id": "hr",            "product_name": "HRTasksAI",           "display_name": "HRTasksAI",           "tool_prefix": "hrtasksai",         "occupation": "HR professional",     "support_email": "support@hrtasksai.com"}),
+    ("tat_",  {"product_id": "travelagent",   "product_name": "TravelAgentTasksAI",  "display_name": "TravelAgentTasksAI",  "tool_prefix": "travelagenttasksai","occupation": "travel agent",        "support_email": "support@travelagenttasksai.com"}),
+    ("dt_",   {"product_id": "dentist",       "product_name": "DentistTasksAI",      "display_name": "DentistTasksAI",      "tool_prefix": "dentisttasksai",    "occupation": "dentist",             "support_email": "support@dentisttasksai.com"}),
+    ("chrt_", {"product_id": "chiropractor",  "product_name": "ChiropractorTasksAI", "display_name": "ChiropractorTasksAI", "tool_prefix": "chiropractortasksai","occupation": "chiropractor",       "support_email": "support@chiropractortasksai.com"}),
+    ("it_",   {"product_id": "insurance",     "product_name": "InsuranceTasksAI",    "display_name": "InsuranceTasksAI",    "tool_prefix": "insurancetasksai",  "occupation": "insurance agent",    "support_email": "support@insurancetasksai.com"}),
+    ("at_",   {"product_id": "accounting",    "product_name": "AccountingTasksAI",   "display_name": "AccountingTasksAI",   "tool_prefix": "accountingtasksai", "occupation": "accountant",          "support_email": "support@accountingtasksai.com"}),
+    ("nt_",   {"product_id": "nutritionist",  "product_name": "NutritionistTasksAI", "display_name": "NutritionistTasksAI", "tool_prefix": "nutritionisttasksai","occupation": "nutritionist",       "support_email": "support@nutritionisttasksai.com"}),
+    ("rest_", {"product_id": "restaurant",    "product_name": "RestaurantTasksAI",   "display_name": "RestaurantTasksAI",   "tool_prefix": "restauranttasksai", "occupation": "restaurant owner",   "support_email": "support@restauranttasksai.com"}),
+    ("llt_",  {"product_id": "landlord",      "product_name": "LandlordTasksAI",     "display_name": "LandlordTasksAI",     "tool_prefix": "landlordtasksai",   "occupation": "landlord",            "support_email": "support@landlordtasksai.com"}),
+    ("prt_",  {"product_id": "principal",     "product_name": "PrincipalTasksAI",    "display_name": "PrincipalTasksAI",    "tool_prefix": "principaltasksai",  "occupation": "school principal",    "support_email": "support@principaltasksai.com"}),
+    ("mot_",  {"product_id": "mortuary",      "product_name": "MortuaryTasksAI",     "display_name": "MortuaryTasksAI",     "tool_prefix": "mortuarytasksai",   "occupation": "funeral director",    "support_email": "support@mortuarytasksai.com"}),
+    ("evt_",  {"product_id": "eventplanner",  "product_name": "EventPlannerTasksAI", "display_name": "EventPlannerTasksAI", "tool_prefix": "eventplannertasksai","occupation": "event planner",      "support_email": "support@eventplannertasksai.com"}),
+    ("cht_",  {"product_id": "church",        "product_name": "ChurchTasksAI",       "display_name": "ChurchTasksAI",       "tool_prefix": "churchtasksai",     "occupation": "church administrator","support_email": "support@churchtasksai.com"}),
+    ("per_",  {"product_id": "personaltrainer","product_name": "PersonalTrainerTasksAI","display_name": "PersonalTrainerTasksAI","tool_prefix": "personaltrainertasksai","occupation": "personal trainer",  "support_email": "support@personaltrainertasksai.com"}),
+    ("elt_",  {"product_id": "electrician",   "product_name": "ElectricianTasksAI",  "display_name": "ElectricianTasksAI",  "tool_prefix": "electriciantasksai","occupation": "electrician",        "support_email": "support@electriciantasksai.com"}),
+    ("mgt_",  {"product_id": "mortgage",      "product_name": "MortgageTasksAI",     "display_name": "MortgageTasksAI",     "tool_prefix": "mortgagetasksai",   "occupation": "mortgage broker",    "support_email": "support@mortgagetasksai.com"}),
+    ("plt_",  {"product_id": "plumber",       "product_name": "PlumberTasksAI",      "display_name": "PlumberTasksAI",      "tool_prefix": "plumbertasksai",    "occupation": "plumber",             "support_email": "support@plumbertasksai.com"}),
+    ("vt_",   {"product_id": "vet",           "product_name": "VetTasksAI",          "display_name": "VetTasksAI",          "tool_prefix": "vettasksai",        "occupation": "veterinarian",        "support_email": "support@vettasksai.com"}),
+    ("fun_",  {"product_id": "funeral",       "product_name": "FuneralTasksAI",      "display_name": "FuneralTasksAI",      "tool_prefix": "funeraltasksai",    "occupation": "funeral director",    "support_email": "support@funeraltasksai.com"}),
+    ("des_",  {"product_id": "designer",      "product_name": "DesignerTasksAI",     "display_name": "DesignerTasksAI",     "tool_prefix": "designertasksai",   "occupation": "designer",            "support_email": "support@designertasksai.com"}),
+    ("mst_",  {"product_id": "militaryspouse","product_name": "MilitarySpouseTasksAI","display_name": "MilitarySpouseTasksAI","tool_prefix": "militaryspousetasksai","occupation": "military spouse",  "support_email": "support@militaryspousetasksai.com"}),
+], key=lambda x: -len(x[0]))
+
+
+def _vertical_from_key(key: str) -> dict | None:
+    """Return vertical metadata dict for a license key, or None if no prefix matches."""
+    for prefix, meta in _VERTICAL_BY_PREFIX:
+        if key.startswith(prefix):
+            return meta
+    return None
+
+
+@app.get("/v1/me")
+async def get_me(
+    license: License = Depends(get_current_license),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return identity + vertical metadata for the calling license key.
+    Used by the MCP server at startup to self-configure tool names and prompts.
+    """
+    meta = _vertical_from_key(license.license_key)
+    if not meta:
+        # Fallback: try products table via user's product_id
+        user_result = await db.execute(
+            text("SELECT product_id FROM users WHERE id = :uid"),
+            {"uid": str(license.user_id)},
+        )
+        user_row = user_result.fetchone()
+        product_id = user_row.product_id if user_row else "law"
+        meta = {
+            "product_id":    product_id,
+            "product_name":  f"{product_id.title()}TasksAI",
+            "display_name":  f"{product_id.title()}TasksAI",
+            "tool_prefix":   f"{product_id}tasksai",
+            "occupation":    product_id,
+            "support_email": f"support@{product_id}tasksai.com",
+        }
+
+    # Fetch domain from products table if available
+    prod_result = await db.execute(
+        text("SELECT domain FROM products WHERE id = :pid AND is_active = TRUE"),
+        {"pid": meta["product_id"]},
+    )
+    prod_row = prod_result.fetchone()
+    domain = prod_row.domain if prod_row else f"{meta['product_id']}tasksai.com"
+
+    return {
+        **meta,
+        "domain":            domain,
+        "license_type":      license.type,
+        "credits_remaining": license.credits_remaining,
+    }
+
+
+# ============================================
+# Routes: Abbreviations (GET /v1/abbreviations)
+# ============================================
+
+@app.get("/v1/abbreviations")
+async def get_abbreviations(
+    license: License = Depends(get_current_license),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return abbreviation expansions for the calling license's vertical.
+    Used by MCP server to populate _ABBREVS at startup.
+    Response: {"product_id": "law", "abbreviations": {"tro": "temporary restraining order", ...}}
+    """
+    meta = _vertical_from_key(license.license_key)
+    product_id = meta["product_id"] if meta else "law"
+
+    result = await db.execute(
+        text("SELECT abbreviation, expansion FROM skill_abbreviations WHERE product_id = :pid ORDER BY abbreviation"),
+        {"pid": product_id},
+    )
+    rows = result.fetchall()
+
+    return {
+        "product_id":    product_id,
+        "abbreviations": {row.abbreviation: row.expansion for row in rows},
+        "count":         len(rows),
+    }
+
+
 @app.post("/credits/purchase")
 async def purchase_credits(
     request: PurchaseCreditsRequest,
@@ -3996,6 +4117,139 @@ async def migrate_add_product(data: dict, db: AsyncSession = Depends(get_db)):
     })
     await db.commit()
     return {"success": True, "product_id": pid}
+
+
+# ============================================
+# Admin Routes: Abbreviations CRUD
+# ============================================
+
+@admin_router.get("/abbreviations")
+async def admin_list_abbreviations(
+    product_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: list all abbreviations, optionally filtered by product_id."""
+    q = "SELECT id, product_id, abbreviation, expansion, created_at FROM skill_abbreviations"
+    params: dict = {}
+    if product_id:
+        q += " WHERE product_id = :pid"
+        params["pid"] = product_id
+    q += " ORDER BY product_id, abbreviation"
+    result = await db.execute(text(q), params)
+    rows = result.fetchall()
+    return [
+        {
+            "id":           row.id,
+            "product_id":   row.product_id,
+            "abbreviation": row.abbreviation,
+            "expansion":    row.expansion,
+            "created_at":   row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]
+
+
+@admin_router.post("/abbreviations", status_code=201)
+async def admin_create_abbreviation(
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: create a new abbreviation. Body: {product_id, abbreviation, expansion}"""
+    product_id   = data.get("product_id")
+    abbreviation = (data.get("abbreviation") or "").lower().strip()
+    expansion    = (data.get("expansion") or "").lower().strip()
+    if not product_id or not abbreviation or not expansion:
+        raise HTTPException(status_code=400, detail="product_id, abbreviation, and expansion are required")
+    try:
+        result = await db.execute(
+            text("""
+                INSERT INTO skill_abbreviations (product_id, abbreviation, expansion)
+                VALUES (:pid, :abbr, :exp)
+                ON CONFLICT (product_id, abbreviation) DO UPDATE SET expansion = EXCLUDED.expansion
+                RETURNING id, product_id, abbreviation, expansion
+            """),
+            {"pid": product_id, "abbr": abbreviation, "exp": expansion},
+        )
+        row = result.fetchone()
+        await db.commit()
+        return {"success": True, "id": row.id, "product_id": row.product_id,
+                "abbreviation": row.abbreviation, "expansion": row.expansion}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.put("/abbreviations/{abbrev_id}")
+async def admin_update_abbreviation(
+    abbrev_id: int,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: update expansion for an abbreviation by its DB id."""
+    expansion = (data.get("expansion") or "").lower().strip()
+    if not expansion:
+        raise HTTPException(status_code=400, detail="expansion is required")
+    result = await db.execute(
+        text("UPDATE skill_abbreviations SET expansion = :exp WHERE id = :id RETURNING id, product_id, abbreviation, expansion"),
+        {"exp": expansion, "id": abbrev_id},
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Abbreviation id {abbrev_id} not found")
+    await db.commit()
+    return {"success": True, "id": row.id, "product_id": row.product_id,
+            "abbreviation": row.abbreviation, "expansion": row.expansion}
+
+
+@admin_router.delete("/abbreviations/{abbrev_id}", status_code=204)
+async def admin_delete_abbreviation(
+    abbrev_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: delete an abbreviation by its DB id."""
+    result = await db.execute(
+        text("DELETE FROM skill_abbreviations WHERE id = :id RETURNING id"),
+        {"id": abbrev_id},
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Abbreviation id {abbrev_id} not found")
+    await db.commit()
+
+
+@admin_router.post("/abbreviations/seed")
+async def admin_seed_abbreviations(db: AsyncSession = Depends(get_db)):
+    """
+    Admin: re-run the abbreviation seed from migration 002.
+    Safe to call multiple times -- uses ON CONFLICT DO NOTHING.
+    Returns counts per vertical.
+    """
+    # Import seed data from migration file
+    import importlib.util, pathlib
+    migration_path = pathlib.Path(__file__).parent / "migrations" / "002_add_abbreviations.py"
+    spec = importlib.util.spec_from_file_location("migration_002", migration_path)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    ABBREVIATIONS = m.ABBREVIATIONS
+
+    summary = {}
+    for product_id, abbrevs in ABBREVIATIONS.items():
+        inserted = 0
+        for abbr, expansion in abbrevs.items():
+            result = await db.execute(
+                text("""
+                    INSERT INTO skill_abbreviations (product_id, abbreviation, expansion)
+                    VALUES (:pid, :abbr, :exp)
+                    ON CONFLICT (product_id, abbreviation) DO NOTHING
+                """),
+                {"pid": product_id, "abbr": abbr.lower(), "exp": expansion.lower()},
+            )
+            inserted += result.rowcount
+        summary[product_id] = inserted
+    await db.commit()
+    total = await db.execute(text("SELECT COUNT(*) FROM skill_abbreviations"))
+    return {"success": True, "inserted_by_vertical": summary,
+            "total_rows": total.scalar()}
 
 
 app.include_router(admin_router)
