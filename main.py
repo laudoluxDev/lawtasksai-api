@@ -4252,17 +4252,27 @@ async def admin_delete_abbreviation(
 @admin_router.post("/abbreviations/seed")
 async def admin_seed_abbreviations(db: AsyncSession = Depends(get_db)):
     """
-    Admin: re-run the abbreviation seed from migration 002.
+    Admin: re-run the abbreviation seed (migration 002 data).
     Safe to call multiple times -- uses ON CONFLICT DO NOTHING.
     Returns counts per vertical.
     """
-    # Import seed data from migration file
-    import importlib.util, pathlib
-    migration_path = pathlib.Path(__file__).parent / "migrations" / "002_add_abbreviations.py"
-    spec = importlib.util.spec_from_file_location("migration_002", migration_path)
-    m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
-    ABBREVIATIONS = m.ABBREVIATIONS
+    ABBREVIATIONS = {
+        "law": {"mtc":"motion to compel","rogs":"interrogatories","rog":"interrogatory","rfa":"request for admission","rfas":"requests for admission","rfp":"request for production","rfps":"requests for production","tro":"temporary restraining order","pi":"personal injury","msj":"motion for summary judgment","msk":"motion to strike","sj":"summary judgment","jnov":"judgment notwithstanding verdict","mil":"motion in limine","sol":"statute of limitations","aff":"affidavit","decl":"declaration","depo":"deposition","deps":"depositions","frcp":"federal rules civil procedure","fre":"federal rules evidence","compl":"complaint","ans":"answer","roe":"rules of evidence","atty":"attorney"},
+        "realtor": {"mls":"multiple listing service","cma":"comparative market analysis","dom":"days on market","arv":"after repair value","hoa":"homeowners association","coe":"close of escrow","emd":"earnest money deposit","piti":"principal interest taxes insurance","ltv":"loan to value","nar":"national association of realtors","bom":"back on market","uc":"under contract","fs":"for sale","fsbo":"for sale by owner","reo":"real estate owned"},
+        "contractor": {"rfi":"request for information","sow":"scope of work","co":"change order","gc":"general contractor","ntp":"notice to proceed","pco":"potential change order","aia":"american institute of architects","lien":"mechanics lien","sub":"subcontractor","por":"purchase order request","cos":"certificate of substantial completion","punch":"punch list","g702":"payment application","g703":"schedule of values"},
+        "farmer": {"fsa":"farm service agency","nrcs":"natural resources conservation service","crp":"conservation reserve program","arc":"agriculture risk coverage","plc":"price loss coverage","usda":"united states department of agriculture","eqip":"environmental quality incentives program","csa":"community supported agriculture","gmp":"good manufacturing practices","gap":"good agricultural practices"},
+        "hr": {"pip":"performance improvement plan","pto":"paid time off","fmla":"family medical leave act","ada":"americans with disabilities act","eeoc":"equal employment opportunity commission","w2":"wage and tax statement","i9":"employment eligibility verification","cobra":"consolidated omnibus budget reconciliation act","osha":"occupational safety and health administration","erp":"employee relations policy"},
+        "accounting": {"cogs":"cost of goods sold","ar":"accounts receivable","ap":"accounts payable","gaap":"generally accepted accounting principles","ytd":"year to date","mtd":"month to date","ebitda":"earnings before interest taxes depreciation amortization","cpa":"certified public accountant","sox":"sarbanes oxley"},
+        "mortgage": {"ltv":"loan to value","dti":"debt to income","arm":"adjustable rate mortgage","apr":"annual percentage rate","pmi":"private mortgage insurance","hud":"housing and urban development","fnma":"fannie mae","fhlmc":"freddie mac","heloc":"home equity line of credit","gfe":"good faith estimate","cd":"closing disclosure","le":"loan estimate"},
+        "insurance": {"doi":"department of insurance","gl":"general liability","wc":"workers compensation","coi":"certificate of insurance","dec":"declarations page","aob":"assignment of benefits","uwi":"underwriting information","clue":"comprehensive loss underwriting exchange","pip":"personal injury protection"},
+        "therapist": {"dap":"data assessment plan","soap":"subjective objective assessment plan","hipaa":"health insurance portability and accountability act","phi":"protected health information","dx":"diagnosis","tx":"treatment","iop":"intensive outpatient program","php":"partial hospitalization program","cbt":"cognitive behavioral therapy","dbt":"dialectical behavior therapy","emdr":"eye movement desensitization reprocessing"},
+        "chiropractor": {"soap":"subjective objective assessment plan","rom":"range of motion","pi":"personal injury","hipaa":"health insurance portability and accountability act","icd":"international classification of diseases","cpt":"current procedural terminology","eob":"explanation of benefits"},
+        "dentist": {"hipaa":"health insurance portability and accountability act","cdt":"current dental terminology","perio":"periodontal","ortho":"orthodontic","endo":"endodontic","eob":"explanation of benefits","pano":"panoramic radiograph"},
+        "teacher": {"iep":"individualized education program","504":"section 504 accommodation plan","ell":"english language learner","sped":"special education","pbis":"positive behavioral interventions and supports","mtss":"multi-tiered system of supports","rti":"response to intervention","ferpa":"family educational rights and privacy act","pd":"professional development","plc":"professional learning community"},
+        "vet": {"soap":"subjective objective assessment plan","avma":"american veterinary medical association","rx":"prescription","dx":"diagnosis","tx":"treatment","hx":"history","pe":"physical examination"},
+        "electrician": {"nec":"national electrical code","gfci":"ground fault circuit interrupter","afci":"arc fault circuit interrupter","rfi":"request for information","co":"change order","ntp":"notice to proceed"},
+        "plumber": {"ipc":"international plumbing code","upc":"uniform plumbing code","rfi":"request for information","co":"change order","ntp":"notice to proceed","pex":"cross-linked polyethylene","abs":"acrylonitrile butadiene styrene"},
+    }
 
     summary = {}
     for product_id, abbrevs in ABBREVIATIONS.items():
