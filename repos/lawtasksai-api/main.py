@@ -3001,11 +3001,20 @@ async def list_skill_versions(
         raise HTTPException(status_code=404, detail=f"Skill '{skill_id}' not found")
 
     versions_result = await db.execute(
-        select(SkillVersion)
+        select(
+            SkillVersion.id,
+            SkillVersion.skill_id,
+            SkillVersion.version,
+            SkillVersion.changelog,
+            SkillVersion.is_stable,
+            SkillVersion.is_beta,
+            SkillVersion.published_at,
+            SkillVersion.content,
+        )
         .where(SkillVersion.skill_id == skill_id)
         .order_by(SkillVersion.published_at.desc())
     )
-    versions = versions_result.scalars().all()
+    versions = versions_result.mappings().all()
 
     return {
         "skill_id": skill_id,
@@ -3014,15 +3023,15 @@ async def list_skill_versions(
         "stable_version": skill.stable_version,
         "versions": [
             {
-                "id": v.id,
-                "version": v.version,
-                "changelog": v.changelog,
-                "is_stable": v.is_stable,
-                "is_beta": v.is_beta,
-                "published_at": v.published_at.isoformat() if v.published_at else None,
-                "updated_at": v.updated_at.isoformat() if v.updated_at else None,
-                "is_current": v.version == skill.current_version,
-                "content_preview": v.content[:120] + "..." if v.content and len(v.content) > 120 else v.content,
+                "id": v["id"],
+                "version": v["version"],
+                "changelog": v["changelog"],
+                "is_stable": v["is_stable"],
+                "is_beta": v["is_beta"],
+                "published_at": v["published_at"].isoformat() if v["published_at"] else None,
+                "updated_at": None,  # populated after migrate_skill_versions_updated_at.py runs
+                "is_current": v["version"] == skill.current_version,
+                "content_preview": (v["content"][:120] + "...") if v["content"] and len(v["content"]) > 120 else v["content"],
             }
             for v in versions
         ]
@@ -3053,7 +3062,7 @@ async def get_skill_version(
         "is_stable": v.is_stable,
         "is_beta": v.is_beta,
         "published_at": v.published_at.isoformat() if v.published_at else None,
-        "updated_at": v.updated_at.isoformat() if v.updated_at else None,
+        "updated_at": getattr(v, 'updated_at', None) and v.updated_at.isoformat(),
     }
 
 
