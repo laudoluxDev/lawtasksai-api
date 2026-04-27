@@ -3658,6 +3658,38 @@ async def restore_page_version(slug: str, version: int, db: AsyncSession = Depen
         "new_version": new_version
     }
 
+@admin_router.post("/migrate/add-abbreviations-table")
+async def migrate_add_abbreviations_table(db: AsyncSession = Depends(get_db)):
+    """
+    One-time migration: create skill_abbreviations table + index.
+    Idempotent — safe to call multiple times.
+    """
+    from sqlalchemy import text
+    # Check if table already exists
+    exists = await db.execute(text(
+        "SELECT 1 FROM information_schema.tables "
+        "WHERE table_schema='public' AND table_name='skill_abbreviations'"
+    ))
+    if exists.fetchone():
+        return {"success": True, "message": "Table already exists"}
+    # Create table
+    await db.execute(text("""
+        CREATE TABLE skill_abbreviations (
+            id           SERIAL PRIMARY KEY,
+            product_id   TEXT NOT NULL,
+            abbreviation TEXT NOT NULL,
+            expansion    TEXT NOT NULL,
+            created_at   TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE (product_id, abbreviation)
+        )
+    """))
+    await db.execute(text(
+        "CREATE INDEX idx_abbrev_product ON skill_abbreviations(product_id)"
+    ))
+    await db.commit()
+    return {"success": True, "message": "Table and index created"}
+
+
 @admin_router.post("/migrate/add-content-pages")
 async def migrate_add_content_pages(db: AsyncSession = Depends(get_db)):
     """One-time migration to create content_pages and content_page_versions tables."""
