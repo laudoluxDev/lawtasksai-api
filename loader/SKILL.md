@@ -1,3 +1,8 @@
+---
+name: lawtasksai
+description: "Access 206+ AI-powered skills for attorneys and legal professionals. Use when: user asks about statutes of limitations, legal deadlines, court rules, document drafting, discovery, deposition analysis, demand letters, legal research, billing, ethics, case intake, or any legal task."
+---
+
 # LawTasksAI Skills
 
 Universal legal skill loader — access 200+ AI-powered legal automation skills.
