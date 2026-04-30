@@ -185,6 +185,7 @@ class License(Base):
     usage_count: Mapped[int] = mapped_column(Integer, default=0)
     credits_purchased: Mapped[int] = mapped_column(Integer, default=0)
     credits_remaining: Mapped[int] = mapped_column(Integer, default=0)
+    product_id: Mapped[Optional[str]] = mapped_column(String(50), default="law")
     notes: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
@@ -444,6 +445,7 @@ CREDIT_PACKS = {
     "unlimited":   {"credits": 800,  "price_cents": 59900,  "one_time": False, "name": "Unlimited"},
     "enterprise":  {"credits": 2000, "price_cents": 99900,  "one_time": False, "name": "Enterprise"},
     # Legacy aliases
+    "peek":        {"credits": 5,    "price_cents": 500,    "one_time": False, "name": "Peek"},
     "trial":       {"credits": 15,   "price_cents": 2900,   "one_time": False, "name": "Starter"},
     "essentials":  {"credits": 60,   "price_cents": 9900,   "one_time": False, "name": "Pro"},
     "accelerator": {"credits": 150,  "price_cents": 19900,  "one_time": False, "name": "Business"},
@@ -879,6 +881,7 @@ async def register(
         product_id=resolved_product_id,
     )
     db.add(user)
+    await db.flush()  # Ensure user row exists before license FK insert
 
     # Create trial license
     license = License(
@@ -1967,6 +1970,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                 type="credits",
                 credits_purchased=credits,
                 credits_remaining=credits,
+                product_id=purchase_product_id,
             )
             db.add(license)
             await db.flush()  # get license.id
@@ -2003,12 +2007,15 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                     type="credits",
                     credits_purchased=credits,
                     credits_remaining=credits,
+                    product_id=purchase_product_id,
                 )
                 db.add(license)
                 await db.flush()  # get license.id
             else:
                 license.credits_remaining += credits
                 license.credits_purchased += credits
+                # Always update license product_id to match the purchase site
+                license.product_id = purchase_product_id
 
         # Log transaction
         tx = CreditTransaction(
@@ -2295,7 +2302,7 @@ My license key is {license_key}"
 OpenClaw will find the file, install it, configure your license, and
 confirm when everything is ready.
 
-(If you prefer to install manually, copy the openclaw folder
+(If you prefer to install manually, copy this folder
 to ~/.openclaw/skills/{prod_domain.split('.')[0]}/ and restart OpenClaw.)
 
 ### Step 3: Start using!
@@ -2381,8 +2388,8 @@ The installer will:
 ## Don\'t have Python?
 
 Use {prod_name} with OpenClaw instead —
-no Python, no terminal, no config files required. See the openclaw folder
-in this download, or visit https://{prod_domain}/getting-started.html
+no Python, no terminal, no config files required. Just install OpenClaw and
+tell it to install the skill from your Downloads folder. See https://{prod_domain}/getting-started.html
 
 ## Support
 {prod_support_email} | https://{prod_domain}
@@ -2613,11 +2620,17 @@ async def download_loader(license_key: str, db: AsyncSession = Depends(get_db)):
     Download loader by license key — uses account's current product_id.
     Kept for backwards compatibility and re-download links.
     """
-    result = await db.execute(select(User).join(License, License.user_id == User.id).where(
+    result = await db.execute(select(License).where(
         License.license_key == license_key, License.status == "active"
     ))
-    user = result.scalar_one_or_none()
-    product_id = (user.product_id if user else None) or "law"
+    license = result.scalar_one_or_none()
+    if license and license.product_id:
+        product_id = license.product_id
+    else:
+        # Fall back to user's product_id
+        user_result = await db.execute(select(User).where(User.id == license.user_id)) if license else None
+        user = user_result.scalar_one_or_none() if user_result else None
+        product_id = (user.product_id if user else None) or "law"
     return await _build_loader_zip(license_key, product_id, db)
 
 
@@ -3409,6 +3422,27 @@ async def restore_page_version(slug: str, version: int, db: AsyncSession = Depen
         "restored_from": version,
         "new_version": new_version
     }
+
+@admin_router.post("/migrate/add-license-product-id")
+async def migrate_add_license_product_id(db: AsyncSession = Depends(get_db)):
+    """
+    One-time migration: add product_id column to licenses table.
+    Idempotent — safe to call multiple times.
+    """
+    from sqlalchemy import text
+    await db.execute(text(
+        "ALTER TABLE licenses ADD COLUMN IF NOT EXISTS product_id VARCHAR(50) DEFAULT 'law'"
+    ))
+    # Backfill from user product_id for existing rows
+    await db.execute(text("""
+        UPDATE licenses l
+        SET product_id = COALESCE(u.product_id, 'law')
+        FROM users u
+        WHERE l.user_id = u.id AND (l.product_id IS NULL OR l.product_id = 'law')
+    """))
+    await db.commit()
+    return {"success": True, "message": "licenses.product_id column added and backfilled"}
+
 
 @admin_router.post("/migrate/add-abbreviations-table")
 async def migrate_add_abbreviations_table(db: AsyncSession = Depends(get_db)):
