@@ -2252,7 +2252,7 @@ async def _build_loader_zip(license_key: str, product_id: str, db: AsyncSession)
     except Exception:
         pass
 
-    zip_filename = f"{prod_domain.split('.')[0]}.zip"  # e.g. contractortasksai.zip
+    zip_filename = f"{prod_domain.split('.')[0]}-skills.zip"  # e.g. contractortasksai-skills.zip
     prod_slug = prod_domain.split('.')[0]   # e.g. "realtortasksai"
     env_prefix = prod_slug.upper()          # e.g. "REALTORTASKSAI"
 
