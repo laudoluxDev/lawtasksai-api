@@ -22,7 +22,14 @@ gcloud run deploy $SERVICE_NAME \
   --memory 512Mi \
   --cpu 1 \
   --max-instances 10 \
-  --min-instances 0
+  --min-instances 0 \
+  --traffic-tags='' \
+  --no-traffic
+
+echo "🔀 Routing 100% traffic to latest revision..."
+gcloud run services update-traffic $SERVICE_NAME \
+  --to-latest \
+  --region $REGION
 
 echo "✅ Deployment complete!"
 echo "🌐 API URL: https://$SERVICE_NAME-10437713249.$REGION.run.app"
