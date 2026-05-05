@@ -7,7 +7,10 @@ description: "Access 206+ AI-powered skills for attorneys and legal professional
 
 Universal legal skill loader — access 200+ AI-powered legal automation skills.
 
-**Loader Version:** 1.6.0
+**Loader Version:** 1.7.0
+
+**What's New in 1.7.0:**
+- 📄 **Document Download** — After any skill run, you can save the output as a professionally formatted Word document (.docx) with your firm letterhead. Ask "save as Word doc" or "download this" after any result.
 
 **What's New in 1.5.0:**
 - 🔍 **Live Citation Verification** — After every skill run, all statute and rule citations in the analysis are automatically verified against authoritative sources (Cornell LII, official state legislature sites). Each citation is marked ✅ Verified, ⚠️ Unverified, or ❌ Mismatch. Mismatches trigger a prominent warning before results are displayed.
@@ -766,29 +769,193 @@ Returns current profile and missing fields.
 
 All document generation happens **on the user's machine**. The LawTasksAI server only delivers the expert schema — it never sees your client data, document content, or generated output.
 
-### How to generate a .docx after running a skill
+### When to Offer Document Download
 
-After receiving the skill result as text, use `python-docx` to save it locally:
+After completing **any skill run** (Step 7), append this prompt at the end of your response:
+
+> 📄 **Save as Word document?** Type "save as doc" or "download this" to save a formatted .docx to your Downloads folder.
+
+Also trigger document generation when the user says any of:
+- "save as Word", "save as doc", "download this", "export this"
+- "save to file", "make a Word doc", "give me a document"
+- "I need a file", "save the output"
+
+### How to Generate the .docx
+
+**Step D1: Check for python-docx**
+
+```bash
+python3 -c "import docx; print('ok')" 2>/dev/null || echo "missing"
+```
+
+If output is `missing`, run:
+```bash
+pip3 install python-docx --quiet
+```
+
+If pip3 is also unavailable, tell the user:
+> ⚠️ python-docx is not installed. Run `pip3 install python-docx` in your terminal, then ask me again.
+
+Then stop — do not attempt generation.
+
+**Step D2: Load firm profile**
+
+Read `~/.lawtasksai/profile.json`. Extract:
+- `firm_name`
+- `attorney_name`
+- `attorney_bar`
+- `bar_jurisdiction`
+- `address`
+- `city_state_zip`
+- `phone`
+- `email`
+
+If profile is missing or fields are blank, generate without letterhead (just the content + disclaimer).
+
+**Step D3: Build a safe filename**
+
+Construct: `{skill_name}-{YYYY-MM-DD}.docx`
+- Use the skill name (lowercase, spaces → hyphens), e.g. `demand-letter-drafter-2026-05-05.docx`
+- Output path: `~/Downloads/{filename}`
+- If that file already exists, append `-2`, `-3`, etc.
+
+**Step D4: Generate the document**
+
+Write and execute this Python script locally:
 
 ```python
 from docx import Document
-import os
+from docx.shared import Pt, Inches, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from datetime import date
+import os, json
 
+# --- Load profile ---
+profile_path = os.path.expanduser('~/.lawtasksai/profile.json')
+profile = {}
+try:
+    with open(profile_path) as f:
+        profile = json.load(f)
+except Exception:
+    pass
+
+firm_name      = profile.get('firm_name', '')
+attorney_name  = profile.get('attorney_name', '')
+attorney_bar   = profile.get('attorney_bar', '')
+address        = profile.get('address', '')
+city_state_zip = profile.get('city_state_zip', '')
+phone          = profile.get('phone', '')
+email          = profile.get('email', '')
+
+# --- Skill result and metadata (filled in by agent) ---
+skill_name   = "{skill_name}"        # e.g. "Demand Letter Drafter"
+skill_result = """{result_text}"""   # the full text output from Step 7
+credits_used = "{credits_used}"
+
+# --- Safe output path ---
+today = date.today().isoformat()
+base_name = skill_name.lower().replace(' ', '-')
+out_dir = os.path.expanduser('~/Downloads')
+out_path = os.path.join(out_dir, f'{base_name}-{today}.docx')
+count = 2
+while os.path.exists(out_path):
+    out_path = os.path.join(out_dir, f'{base_name}-{today}-{count}.docx')
+    count += 1
+
+# --- Build document ---
 doc = Document()
-doc.add_paragraph(result_text)
-out_path = os.path.expanduser('~/Downloads/lawtasksai-output.docx')
+
+# Page margins
+for section in doc.sections:
+    section.top_margin    = Inches(1)
+    section.bottom_margin = Inches(1)
+    section.left_margin   = Inches(1.25)
+    section.right_margin  = Inches(1.25)
+
+# Letterhead (only if profile has data)
+if firm_name or attorney_name:
+    if firm_name:
+        h = doc.add_paragraph()
+        h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = h.add_run(firm_name)
+        run.bold = True
+        run.font.size = Pt(16)
+
+    if attorney_name:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run(attorney_name)
+        run.font.size = Pt(12)
+        if attorney_bar:
+            run.text += f'  |  Bar No. {attorney_bar}'
+
+    contact_parts = [x for x in [address, city_state_zip, phone, email] if x]
+    if contact_parts:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run('  ·  '.join(contact_parts))
+        run.font.size = Pt(10)
+        run.font.color.rgb = RGBColor(0x44, 0x44, 0x44)
+
+    # Divider
+    doc.add_paragraph('─' * 72)
+
+# Document title
+title_p = doc.add_paragraph()
+title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+title_run = title_p.add_run(skill_name.upper())
+title_run.bold = True
+title_run.font.size = Pt(13)
+
+# Date
+date_p = doc.add_paragraph()
+date_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+date_p.add_run(f'Generated: {today}').font.size = Pt(10)
+
+doc.add_paragraph('')  # spacer
+
+# Body content — split on double newlines to preserve paragraph structure
+for para_text in skill_result.split('\n\n'):
+    para_text = para_text.strip()
+    if not para_text:
+        continue
+    p = doc.add_paragraph()
+    p.add_run(para_text).font.size = Pt(11)
+
+# Disclaimer footer
+doc.add_paragraph('')
+hline = doc.add_paragraph('─' * 72)
+p = doc.add_paragraph()
+p.add_run(
+    'This output is prepared for use by attorneys and paralegals. '
+    'It is not legal advice. Always apply your own professional review and judgment. '
+    f'Generated by LawTasksAI · {credits_used} credit(s) used · Processed locally on your machine.'
+).font.size = Pt(9)
+
 doc.save(out_path)
-print(f"Saved to {out_path}")
+print(out_path)
 ```
 
-Tell the user:
+**Step D5: Confirm to the user**
+
+After the script runs successfully:
 
 > **📄 Document Saved**
-> 
-> Your demand letter has been saved to:
-> `~/Downloads/lawtasksai-output.docx`
-> 
+>
+> **{Skill Name}** has been saved to:
+> `~/Downloads/{filename}.docx`
+>
+> {If letterhead: "Your firm letterhead has been applied."}
 > Your document content never left your machine.
+
+If the script raises an error, show the error message and suggest:
+> Try running `pip3 install python-docx` in your terminal, then ask me to save again.
+
+**Step D6: Offer to collect profile if missing**
+
+If profile was empty during D2, after saving append:
+
+> 💡 **Add your firm letterhead?** I can put your firm name, attorney info, and contact details on future documents. Just say "set up my letterhead" to get started.
 
 ---
 
@@ -815,6 +982,9 @@ X-Loader-Version: 1.6.0
 ---
 
 ## Changelog
+
+### v1.7.0 (2026-05-05)
+- 📄 **Document Download (Steps D1–D6):** After any skill run, the user can save formatted output as a .docx with firm letterhead. Triggered by "save as doc", "download this", etc. Uses python-docx locally — zero server involvement. Filename is skill-specific and date-stamped. Letterhead pulled from `~/.lawtasksai/profile.json`. Safe filename collision handling included.
 
 ### v1.6.0 (2026-03-17)
 - 📊 **Anonymous Gap Reporting:** When a legal question matches no skill, the loader now asks for explicit per-request consent to anonymously report the search terms to LawTasksAI. No personal data, no query content — only keywords. User can say yes or no each time. Reported terms feed the skill development roadmap.
