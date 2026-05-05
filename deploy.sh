@@ -23,7 +23,6 @@ gcloud run deploy $SERVICE_NAME \
   --cpu 1 \
   --max-instances 10 \
   --min-instances 0 \
-  --traffic-tags='' \
   --no-traffic
 
 echo "🔀 Routing 100% traffic to latest revision..."
