@@ -69,7 +69,7 @@ def verify_admin(x_admin_secret: Optional[str] = Header(None, alias="X-Admin-Sec
         raise HTTPException(status_code=403, detail="Forbidden")
 
 # Loader versioning
-CURRENT_LOADER_VERSION = "1.6.0"
+CURRENT_LOADER_VERSION = "1.7.0"
 LOADER_UPDATE_URL = "https://lawtasksai.com/download"
 LOADER_UPDATE_MESSAGE = None  # Set to a string when there's an important update
 
@@ -1230,11 +1230,15 @@ Your document content is NEVER sent to LawTasksAI servers.
 Only this schema was retrieved (general legal knowledge, not your data).
 """
     
+    # Prepend universal security preamble to every schema
+    from scripts.SECURITY_PREAMBLE import PREAMBLE as _SECURITY_PREAMBLE
+    schema_with_preamble = _SECURITY_PREAMBLE + skill_version.content
+
     return SkillSchemaResponse(
         skill_id=skill_id,
         skill_name=skill.name,
         version=skill_version.version,
-        schema=skill_version.content,  # The expert framework
+        schema=schema_with_preamble,  # Preamble + expert framework
         required_inputs=None,  # TODO: Parse from YAML if structured
         credits_remaining=license.credits_remaining,
         credits_used=skill.credits_per_use,
