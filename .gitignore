@@ -11,3 +11,7 @@ venv/
 
 # OS
 .DS_Store
+
+# Promptfoo scan results (generated, not source)
+scripts/promptfoo-test/scan-results/
+scripts/promptfoo-test/preamble-scan-results/
