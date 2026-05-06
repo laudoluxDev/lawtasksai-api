@@ -133,6 +133,8 @@ class Skill(Base):
     triggers: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), default=list)
     product_id: Mapped[str] = mapped_column(String(50), default="law")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    security_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    security_scanned_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 class SkillVersion(Base):
     __tablename__ = "skill_versions"
@@ -235,6 +237,23 @@ class SkillGap(Base):
     loader_version: Mapped[Optional[str]] = mapped_column(String(20))     # which loader version reported
     reported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+class SkillSecurityScan(Base):
+    """Tracks promptfoo security scan results per skill."""
+    __tablename__ = "skill_security_scans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    skill_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    vertical: Mapped[str] = mapped_column(String(100), nullable=False)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    tests_run: Mapped[int] = mapped_column(Integer, default=0)
+    tests_passed: Mapped[int] = mapped_column(Integer, default=0)
+    tests_failed: Mapped[int] = mapped_column(Integer, default=0)
+    plugins_tested: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String))
+    preamble_tested: Mapped[bool] = mapped_column(Boolean, default=True)
+    scan_model: Mapped[Optional[str]] = mapped_column(String(100), default='openai:gpt-4o-mini')
+    scanned_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 # ============================================
 # Database Session
 # ============================================
@@ -298,6 +317,7 @@ class SkillResponse(BaseModel):
     requires_upload: bool
     execution_type: str
     confidentiality_note: Optional[str] = None  # Warning for sensitive data handling
+    security_verified: bool = False
 
 class SkillExecuteRequest(BaseModel):
     query: str  # User's input/question
@@ -1025,7 +1045,8 @@ async def list_skills(
             credits_per_use=s.credits_per_use,
             requires_upload=s.requires_upload,
             execution_type=s.execution_type,
-            confidentiality_note=get_confidentiality_note(s)
+            confidentiality_note=get_confidentiality_note(s),
+            security_verified=bool(s.security_verified)
         )
         for s in skills
     ]
@@ -4082,6 +4103,64 @@ async def admin_seed_abbreviations(db: AsyncSession = Depends(get_db)):
     total = await db.execute(text("SELECT COUNT(*) FROM skill_abbreviations"))
     return {"success": True, "inserted_by_vertical": summary,
             "total_rows": total.scalar()}
+
+
+# ============================================
+# Admin: Security Scans
+# ============================================
+
+@admin_router.get("/security-scans")
+async def admin_get_security_scans(
+    vertical: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return security scan summary and full scan list.
+    Requires X-Admin-Secret header.
+    Optional ?vertical=law filter.
+    """
+    query = select(SkillSecurityScan)
+    if vertical:
+        query = query.where(SkillSecurityScan.vertical == vertical)
+    query = query.order_by(SkillSecurityScan.vertical, SkillSecurityScan.skill_id)
+
+    result = await db.execute(query)
+    scans = result.scalars().all()
+
+    total = len(scans)
+    verified_count = sum(1 for s in scans if s.verified)
+
+    by_vertical: dict = {}
+    for s in scans:
+        if s.vertical not in by_vertical:
+            by_vertical[s.vertical] = {"total": 0, "verified": 0}
+        by_vertical[s.vertical]["total"] += 1
+        if s.verified:
+            by_vertical[s.vertical]["verified"] += 1
+
+    scan_list = [
+        {
+            "skill_id": s.skill_id,
+            "vertical": s.vertical,
+            "verified": s.verified,
+            "tests_run": s.tests_run,
+            "tests_passed": s.tests_passed,
+            "tests_failed": s.tests_failed,
+            "plugins_tested": s.plugins_tested or [],
+            "preamble_tested": s.preamble_tested,
+            "scan_model": s.scan_model,
+            "scanned_at": s.scanned_at.isoformat() if s.scanned_at else None,
+        }
+        for s in scans
+    ]
+
+    return {
+        "summary": {
+            "total": total,
+            "verified": verified_count,
+            "by_vertical": by_vertical,
+        },
+        "scans": scan_list,
+    }
 
 
 app.include_router(admin_router)

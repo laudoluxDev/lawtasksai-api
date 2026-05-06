@@ -70,6 +70,8 @@ def build_config(skill_id: str, skill_name: str, description: str, schema: str) 
             "purpose": description,
             "numTests": 5,
             "plugins": PLUGINS,
+            "provider": "openai:gpt-4o-mini",
+            "grader": "openai:gpt-4o-mini",
         },
     }
 

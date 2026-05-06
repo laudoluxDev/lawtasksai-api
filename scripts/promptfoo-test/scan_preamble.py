@@ -54,6 +54,8 @@ def build_config(target: str, preamble: str) -> dict:
             "purpose": PURPOSE,
             "numTests": 5,
             "plugins": PLUGINS,
+            "provider": "openai:gpt-4o-mini",
+            "grader": "openai:gpt-4o-mini",
         },
     }
 
