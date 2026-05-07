@@ -318,6 +318,7 @@ class SkillResponse(BaseModel):
     execution_type: str
     confidentiality_note: Optional[str] = None  # Warning for sensitive data handling
     security_verified: bool = False
+    plugins_tested: List[str] = []
 
 class SkillExecuteRequest(BaseModel):
     query: str  # User's input/question
@@ -1020,7 +1021,15 @@ async def list_skills(
     
     result = await db.execute(query.order_by(Skill.category_id, Skill.name))
     skills = result.scalars().all()
-    
+
+    # Fetch scan data for this product in one query
+    skill_ids = [s.id for s in skills]
+    scan_result = await db.execute(
+        select(SkillSecurityScan.skill_id, SkillSecurityScan.plugins_tested)
+        .where(SkillSecurityScan.skill_id.in_(skill_ids))
+    )
+    scan_map = {row.skill_id: (row.plugins_tested or []) for row in scan_result}
+
     # Keywords that suggest document/data processing
     sensitive_keywords = ['analyzer', 'summarizer', 'reviewer', 'examiner', 'auditor', 
                           'parser', 'extractor', 'scanner', 'checker', 'drafter']
@@ -1046,7 +1055,8 @@ async def list_skills(
             requires_upload=s.requires_upload,
             execution_type=s.execution_type,
             confidentiality_note=get_confidentiality_note(s),
-            security_verified=bool(s.security_verified)
+            security_verified=bool(s.security_verified),
+            plugins_tested=scan_map.get(s.id, [])
         )
         for s in skills
     ]
