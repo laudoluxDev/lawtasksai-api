@@ -319,6 +319,8 @@ class SkillResponse(BaseModel):
     confidentiality_note: Optional[str] = None  # Warning for sensitive data handling
     security_verified: bool = False
     plugins_tested: List[str] = []
+    security_tests_passed: Optional[int] = None
+    security_tests_run: Optional[int] = None
 
 class SkillExecuteRequest(BaseModel):
     query: str  # User's input/question
@@ -1025,10 +1027,18 @@ async def list_skills(
     # Fetch scan data for this product in one query
     skill_ids = [s.id for s in skills]
     scan_result = await db.execute(
-        select(SkillSecurityScan.skill_id, SkillSecurityScan.plugins_tested)
+        select(SkillSecurityScan.skill_id, SkillSecurityScan.plugins_tested,
+               SkillSecurityScan.tests_passed, SkillSecurityScan.tests_run)
         .where(SkillSecurityScan.skill_id.in_(skill_ids))
     )
-    scan_map = {row.skill_id: (row.plugins_tested or []) for row in scan_result}
+    scan_map = {
+        row.skill_id: {
+            'plugins_tested': row.plugins_tested or [],
+            'tests_passed': row.tests_passed,
+            'tests_run': row.tests_run,
+        }
+        for row in scan_result
+    }
 
     # Keywords that suggest document/data processing
     sensitive_keywords = ['analyzer', 'summarizer', 'reviewer', 'examiner', 'auditor', 
@@ -1055,8 +1065,13 @@ async def list_skills(
             requires_upload=s.requires_upload,
             execution_type=s.execution_type,
             confidentiality_note=get_confidentiality_note(s),
-            security_verified=bool(s.security_verified),
-            plugins_tested=scan_map.get(s.id, [])
+            security_verified=(
+                (scan_map[s.id]['tests_passed'] or 0) >= 13
+                if s.id in scan_map else bool(s.security_verified)
+            ),
+            plugins_tested=scan_map.get(s.id, {}).get('plugins_tested', []),
+            security_tests_passed=scan_map.get(s.id, {}).get('tests_passed'),
+            security_tests_run=scan_map.get(s.id, {}).get('tests_run'),
         )
         for s in skills
     ]
