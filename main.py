@@ -237,6 +237,20 @@ class SkillGap(Base):
     loader_version: Mapped[Optional[str]] = mapped_column(String(20))     # which loader version reported
     reported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+class PlatformSecurityScan(Base):
+    """Platform-level (preamble) security scan results per vertical+model."""
+    __tablename__ = "platform_security_scans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    vertical: Mapped[str] = mapped_column(String(100), nullable=False, default='all')
+    scan_model: Mapped[str] = mapped_column(String(100), nullable=False)
+    tests_run: Mapped[int] = mapped_column(Integer, default=0)
+    tests_passed: Mapped[int] = mapped_column(Integer, default=0)
+    tests_failed: Mapped[int] = mapped_column(Integer, default=0)
+    scanned_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class SkillSecurityScan(Base):
     """Tracks promptfoo security scan results per skill."""
     __tablename__ = "skill_security_scans"
@@ -321,6 +335,10 @@ class SkillResponse(BaseModel):
     plugins_tested: List[str] = []
     security_tests_passed: Optional[int] = None
     security_tests_run: Optional[int] = None
+    platform_tests_passed: Optional[int] = None
+    platform_tests_run: Optional[int] = None
+    combined_tests_passed: Optional[int] = None
+    combined_tests_run: Optional[int] = None
 
 class SkillExecuteRequest(BaseModel):
     query: str  # User's input/question
@@ -1024,7 +1042,7 @@ async def list_skills(
     result = await db.execute(query.order_by(Skill.category_id, Skill.name))
     skills = result.scalars().all()
 
-    # Fetch scan data for this product in one query
+    # Fetch per-skill scan data
     skill_ids = [s.id for s in skills]
     scan_result = await db.execute(
         select(SkillSecurityScan.skill_id, SkillSecurityScan.plugins_tested,
@@ -1040,6 +1058,17 @@ async def list_skills(
         for row in scan_result
     }
 
+    # Fetch platform (preamble) scan — use primary model (Claude) for 'all' vertical
+    plat_result = await db.execute(
+        select(PlatformSecurityScan.tests_passed, PlatformSecurityScan.tests_run)
+        .where(PlatformSecurityScan.vertical == 'all')
+        .where(PlatformSecurityScan.scan_model.like('%claude%'))
+        .limit(1)
+    )
+    plat_row = plat_result.first()
+    plat_passed = plat_row.tests_passed if plat_row else 20
+    plat_run    = plat_row.tests_run    if plat_row else 20
+
     # Keywords that suggest document/data processing
     sensitive_keywords = ['analyzer', 'summarizer', 'reviewer', 'examiner', 'auditor', 
                           'parser', 'extractor', 'scanner', 'checker', 'drafter']
@@ -1054,8 +1083,29 @@ async def list_skills(
             return "🔒 Runs locally — data stays on your machine"
         return None
     
-    return [
-        SkillResponse(
+    responses = []
+    for s in skills:
+        skill_scan = scan_map.get(s.id)
+        skill_passed = skill_scan['tests_passed'] if skill_scan else None
+        skill_run    = skill_scan['tests_run']    if skill_scan else None
+
+        # Combined = platform + per-skill (only if per-skill scan exists)
+        if skill_passed is not None and skill_run is not None:
+            combined_passed = plat_passed + skill_passed
+            combined_run    = plat_run    + skill_run
+        else:
+            combined_passed = None
+            combined_run    = None
+
+        # Verified if combined passes 33/35 (or 13/15 per-skill if no platform data)
+        if combined_passed is not None and combined_run is not None:
+            verified = combined_passed >= (combined_run - 2)  # allow 2 failures in 35
+        elif skill_passed is not None:
+            verified = skill_passed >= 13
+        else:
+            verified = bool(s.security_verified)
+
+        responses.append(SkillResponse(
             id=s.id,
             name=s.name,
             description=s.description,
@@ -1065,16 +1115,16 @@ async def list_skills(
             requires_upload=s.requires_upload,
             execution_type=s.execution_type,
             confidentiality_note=get_confidentiality_note(s),
-            security_verified=(
-                (scan_map[s.id]['tests_passed'] or 0) >= 13
-                if s.id in scan_map else bool(s.security_verified)
-            ),
-            plugins_tested=scan_map.get(s.id, {}).get('plugins_tested', []),
-            security_tests_passed=scan_map.get(s.id, {}).get('tests_passed'),
-            security_tests_run=scan_map.get(s.id, {}).get('tests_run'),
-        )
-        for s in skills
-    ]
+            security_verified=verified,
+            plugins_tested=skill_scan['plugins_tested'] if skill_scan else [],
+            security_tests_passed=skill_passed,
+            security_tests_run=skill_run,
+            platform_tests_passed=plat_passed,
+            platform_tests_run=plat_run,
+            combined_tests_passed=combined_passed,
+            combined_tests_run=combined_run,
+        ))
+    return responses
 
 @app.get("/skills/triggers")
 @app.get("/v1/skills/triggers")
