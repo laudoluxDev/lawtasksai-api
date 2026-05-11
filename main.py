@@ -4814,7 +4814,7 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
         print(f"[Broadcast] send campaign: {send_data.get('code')} {send_data.get('message','')[:80]}")
 
     return {
-        "status": "ok" if str(send_data.get("code")) == "0" else "error",
+        "status": "ok" if str(send_data.get("code")) in ("0", "200") else "error",
         "campaign_name": campaign_name,
         "campaign_key": campaign_key,
         "subscriber_count": subscriber_count,
