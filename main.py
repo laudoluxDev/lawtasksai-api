@@ -4541,8 +4541,10 @@ async def migrate_sync_zoho_subscribers(db: AsyncSession = Depends(get_db)):
                 VALUES (gen_random_uuid(), :uid, :pid)
                 ON CONFLICT (user_id, product_id) DO NOTHING
             """), {"uid": str(u.id), "pid": pid})
+            await db.commit()  # commit each row individually to avoid cascading failures
             ok_count += 1
         except Exception as e:
+            await db.rollback()
             fail_count += 1
             print(f"[Sync] DB insert failed for {u.email}: {e}")
             continue
