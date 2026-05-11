@@ -4758,24 +4758,27 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
     # Step 1: Create the campaign
     campaign_name = f"{product_name} Blog — {req.post_title[:50]}"
     import urllib.parse as _up
+    # list_details must be JSON-encoded: {"listkey": ["<key>"]}
+    list_details = json.dumps({"listkey": [list_key]})
+
     async with httpx.AsyncClient(timeout=30) as client:
         create_resp = await client.post(
-            "https://campaigns.zoho.com/api/v1.1/json/createcampaign",
+            "https://campaigns.zoho.com/api/v1.1/createCampaign",
             params={"resfmt": "JSON"},
             data={
-                "campaignName": campaign_name,
-                "fromEmail": from_email,
-                "senderName": from_name,
-                "replyTo": from_email,
+                "campaignname": campaign_name,
+                "from_email": from_email,
+                "sender_name": from_name,
+                "reply_to": from_email,
                 "subject": req.subject,
-                "listKey": list_key,
+                "list_details": list_details,
                 "content": html_body,
-                "type": "email",
             },
             headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}"}
         )
         create_data = create_resp.json()
         print(f"[Broadcast] create campaign: {create_data.get('code')} {create_data.get('message','')[:80]}")
+        print(f"[Broadcast] create raw: {json.dumps(create_data)[:300]}")
 
         if str(create_data.get("code")) != "0":
             return {
@@ -4784,13 +4787,18 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
                 "raw": create_data
             }
 
-        campaign_key = create_data.get("campaignKey") or create_data.get("details", {}).get("campaignKey", "")
+        campaign_key = (
+            create_data.get("campaignkey")
+            or create_data.get("campaignKey")
+            or create_data.get("details", {}).get("campaignkey", "")
+            or create_data.get("details", {}).get("campaignKey", "")
+        )
 
         # Step 2: Send the campaign immediately
         send_resp = await client.post(
-            "https://campaigns.zoho.com/api/v1.1/json/sendcampaign",
+            "https://campaigns.zoho.com/api/v1.1/sendcampaign",
             params={"resfmt": "JSON"},
-            data={"campaignKey": campaign_key, "sendOption": "now"},
+            data={"campaignkey": campaign_key},
             headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}"}
         )
         send_data = send_resp.json()
