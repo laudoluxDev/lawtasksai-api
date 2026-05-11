@@ -2189,9 +2189,26 @@ async def get_zoho_access_token() -> str:
         return data.get("access_token", "")
 
 
+def _load_zoho_listkeys() -> dict:
+    """Load per-vertical Zoho list keys from bundled JSON."""
+    try:
+        lk_path = os.path.join(os.path.dirname(__file__) if '__file__' in dir() else '/app', 'zoho-listkeys.json')
+        with open(lk_path) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+_ZOHO_LISTKEYS: dict = _load_zoho_listkeys()
+
+
+def get_zoho_listkey(product_id: str) -> str:
+    """Get the Zoho Campaigns list key for a given product_id."""
+    return _ZOHO_LISTKEYS.get(product_id, os.getenv("ZOHO_LIST_KEY", ""))
+
+
 async def add_to_zoho_list(email: str, name: str, product_id: str = "law") -> None:
-    """Add a contact to Zoho Campaigns LawTasksAI Subscribers list with product_id tag. Fails silently."""
-    list_key = os.getenv("ZOHO_LIST_KEY", "")
+    """Add a contact to the per-vertical Zoho Campaigns list. Fails silently."""
+    list_key = get_zoho_listkey(product_id)
     if not list_key or not os.getenv("ZOHO_CAMPAIGNS_REFRESH_TOKEN"):
         return
     try:
@@ -2202,7 +2219,6 @@ async def add_to_zoho_list(email: str, name: str, product_id: str = "law") -> No
         contact_info = json.dumps({
             "Contact Email": email,
             "First Name": name or "",
-            "CONTACT_CF1": product_id,  # product_id custom field
         })
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
@@ -2210,7 +2226,7 @@ async def add_to_zoho_list(email: str, name: str, product_id: str = "law") -> No
                 params={"resfmt": "JSON", "listkey": list_key, "contactinfo": contact_info},
                 headers={"Authorization": f"Zoho-oauthtoken {access_token}"}
             )
-            print(f"[Zoho Campaigns] add subscriber {email} ({product_id}): {resp.status_code} {resp.text[:200]}")
+            print(f"[Zoho Campaigns] add subscriber {email} -> {product_id}: {resp.status_code} {resp.text[:200]}")
     except Exception as e:
         print(f"[Zoho Campaigns] failed to add subscriber {email}: {e}")
 
@@ -4681,6 +4697,7 @@ class BroadcastRequest(BaseModel):
     post_excerpt: str = ""           # 1-2 sentence teaser
     from_name: Optional[str] = None  # Defaults to product display name
     from_email: Optional[str] = None # Defaults to hello@{domain}
+    dry_run: bool = False            # If true, create draft campaign but don't send
 
 
 @admin_router.post("/broadcast")
@@ -4755,20 +4772,20 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
     if not campaigns_token:
         return {"status": "error", "reason": "Could not get Zoho Campaigns token"}
 
-    list_key = os.getenv("ZOHO_LIST_KEY", "")
-    if not list_key:
-        return {"status": "error", "reason": "ZOHO_LIST_KEY not configured"}
-
     # Step 1: Create the campaign
     campaign_name = f"{product_name} Blog — {req.post_title[:50]}"
-    import urllib.parse as _up
-    # Store email HTML temporarily so Zoho can fetch it via content_url
+    # Store email HTML for Zoho content_url import
     import hashlib as _hl
     content_id = _hl.md5(html_body.encode()).hexdigest()[:16]
     _broadcast_content_cache[content_id] = html_body
 
     api_base = os.getenv("API_BASE_URL", "https://api.lawtasksai.com")
     content_url = f"{api_base}/email-content/{content_id}"
+
+    # Use per-vertical list key
+    list_key = get_zoho_listkey(req.product_id)
+    if not list_key:
+        return {"status": "error", "reason": f"No Zoho list configured for {req.product_id}"}
 
     # list_details: {listkey: []} — empty array = all contacts in list
     list_details = json.dumps({list_key: []})
@@ -4802,7 +4819,16 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
 
         campaign_key = create_data.get("campaignKey", "")
 
-        # Step 2: Send the campaign immediately
+        # Step 2: Send or hold as draft
+        if req.dry_run:
+            return {
+                "status": "draft",
+                "campaign_name": campaign_name,
+                "campaign_key": campaign_key,
+                "subscriber_count": subscriber_count,
+                "message": "Campaign created as draft. Review in Zoho Campaigns UI before sending.",
+            }
+
         send_resp = await client.post(
             "https://campaigns.zoho.com/api/v1.1/sendcampaign",
             params={"resfmt": "JSON"},
