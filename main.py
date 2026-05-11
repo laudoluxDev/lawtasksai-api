@@ -4665,6 +4665,146 @@ async def admin_email_subscribers(
     }
 
 
+# ============================================
+# Admin: Email Broadcast
+# ============================================
+
+class BroadcastRequest(BaseModel):
+    product_id: str                  # e.g. 'law'
+    subject: str                     # Email subject line
+    post_title: str                  # Blog post title
+    post_url: str                    # Full URL to the post
+    post_excerpt: str = ""           # 1-2 sentence teaser
+    from_name: Optional[str] = None  # Defaults to product display name
+    from_email: Optional[str] = None # Defaults to hello@{domain}
+
+
+@admin_router.post("/broadcast")
+async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Send a blog post broadcast to all subscribed users for a given product_id.
+    Uses Zoho Campaigns to send a campaign to a segment of the LawTasksAI Subscribers list.
+    """
+    # Resolve product domain + name
+    product_domain = "lawtasksai.com"
+    product_name = "LawTasksAI"
+    try:
+        prod_result = await db.execute(
+            text("SELECT domain, name FROM products WHERE id = :pid AND is_active = TRUE"),
+            {"pid": req.product_id}
+        )
+        prod_row = prod_result.fetchone()
+        if prod_row:
+            product_domain = prod_row.domain or product_domain
+            product_name = prod_row.name or product_name
+    except Exception:
+        pass
+
+    from_name = req.from_name or f"{product_name} Team"
+    from_email = req.from_email or f"kent@{product_domain}"
+
+    # Count subscribers
+    count_result = await db.execute(text("""
+        SELECT COUNT(*) FROM email_subscriptions
+        WHERE product_id = :pid AND subscribed = TRUE
+    """), {"pid": req.product_id})
+    subscriber_count = count_result.scalar() or 0
+
+    if subscriber_count == 0:
+        return {"status": "skipped", "reason": f"No subscribed users for {req.product_id}"}
+
+    # Build HTML email body
+    excerpt = req.post_excerpt or f"A new post from {product_name} is ready to read."
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Georgia,serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:32px 0">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;max-width:600px">
+        <!-- Header -->
+        <tr><td style="background:#1a1a2e;padding:24px 40px">
+          <a href="https://{product_domain}" style="color:#ffffff;font-family:Arial,sans-serif;font-size:20px;font-weight:bold;text-decoration:none">{product_name}</a>
+        </td></tr>
+        <!-- Body -->
+        <tr><td style="padding:40px">
+          <p style="font-family:Arial,sans-serif;font-size:13px;color:#888;margin:0 0 16px">New from {product_name}</p>
+          <h1 style="font-family:Georgia,serif;font-size:26px;color:#1a1a2e;margin:0 0 16px;line-height:1.3">{req.post_title}</h1>
+          <p style="font-family:Arial,sans-serif;font-size:16px;color:#444;line-height:1.6;margin:0 0 28px">{excerpt}</p>
+          <a href="{req.post_url}" style="display:inline-block;background:#1a1a2e;color:#ffffff;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;padding:14px 28px;border-radius:6px;text-decoration:none">Read the full post →</a>
+        </td></tr>
+        <!-- Footer -->
+        <tr><td style="background:#f9f9f9;padding:24px 40px;border-top:1px solid #eee">
+          <p style="font-family:Arial,sans-serif;font-size:12px;color:#aaa;margin:0;line-height:1.5">
+            You're receiving this because you signed up at {product_domain}.<br>
+            <a href="$$unsub$$" style="color:#aaa">Unsubscribe</a>
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    # Get Campaigns token
+    campaigns_token = await get_zoho_campaigns_token()
+    if not campaigns_token:
+        return {"status": "error", "reason": "Could not get Zoho Campaigns token"}
+
+    list_key = os.getenv("ZOHO_LIST_KEY", "")
+    if not list_key:
+        return {"status": "error", "reason": "ZOHO_LIST_KEY not configured"}
+
+    # Step 1: Create the campaign
+    campaign_name = f"{product_name} Blog — {req.post_title[:50]}"
+    import urllib.parse as _up
+    async with httpx.AsyncClient(timeout=30) as client:
+        create_resp = await client.post(
+            "https://campaigns.zoho.com/api/v1.1/json/createcampaign",
+            params={"resfmt": "JSON"},
+            data={
+                "campaignName": campaign_name,
+                "fromEmail": from_email,
+                "senderName": from_name,
+                "replyTo": from_email,
+                "subject": req.subject,
+                "listKey": list_key,
+                "content": html_body,
+                "type": "email",
+            },
+            headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}"}
+        )
+        create_data = create_resp.json()
+        print(f"[Broadcast] create campaign: {create_data.get('code')} {create_data.get('message','')[:80]}")
+
+        if str(create_data.get("code")) != "0":
+            return {
+                "status": "error",
+                "reason": f"Campaign creation failed: {create_data.get('message')}",
+                "raw": create_data
+            }
+
+        campaign_key = create_data.get("campaignKey") or create_data.get("details", {}).get("campaignKey", "")
+
+        # Step 2: Send the campaign immediately
+        send_resp = await client.post(
+            "https://campaigns.zoho.com/api/v1.1/json/sendcampaign",
+            params={"resfmt": "JSON"},
+            data={"campaignKey": campaign_key, "sendOption": "now"},
+            headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}"}
+        )
+        send_data = send_resp.json()
+        print(f"[Broadcast] send campaign: {send_data.get('code')} {send_data.get('message','')[:80]}")
+
+    return {
+        "status": "ok" if str(send_data.get("code")) == "0" else "error",
+        "campaign_name": campaign_name,
+        "campaign_key": campaign_key,
+        "subscriber_count": subscriber_count,
+        "send_response": send_data,
+    }
+
+
 app.include_router(admin_router)
 
 
