@@ -4508,6 +4508,74 @@ async def migrate_add_email_subscriptions(db: AsyncSession = Depends(get_db)):
 # Admin: Email Subscribers
 # ============================================
 
+@admin_router.post("/migrate/sync-zoho-subscribers")
+async def migrate_sync_zoho_subscribers(db: AsyncSession = Depends(get_db)):
+    """
+    One-time: backfill email_subscriptions for existing users + add them to Zoho Campaigns.
+    Idempotent — uses INSERT ON CONFLICT DO NOTHING.
+    """
+    # Find all users without an email_subscriptions row for their product_id
+    result = await db.execute(text("""
+        SELECT u.id, u.email, u.name, u.product_id
+        FROM users u
+        LEFT JOIN email_subscriptions es
+            ON es.user_id = u.id AND es.product_id = COALESCE(u.product_id, 'law')
+        WHERE es.id IS NULL
+        ORDER BY u.created_at
+    """))
+    users = result.fetchall()
+
+    campaigns_token = await get_zoho_campaigns_token()
+    list_key = os.getenv("ZOHO_LIST_KEY", "")
+
+    ok_count = 0
+    fail_count = 0
+    zoho_ok = 0
+
+    for u in users:
+        pid = u.product_id or "law"
+        # Insert subscription row
+        try:
+            await db.execute(text("""
+                INSERT INTO email_subscriptions (user_id, product_id)
+                VALUES (:uid, :pid)
+                ON CONFLICT (user_id, product_id) DO NOTHING
+            """), {"uid": str(u.id), "pid": pid})
+            ok_count += 1
+        except Exception as e:
+            fail_count += 1
+            print(f"[Sync] DB insert failed for {u.email}: {e}")
+            continue
+
+        # Add to Zoho
+        if campaigns_token and list_key:
+            try:
+                contact_info = json.dumps({
+                    "Contact Email": u.email,
+                    "First Name": (u.name or "").split()[0] if u.name else "",
+                    "CONTACT_CF1": pid,
+                })
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.post(
+                        "https://campaigns.zoho.com/api/v1.1/listsubscribe",
+                        params={"resfmt": "JSON", "listkey": list_key, "contactinfo": contact_info},
+                        headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}"}
+                    )
+                    if resp.json().get("code") == "0":
+                        zoho_ok += 1
+            except Exception as ze:
+                print(f"[Sync] Zoho add failed for {u.email}: {ze}")
+
+    await db.commit()
+    return {
+        "status": "ok",
+        "users_found": len(users),
+        "db_inserted": ok_count,
+        "db_failed": fail_count,
+        "zoho_added": zoho_ok,
+    }
+
+
 @admin_router.get("/email-subscribers")
 async def admin_email_subscribers(
     product_id: Optional[str] = Query(None),
