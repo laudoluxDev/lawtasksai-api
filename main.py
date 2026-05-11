@@ -23,7 +23,7 @@ import re
 # Database imports (using async SQLAlchemy)
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, select, update, func, or_, text
+from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, select, update, func, or_, text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 import uuid
 import base64
@@ -54,7 +54,7 @@ except ImportError:
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/lawtasksai")
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.taskvaultai.com")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.lawtasksai.com")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://lawtasksai.com")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
@@ -268,6 +268,20 @@ class SkillSecurityScan(Base):
     scanned_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+
+class EmailSubscription(Base):
+    """Per-vertical email subscription preferences for users."""
+    __tablename__ = "email_subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    product_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    subscribed: Mapped[bool] = mapped_column(Boolean, default=True)
+    subscribed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    unsubscribed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (UniqueConstraint("user_id", "product_id", name="uq_email_sub_user_product"),)
+
 # ============================================
 # Database Session
 # ============================================
@@ -302,6 +316,12 @@ class UserCreate(BaseModel):
     name: Optional[str] = None
     firm_name: Optional[str] = None
     product_id: Optional[str] = None  # Multi-tenancy: which product they registered from
+
+class SimpleSignupRequest(BaseModel):
+    """Password-free signup — name + email only. Password is auto-generated."""
+    email: EmailStr
+    name: Optional[str] = None
+    product_id: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: str
@@ -937,7 +957,111 @@ async def register(
     
     await db.commit()
     await db.refresh(user)
-    
+
+    # Send welcome email with license key
+    try:
+        # Resolve product domain and name
+        reg_product_domain = "lawtasksai.com"
+        reg_product_name = "LawTasksAI"
+        try:
+            prod_result = await db.execute(
+                text("SELECT domain, name FROM products WHERE id = :pid AND is_active = TRUE"),
+                {"pid": resolved_product_id}
+            )
+            prod_row = prod_result.fetchone()
+            if prod_row and prod_row.domain:
+                reg_product_domain = prod_row.domain
+                reg_product_name = prod_row.name
+        except Exception:
+            pass
+
+        first_name = (user.name or "").split()[0] if user.name else ""
+        greeting = f"Hi {first_name}," if first_name else "Hi there,"
+        success_url = f"https://{reg_product_domain}/success.html?signup=1"
+        task_library_url = f"https://{reg_product_domain}/task-library"
+
+        welcome_subject = f"You're in — your {reg_product_name} license key"
+        welcome_body = f"""{greeting}
+
+Your free {reg_product_name} account is ready — 5 credits are waiting.
+
+YOUR LICENSE KEY
+{license.license_key}
+
+Keep this somewhere safe. It's how you authenticate and download your skills.
+
+NEXT STEP
+Download and install your skills package:
+{success_url}
+
+Then browse 150+ tasks ready to run:
+{task_library_url}
+
+Each credit runs one task. Your 5 free credits don't expire — take your time.
+
+Questions? Reply to this email or reach us at hello@{reg_product_domain}
+
+— The {reg_product_name} Team
+"""
+
+        zoho_client_id = os.getenv("ZOHO_CLIENT_ID", "")
+        zoho_client_secret = os.getenv("ZOHO_CLIENT_SECRET", "")
+        zoho_refresh_token = os.getenv("ZOHO_MAIL_REFRESH_TOKEN", "") or os.getenv("ZOHO_REFRESH_TOKEN", "")
+        zoho_account_id = "6556209000000008002"
+
+        if zoho_client_id and zoho_refresh_token:
+            token_resp = await asyncio.get_event_loop().run_in_executor(None, lambda: __import__('urllib.request', fromlist=['urlopen']).urlopen(
+                __import__('urllib.request', fromlist=['Request']).Request(
+                    "https://accounts.zoho.com/oauth/v2/token",
+                    data=f"refresh_token={zoho_refresh_token}&client_id={zoho_client_id}&client_secret={zoho_client_secret}&grant_type=refresh_token".encode(),
+                    method="POST"
+                ), timeout=10
+            ))
+            token_data = json.loads(token_resp.read())
+            access_token = token_data.get("access_token")
+
+            if access_token:
+                import urllib.request as _ur2
+                mail_payload = json.dumps({
+                    "fromAddress": f"hello@{reg_product_domain}",
+                    "toAddress": user.email,
+                    "subject": welcome_subject,
+                    "content": welcome_body,
+                    "mailFormat": "plaintext"
+                }).encode()
+                mail_req = _ur2.Request(
+                    f"https://mail.zoho.com/api/accounts/{zoho_account_id}/messages",
+                    data=mail_payload,
+                    headers={
+                        "Authorization": f"Zoho-oauthtoken {access_token}",
+                        "Content-Type": "application/json"
+                    },
+                    method="POST"
+                )
+                with _ur2.urlopen(mail_req, timeout=10) as mr:
+                    resp_data = json.loads(mr.read())
+                    print(f"[Email] welcome sent via Zoho to {user.email}: {resp_data.get('status', {}).get('code')}")
+            else:
+                print(f"[Email] welcome Zoho token refresh failed: {token_data}")
+        else:
+            print(f"[Email] welcome skipped for {user.email}: Zoho not configured")
+    except Exception as email_err:
+        print(f"[Email] welcome failed for {user.email}: {email_err}")
+
+    # Add to Zoho Campaigns subscriber list (fire-and-forget)
+    try:
+        await add_to_zoho_list(user.email, user.name or "", resolved_product_id)
+    except Exception as zoho_err:
+        print(f"[Zoho Campaigns] signup hook failed for {user.email}: {zoho_err}")
+
+    # Insert email_subscriptions row
+    try:
+        sub = EmailSubscription(user_id=user_id, product_id=resolved_product_id)
+        db.add(sub)
+        await db.commit()
+    except Exception as sub_err:
+        print(f"[EmailSub] failed to insert subscription for {user.email}: {sub_err}")
+
     return UserResponse(
         id=str(user.id),
         email=user.email,
@@ -946,6 +1070,31 @@ async def register(
         credits_balance=user.credits_balance,
         created_at=user.created_at
     )
+
+@app.post("/v1/signup", response_model=UserResponse, status_code=201)
+async def simple_signup(
+    data: SimpleSignupRequest,
+    db: AsyncSession = Depends(get_db),
+    product_id: str = Depends(get_product_id),
+):
+    """
+    Password-free signup endpoint for landing page free-trial flow.
+    Accepts name + email only; generates a random password internally.
+    Returns the same UserResponse as /auth/register.
+    """
+    # Delegate to the existing register logic by constructing a UserCreate
+    # with an auto-generated password the user never needs to know.
+    auto_password = secrets.token_urlsafe(24)
+    resolved_product_id = data.product_id or product_id
+    user_create = UserCreate(
+        email=data.email,
+        name=data.name,
+        password=auto_password,
+        product_id=resolved_product_id,
+    )
+    # Reuse register() — pass the assembled UserCreate
+    return await register(user_create, db, resolved_product_id)
+
 
 @app.post("/auth/login", response_model=TokenResponse)
 async def login(credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
@@ -1807,6 +1956,65 @@ async def report_skill_gap(
 
 
 # ============================================
+# Routes: Support Contact Form
+# ============================================
+
+class SupportRequest(BaseModel):
+    name: str
+    email: EmailStr
+    topic: Optional[str] = ""
+    message: str
+    product: Optional[str] = "TasksAI"  # populated by the landing page template
+
+@app.post("/v1/support", status_code=204)
+async def submit_support_request(req: SupportRequest):
+    """
+    Accept a support contact form submission and forward it to the
+    product support inbox via Zoho Mail.
+    Returns 204 No Content on success.
+    """
+    # Determine the right inbox based on the product field
+    # All verticals share the same Zoho account; route to hello@lawtasksai.com
+    # (the catch-all inbox) and include the product name in the subject.
+    to_address = "hello@lawtasksai.com"
+    subject = f"[Support] {req.product} — {req.topic or 'General inquiry'}"
+    body = (
+        f"Name:    {req.name}\n"
+        f"Email:   {req.email}\n"
+        f"Product: {req.product}\n"
+        f"Topic:   {req.topic or 'Not specified'}\n"
+        f"\n"
+        f"{req.message}\n"
+        f"\n---\n"
+        f"Reply directly to this email to respond to the user.\n"
+    )
+
+    try:
+        access_token = await get_zoho_access_token()
+        if access_token:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    f"https://mail.zoho.com/api/accounts/{os.getenv('ZOHO_ACCOUNT_ID', '6556209000000008002')}/messages",
+                    json={
+                        "fromAddress": "hello@lawtasksai.com",
+                        "toAddress": to_address,
+                        "replyTo": req.email,
+                        "subject": subject,
+                        "content": body,
+                        "mailFormat": "plaintext"
+                    },
+                    headers={"Authorization": f"Zoho-oauthtoken {access_token}"}
+                )
+                print(f"[Support] form from {req.email} ({req.product}): Zoho status {resp.status_code}")
+        else:
+            print(f"[Support] could not get Zoho access token — support email NOT sent for {req.email}")
+    except Exception as e:
+        print(f"[Support] failed to send support email for {req.email}: {e}")
+        # Don't surface the error to the user — the 204 response is still sent
+        # so they aren't left with a broken form. Log it for ops review.
+
+
+# ============================================
 # Routes: Checkout & Purchase
 # ============================================
 
@@ -1944,8 +2152,29 @@ async def create_checkout_session(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+async def get_zoho_campaigns_token() -> str:
+    """Exchange Zoho Campaigns refresh token for a fresh access token."""
+    refresh_token = os.getenv("ZOHO_CAMPAIGNS_REFRESH_TOKEN", "")
+    client_id = os.getenv("ZOHO_CAMPAIGNS_CLIENT_ID", "")
+    client_secret = os.getenv("ZOHO_CAMPAIGNS_CLIENT_SECRET", "")
+    if not refresh_token:
+        return ""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            "https://accounts.zoho.com/oauth/v2/token",
+            data={
+                "refresh_token": refresh_token,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "grant_type": "refresh_token"
+            }
+        )
+        data = resp.json()
+        return data.get("access_token", "")
+
+
 async def get_zoho_access_token() -> str:
-    """Exchange Zoho refresh token for a fresh access token."""
+    """Exchange Zoho Mail refresh token for a fresh access token."""
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.post(
             "https://accounts.zoho.com/oauth/v2/token",
@@ -1960,26 +2189,30 @@ async def get_zoho_access_token() -> str:
         return data.get("access_token", "")
 
 
-async def add_to_zoho_list(email: str, name: str) -> None:
-    """Add a contact to Zoho Campaigns LawTasksAI Subscribers list. Fails silently."""
+async def add_to_zoho_list(email: str, name: str, product_id: str = "law") -> None:
+    """Add a contact to Zoho Campaigns LawTasksAI Subscribers list with product_id tag. Fails silently."""
     list_key = os.getenv("ZOHO_LIST_KEY", "")
-    if not list_key or not os.getenv("ZOHO_REFRESH_TOKEN"):
+    if not list_key or not os.getenv("ZOHO_CAMPAIGNS_REFRESH_TOKEN"):
         return
     try:
-        access_token = await get_zoho_access_token()
+        access_token = await get_zoho_campaigns_token()
         if not access_token:
-            print(f"[Zoho] could not get access token")
+            print("[Zoho Campaigns] could not get access token")
             return
-        contact_info = json.dumps({"Contact Email": email, "First Name": name or ""})
+        contact_info = json.dumps({
+            "Contact Email": email,
+            "First Name": name or "",
+            "CONTACT_CF1": product_id,  # product_id custom field
+        })
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
-                "https://campaigns.zoho.com/api/v1.1/json/listsubscribe",
+                "https://campaigns.zoho.com/api/v1.1/listsubscribe",
                 params={"resfmt": "JSON", "listkey": list_key, "contactinfo": contact_info},
-                headers={"Authorization": f"Zoho-authtoken {access_token}"}
+                headers={"Authorization": f"Zoho-oauthtoken {access_token}"}
             )
-            print(f"[Zoho] add subscriber {email}: {resp.status_code} {resp.text[:200]}")
+            print(f"[Zoho Campaigns] add subscriber {email} ({product_id}): {resp.status_code} {resp.text[:200]}")
     except Exception as e:
-        print(f"[Zoho] failed to add subscriber {email}: {e}")
+        print(f"[Zoho Campaigns] failed to add subscriber {email}: {e}")
 
 
 @app.post("/webhooks/stripe")
@@ -2133,23 +2366,26 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
         # Send confirmation email via Zoho SMTP or SendGrid
         try:
-            download_url = f"https://api.taskvaultai.com/download/loader?session_id={session['id']}"
             success_url = f"https://{purchase_product_domain}/success?session_id={session['id']}"
-            email_subject = f"Your {purchase_product_name} license key and download link"
-            email_body = f"""Thank you for purchasing {purchase_product_name}!
+            task_library_url = f"https://{purchase_product_domain}/task-library"
+            email_subject = f"You're set up — your {purchase_product_name} license key"
+            email_body = f"""Your {purchase_product_name} purchase is confirmed — {credits} credits are ready to use.
 
-Your license key: {license.license_key}
-Credits: {credits}
+YOUR LICENSE KEY
+{license.license_key}
 
-Download your skills package here:
-{download_url}
+Keep this somewhere safe. It's how you authenticate and download your skills anytime.
 
-Or visit your purchase summary:
+NEXT STEP
+Visit your purchase summary to download and install:
 {success_url}
 
-Keep this email — your license key gives you access to your downloads anytime.
+You have {credits} credits to start — each credit runs one task.
+Browse what's available: {task_library_url}
 
-Questions? hello@{purchase_product_domain}
+Questions? Reply to this email or reach us at hello@{purchase_product_domain}
+
+— The {purchase_product_name} Team
 """
             from_addr = f"hello@{purchase_product_domain}"
             from_name = purchase_product_name
@@ -3958,7 +4194,7 @@ async def admin_provision_user(
         "product_id": product_id,
         "license_key": license.license_key,
         "credits": license.credits_remaining,
-        "download_url": f"https://api.taskvaultai.com/download/loader/{license.license_key}",
+        "download_url": f"https://api.lawtasksai.com/download/loader/{license.license_key}",
     }
 
 
@@ -4238,7 +4474,137 @@ async def admin_get_security_scans(
     }
 
 
+@admin_router.post("/migrate/add-email-subscriptions")
+async def migrate_add_email_subscriptions(db: AsyncSession = Depends(get_db)):
+    """
+    One-time migration: create email_subscriptions table + indexes.
+    Idempotent — safe to call multiple times.
+    """
+    exists = await db.execute(text(
+        "SELECT 1 FROM information_schema.tables "
+        "WHERE table_schema='public' AND table_name='email_subscriptions'"
+    ))
+    if exists.fetchone():
+        return {"success": True, "message": "Table already exists"}
+    await db.execute(text("""
+        CREATE TABLE email_subscriptions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id),
+            product_id VARCHAR(50) NOT NULL,
+            subscribed BOOLEAN DEFAULT TRUE,
+            subscribed_at TIMESTAMP DEFAULT NOW(),
+            unsubscribed_at TIMESTAMP,
+            CONSTRAINT uq_email_sub_user_product UNIQUE (user_id, product_id)
+        )
+    """))
+    await db.execute(text("CREATE INDEX idx_email_subscriptions_user_id ON email_subscriptions(user_id)"))
+    await db.execute(text("CREATE INDEX idx_email_subscriptions_product_id ON email_subscriptions(product_id)"))
+    await db.execute(text("CREATE INDEX idx_email_subscriptions_subscribed ON email_subscriptions(subscribed)"))
+    await db.commit()
+    return {"success": True, "message": "email_subscriptions table and indexes created"}
+
+
 app.include_router(admin_router)
+
+
+# ============================================
+# Zoho Campaigns Unsubscribe Webhook
+# ============================================
+
+class ZohoUnsubscribePayload(BaseModel):
+    email: str
+    listkey: Optional[str] = None
+    product_id: Optional[str] = None
+
+
+@app.post("/webhooks/zoho-unsubscribe")
+async def zoho_unsubscribe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Receives unsubscribe notifications from Zoho Campaigns.
+    Sets email_subscriptions.subscribed = false for the given user + product_id.
+    Does NOT affect credits, license, or account access.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = dict(await request.form())
+
+    email = body.get("email", "").strip().lower()
+    product_id = body.get("product_id") or body.get("CONTACT_CF1") or "law"
+
+    if not email:
+        return {"status": "ignored", "reason": "no email"}
+
+    # Find user by email
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        return {"status": "ignored", "reason": "user not found"}
+
+    # Update or insert unsubscription record
+    result2 = await db.execute(
+        select(EmailSubscription).where(
+            EmailSubscription.user_id == user.id,
+            EmailSubscription.product_id == product_id
+        )
+    )
+    sub = result2.scalar_one_or_none()
+    if sub:
+        sub.subscribed = False
+        sub.unsubscribed_at = datetime.utcnow()
+    else:
+        sub = EmailSubscription(
+            user_id=user.id,
+            product_id=product_id,
+            subscribed=False,
+            unsubscribed_at=datetime.utcnow()
+        )
+        db.add(sub)
+
+    await db.commit()
+    print(f"[Zoho Unsubscribe] {email} unsubscribed from {product_id}")
+    return {"status": "ok"}
+
+
+# ============================================
+# Admin: Email Subscribers
+# ============================================
+
+@admin_router.get("/email-subscribers")
+async def admin_email_subscribers(
+    product_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    GET /admin/email-subscribers?product_id=law
+    Returns subscriber counts per vertical (or for a specific vertical).
+    """
+    query = select(
+        EmailSubscription.product_id,
+        func.count(EmailSubscription.id).label("total"),
+        func.sum(
+            func.cast(EmailSubscription.subscribed, Integer)
+        ).label("subscribed")
+    ).group_by(EmailSubscription.product_id)
+
+    if product_id:
+        query = query.where(EmailSubscription.product_id == product_id)
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    return {
+        "subscribers": [
+            {
+                "product_id": row.product_id,
+                "total": row.total,
+                "subscribed": int(row.subscribed or 0),
+                "unsubscribed": row.total - int(row.subscribed or 0),
+            }
+            for row in rows
+        ]
+    }
+
 
 if __name__ == "__main__":
     import uvicorn
