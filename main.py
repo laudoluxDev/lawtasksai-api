@@ -1056,7 +1056,7 @@ Questions? Reply to this email or reach us at hello@{reg_product_domain}
 
     # Insert email_subscriptions row
     try:
-        sub = EmailSubscription(user_id=user_id, product_id=resolved_product_id)
+        sub = EmailSubscription(user_id=user_id, product_id=resolved_product_id, subscribed=True)
         db.add(sub)
         await db.commit()
     except Exception as sub_err:
@@ -4537,8 +4537,8 @@ async def migrate_sync_zoho_subscribers(db: AsyncSession = Depends(get_db)):
         # Insert subscription row
         try:
             await db.execute(text("""
-                INSERT INTO email_subscriptions (id, user_id, product_id)
-                VALUES (gen_random_uuid(), :uid, :pid)
+                INSERT INTO email_subscriptions (id, user_id, product_id, subscribed, subscribed_at)
+                VALUES (gen_random_uuid(), :uid, :pid, TRUE, NOW())
                 ON CONFLICT (user_id, product_id) DO NOTHING
             """), {"uid": str(u.id), "pid": pid})
             await db.commit()  # commit each row individually to avoid cascading failures
