@@ -4563,7 +4563,9 @@ async def migrate_sync_zoho_subscribers(db: AsyncSession = Depends(get_db)):
                         params={"resfmt": "JSON", "listkey": list_key, "contactinfo": contact_info},
                         headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}"}
                     )
-                    if resp.json().get("code") == "0":
+                    rj = resp.json()
+                    print(f"[Sync] Zoho {u.email}: code={rj.get('code')} msg={rj.get('message','')[:60]}")
+                    if str(rj.get("code")) == "0" or "already" in rj.get("message", "").lower():
                         zoho_ok += 1
             except Exception as ze:
                 print(f"[Sync] Zoho add failed for {u.email}: {ze}")
