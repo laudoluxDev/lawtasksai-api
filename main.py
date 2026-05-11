@@ -2206,7 +2206,7 @@ async def add_to_zoho_list(email: str, name: str, product_id: str = "law") -> No
         })
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
-                "https://campaigns.zoho.com/api/v1.1/listsubscribe",
+                "https://campaigns.zoho.com/api/v1.1/json/listsubscribe",
                 params={"resfmt": "JSON", "listkey": list_key, "contactinfo": contact_info},
                 headers={"Authorization": f"Zoho-oauthtoken {access_token}"}
             )
@@ -4559,7 +4559,7 @@ async def migrate_sync_zoho_subscribers(db: AsyncSession = Depends(get_db)):
                 })
                 async with httpx.AsyncClient(timeout=10) as client:
                     resp = await client.post(
-                        "https://campaigns.zoho.com/api/v1.1/listsubscribe",
+                        "https://campaigns.zoho.com/api/v1.1/json/listsubscribe",
                         params={"resfmt": "JSON", "listkey": list_key, "contactinfo": contact_info},
                         headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}"}
                     )
@@ -4612,7 +4612,7 @@ async def migrate_push_to_zoho(db: AsyncSession = Depends(get_db)):
             })
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.post(
-                    "https://campaigns.zoho.com/api/v1.1/listsubscribe",
+                    "https://campaigns.zoho.com/api/v1.1/json/listsubscribe",
                     params={"resfmt": "JSON", "listkey": list_key, "contactinfo": contact_info},
                     headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}"}
                 )
