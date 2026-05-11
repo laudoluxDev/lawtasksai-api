@@ -4669,6 +4669,10 @@ async def admin_email_subscribers(
 # Admin: Email Broadcast
 # ============================================
 
+# In-memory cache for broadcast email HTML (Zoho fetches via content_url)
+_broadcast_content_cache: dict = {}
+
+
 class BroadcastRequest(BaseModel):
     product_id: str                  # e.g. 'law'
     subject: str                     # Email subject line
@@ -4758,8 +4762,18 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
     # Step 1: Create the campaign
     campaign_name = f"{product_name} Blog — {req.post_title[:50]}"
     import urllib.parse as _up
-    # list_details must be JSON-encoded: {"listkey": ["<key>"]}
-    list_details = json.dumps({"listkey": [list_key]})
+    # Store email HTML temporarily so Zoho can fetch it via content_url
+    import hashlib as _hl
+    content_id = _hl.md5(html_body.encode()).hexdigest()[:16]
+    _broadcast_content_cache[content_id] = html_body
+
+    api_base = os.getenv("API_BASE_URL", "https://api.lawtasksai.com")
+    content_url = f"{api_base}/email-content/{content_id}"
+
+    # list_details: {listkey: []} — empty array = all contacts in list
+    list_details = json.dumps({list_key: []})
+    # topicId is mandatory for Zoho orgs with topic management enabled
+    topic_id = os.getenv("ZOHO_TOPIC_ID", "1612833000000048017")
 
     async with httpx.AsyncClient(timeout=30) as client:
         create_resp = await client.post(
@@ -4768,38 +4782,33 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
             data={
                 "campaignname": campaign_name,
                 "from_email": from_email,
-                "sender_name": from_name,
-                "reply_to": from_email,
                 "subject": req.subject,
                 "list_details": list_details,
-                "content": html_body,
+                "topicId": topic_id,
+                "content_url": content_url,
             },
-            headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}"}
+            headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}",
+                     "Content-Type": "application/x-www-form-urlencoded"}
         )
         create_data = create_resp.json()
         print(f"[Broadcast] create campaign: {create_data.get('code')} {create_data.get('message','')[:80]}")
-        print(f"[Broadcast] create raw: {json.dumps(create_data)[:300]}")
 
-        if str(create_data.get("code")) != "0":
+        if str(create_data.get("code")) != "200":
             return {
                 "status": "error",
                 "reason": f"Campaign creation failed: {create_data.get('message')}",
                 "raw": create_data
             }
 
-        campaign_key = (
-            create_data.get("campaignkey")
-            or create_data.get("campaignKey")
-            or create_data.get("details", {}).get("campaignkey", "")
-            or create_data.get("details", {}).get("campaignKey", "")
-        )
+        campaign_key = create_data.get("campaignKey", "")
 
         # Step 2: Send the campaign immediately
         send_resp = await client.post(
             "https://campaigns.zoho.com/api/v1.1/sendcampaign",
             params={"resfmt": "JSON"},
             data={"campaignkey": campaign_key},
-            headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}"}
+            headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}",
+                     "Content-Type": "application/x-www-form-urlencoded"}
         )
         send_data = send_resp.json()
         print(f"[Broadcast] send campaign: {send_data.get('code')} {send_data.get('message','')[:80]}")
@@ -4814,6 +4823,16 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
 
 
 app.include_router(admin_router)
+
+
+@app.get("/email-content/{content_id}")
+async def serve_email_content(content_id: str):
+    """Serve temporary broadcast email HTML for Zoho content_url import."""
+    from fastapi.responses import HTMLResponse
+    html = _broadcast_content_cache.get(content_id)
+    if not html:
+        raise HTTPException(status_code=404, detail="Content not found or expired")
+    return HTMLResponse(content=html)
 
 
 # ============================================
