@@ -4537,8 +4537,8 @@ async def migrate_sync_zoho_subscribers(db: AsyncSession = Depends(get_db)):
         # Insert subscription row
         try:
             await db.execute(text("""
-                INSERT INTO email_subscriptions (user_id, product_id)
-                VALUES (:uid, :pid)
+                INSERT INTO email_subscriptions (id, user_id, product_id)
+                VALUES (gen_random_uuid(), :uid, :pid)
                 ON CONFLICT (user_id, product_id) DO NOTHING
             """), {"uid": str(u.id), "pid": pid})
             ok_count += 1
