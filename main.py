@@ -4504,6 +4504,46 @@ async def migrate_add_email_subscriptions(db: AsyncSession = Depends(get_db)):
     return {"success": True, "message": "email_subscriptions table and indexes created"}
 
 
+# ============================================
+# Admin: Email Subscribers
+# ============================================
+
+@admin_router.get("/email-subscribers")
+async def admin_email_subscribers(
+    product_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    GET /admin/email-subscribers?product_id=law
+    Returns subscriber counts per vertical (or for a specific vertical).
+    """
+    query = select(
+        EmailSubscription.product_id,
+        func.count(EmailSubscription.id).label("total"),
+        func.sum(
+            func.cast(EmailSubscription.subscribed, Integer)
+        ).label("subscribed")
+    ).group_by(EmailSubscription.product_id)
+
+    if product_id:
+        query = query.where(EmailSubscription.product_id == product_id)
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    return {
+        "subscribers": [
+            {
+                "product_id": row.product_id,
+                "total": row.total,
+                "subscribed": int(row.subscribed or 0),
+                "unsubscribed": row.total - int(row.subscribed or 0),
+            }
+            for row in rows
+        ]
+    }
+
+
 app.include_router(admin_router)
 
 
@@ -4564,46 +4604,6 @@ async def zoho_unsubscribe_webhook(request: Request, db: AsyncSession = Depends(
     await db.commit()
     print(f"[Zoho Unsubscribe] {email} unsubscribed from {product_id}")
     return {"status": "ok"}
-
-
-# ============================================
-# Admin: Email Subscribers
-# ============================================
-
-@admin_router.get("/email-subscribers")
-async def admin_email_subscribers(
-    product_id: Optional[str] = Query(None),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    GET /admin/email-subscribers?product_id=law
-    Returns subscriber counts per vertical (or for a specific vertical).
-    """
-    query = select(
-        EmailSubscription.product_id,
-        func.count(EmailSubscription.id).label("total"),
-        func.sum(
-            func.cast(EmailSubscription.subscribed, Integer)
-        ).label("subscribed")
-    ).group_by(EmailSubscription.product_id)
-
-    if product_id:
-        query = query.where(EmailSubscription.product_id == product_id)
-
-    result = await db.execute(query)
-    rows = result.all()
-
-    return {
-        "subscribers": [
-            {
-                "product_id": row.product_id,
-                "total": row.total,
-                "subscribed": int(row.subscribed or 0),
-                "unsubscribed": row.total - int(row.subscribed or 0),
-            }
-            for row in rows
-        ]
-    }
 
 
 if __name__ == "__main__":
