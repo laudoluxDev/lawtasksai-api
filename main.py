@@ -4580,6 +4580,55 @@ async def migrate_sync_zoho_subscribers(db: AsyncSession = Depends(get_db)):
     }
 
 
+@admin_router.post("/migrate/push-to-zoho")
+async def migrate_push_to_zoho(db: AsyncSession = Depends(get_db)):
+    """
+    Push all subscribed users from email_subscriptions to Zoho Campaigns.
+    Safe to re-run — Zoho handles duplicates gracefully.
+    """
+    result = await db.execute(text("""
+        SELECT u.email, u.name, es.product_id
+        FROM email_subscriptions es
+        JOIN users u ON u.id = es.user_id
+        WHERE es.subscribed = TRUE
+        ORDER BY es.subscribed_at
+    """))
+    rows = result.fetchall()
+
+    campaigns_token = await get_zoho_campaigns_token()
+    list_key = os.getenv("ZOHO_LIST_KEY", "")
+
+    if not campaigns_token or not list_key:
+        return {"status": "error", "reason": "Zoho Campaigns not configured"}
+
+    ok = 0
+    fail = 0
+    for row in rows:
+        try:
+            contact_info = json.dumps({
+                "Contact Email": row.email,
+                "First Name": (row.name or "").split()[0] if row.name else "",
+                "CONTACT_CF1": row.product_id or "law",
+            })
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    "https://campaigns.zoho.com/api/v1.1/listsubscribe",
+                    params={"resfmt": "JSON", "listkey": list_key, "contactinfo": contact_info},
+                    headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}"}
+                )
+                rj = resp.json()
+                print(f"[ZohoPush] {row.email} ({row.product_id}): code={rj.get('code')} {rj.get('message','')[:50]}")
+                if str(rj.get("code")) == "0" or "already" in rj.get("message", "").lower():
+                    ok += 1
+                else:
+                    fail += 1
+        except Exception as e:
+            print(f"[ZohoPush] failed for {row.email}: {e}")
+            fail += 1
+
+    return {"status": "ok", "total": len(rows), "zoho_added": ok, "failed": fail}
+
+
 @admin_router.get("/email-subscribers")
 async def admin_email_subscribers(
     product_id: Optional[str] = Query(None),
