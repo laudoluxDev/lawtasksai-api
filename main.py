@@ -4843,9 +4843,9 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
             "https://campaigns.zoho.com/api/v1.1/createCampaign",
             params={"resfmt": "JSON"},
             data={
-                "campaignname": f"[TEST] {campaign_name[:40]}",
+                "campaignname": f"Test Preview - {campaign_name[:40]}",
                 "from_email": from_email,
-                "subject": f"[TEST] {req.subject}",
+                "subject": f"TEST PREVIEW - {req.subject}",
                 "list_details": test_list_details,
                 "topicId": topic_id,
                 "content_url": content_url,
