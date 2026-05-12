@@ -4739,29 +4739,34 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
     html_body = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f5f5f5;font-family:Georgia,serif">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:32px 0">
+<body style="margin:0;padding:0;background:#f0f4f8;font-family:Arial,Helvetica,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4f8;padding:40px 0">
     <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;max-width:600px">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;max-width:600px;box-shadow:0 2px 8px rgba(0,0,0,0.06)">
         <!-- Header -->
-        <tr><td style="background:#1a1a2e;padding:24px 40px">
-          <a href="https://{product_domain}" style="color:#ffffff;font-family:Arial,sans-serif;font-size:20px;font-weight:bold;text-decoration:none">{product_name}</a>
+        <tr><td style="background:#0f172a;padding:28px 40px;text-align:center">
+          <a href="https://{product_domain}" style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:bold;text-decoration:none;letter-spacing:0.5px">{product_name}</a>
         </td></tr>
         <!-- Body -->
-        <tr><td style="padding:40px">
-          <p style="font-family:Arial,sans-serif;font-size:13px;color:#888;margin:0 0 16px">New from {product_name}</p>
-          <h1 style="font-family:Georgia,serif;font-size:26px;color:#1a1a2e;margin:0 0 16px;line-height:1.3">{req.post_title}</h1>
-          <p style="font-family:Arial,sans-serif;font-size:16px;color:#444;line-height:1.6;margin:0 0 28px">{excerpt}</p>
-          <a href="{req.post_url}" style="display:inline-block;background:#1a1a2e;color:#ffffff;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;padding:14px 28px;border-radius:6px;text-decoration:none">Read the full post →</a>
+        <tr><td style="padding:44px 40px 40px">
+          <p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#64748b;margin:0 0 12px;text-transform:uppercase;letter-spacing:1px;font-weight:600">New from {product_name}</p>
+          <h1 style="font-family:Georgia,Times,'Times New Roman',serif;font-size:28px;color:#0f172a;margin:0 0 20px;line-height:1.35">{req.post_title}</h1>
+          <p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;color:#475569;line-height:1.7;margin:0 0 32px">{excerpt}</p>
+          <table cellpadding="0" cellspacing="0" border="0"><tr><td style="background:#2563eb;border-radius:6px;padding:14px 32px">
+            <a href="{req.post_url}" style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;text-decoration:none;display:inline-block">Read the full post &rarr;</a>
+          </td></tr></table>
         </td></tr>
+        <!-- Divider -->
+        <tr><td style="padding:0 40px"><hr style="border:none;border-top:1px solid #e2e8f0;margin:0"></td></tr>
         <!-- Footer -->
-        <tr><td style="background:#f9f9f9;padding:24px 40px;border-top:1px solid #eee">
-          <p style="font-family:Arial,sans-serif;font-size:12px;color:#aaa;margin:0;line-height:1.5">
-            You're receiving this because you signed up at {product_domain}.<br>
-            <a href="$$unsub$$" style="color:#aaa">Unsubscribe</a>
+        <tr><td style="padding:24px 40px 28px">
+          <p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#94a3b8;margin:0;line-height:1.6">
+            You received this because you signed up at <a href="https://{product_domain}" style="color:#94a3b8">{product_domain}</a>.<br>
+            <a href="$$unsub$$" style="color:#94a3b8;text-decoration:underline">Unsubscribe</a> from these emails.
           </p>
         </td></tr>
       </table>
+      <p style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#94a3b8;margin:16px 0 0;text-align:center">&copy; 2026 {product_name}. All rights reserved.</p>
     </td></tr>
   </table>
 </body>
@@ -4774,13 +4779,23 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
 
     # Step 1: Create the campaign
     campaign_name = f"{product_name} Blog — {req.post_title[:50]}"
-    # Store email HTML for Zoho content_url import
+
+    # Upload email HTML to Cloud Storage for Zoho content_url import
     import hashlib as _hl
     content_id = _hl.md5(html_body.encode()).hexdigest()[:16]
-    _broadcast_content_cache[content_id] = html_body
-
-    api_base = os.getenv("API_BASE_URL", "https://api.lawtasksai.com")
-    content_url = f"{api_base}/email-content/{content_id}"
+    try:
+        from google.cloud import storage as gcs
+        gcs_client = gcs.Client()
+        bucket = gcs_client.bucket("tasksai-email-content")
+        blob = bucket.blob(f"broadcasts/{content_id}.html")
+        blob.upload_from_string(html_body, content_type="text/html")
+        content_url = f"https://storage.googleapis.com/tasksai-email-content/broadcasts/{content_id}.html"
+        print(f"[Broadcast] uploaded email HTML to {content_url}")
+    except Exception as e:
+        print(f"[Broadcast] GCS upload failed, falling back to in-memory: {e}")
+        _broadcast_content_cache[content_id] = html_body
+        api_base = os.getenv("API_BASE_URL", "https://api.lawtasksai.com")
+        content_url = f"{api_base}/email-content/{content_id}"
 
     # Use per-vertical list key
     list_key = get_zoho_listkey(req.product_id)
