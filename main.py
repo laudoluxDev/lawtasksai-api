@@ -4834,16 +4834,55 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
 
         campaign_key = create_data.get("campaignKey", "")
 
-        # Step 2: Send or hold as draft
+        # Step 2: Send test email to admin, then hold as draft
+        test_list_key = os.getenv("ZOHO_TEST_LIST_KEY", "3z5f5746e1c119ce625cc563b0b6fecd36d78134258c4fd2a22bbfb5ac15dfdcdc")
+        test_list_details = json.dumps({test_list_key: []})
+
+        # Create a clone campaign for the test send (targets test list only)
+        test_create = await client.post(
+            "https://campaigns.zoho.com/api/v1.1/createCampaign",
+            params={"resfmt": "JSON"},
+            data={
+                "campaignname": f"[TEST] {campaign_name[:40]}",
+                "from_email": from_email,
+                "subject": f"[TEST] {req.subject}",
+                "list_details": test_list_details,
+                "topicId": topic_id,
+                "content_url": content_url,
+            },
+            headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}",
+                     "Content-Type": "application/x-www-form-urlencoded"}
+        )
+        test_data = test_create.json()
+        test_key = test_data.get("campaignKey", "")
+        test_sent = False
+
+        if str(test_data.get("code")) == "200" and test_key:
+            # Send the test campaign immediately (only goes to test list = Kent)
+            test_send = await client.post(
+                "https://campaigns.zoho.com/api/v1.1/sendcampaign",
+                params={"resfmt": "JSON"},
+                data={"campaignkey": test_key},
+                headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}",
+                         "Content-Type": "application/x-www-form-urlencoded"}
+            )
+            test_send_data = test_send.json()
+            test_sent = str(test_send_data.get("code")) in ("0", "200")
+            print(f"[Broadcast] test email sent: {test_send_data.get('code')} {test_send_data.get('message','')[:60]}")
+        else:
+            print(f"[Broadcast] test campaign create failed: {test_data.get('code')} {test_data.get('message','')[:60]}")
+
         if req.dry_run:
             return {
                 "status": "draft",
                 "campaign_name": campaign_name,
                 "campaign_key": campaign_key,
                 "subscriber_count": subscriber_count,
-                "message": "Campaign created as draft. Review in Zoho Campaigns UI before sending.",
+                "test_email_sent": test_sent,
+                "message": "Draft created. Test email sent to admin. Call POST /admin/broadcast/approve with campaign_key to send to all subscribers.",
             }
 
+        # If dry_run is False, send immediately (legacy behavior)
         send_resp = await client.post(
             "https://campaigns.zoho.com/api/v1.1/sendcampaign",
             params={"resfmt": "JSON"},
@@ -4859,6 +4898,34 @@ async def admin_broadcast(req: BroadcastRequest, db: AsyncSession = Depends(get_
         "campaign_name": campaign_name,
         "campaign_key": campaign_key,
         "subscriber_count": subscriber_count,
+        "send_response": send_data,
+    }
+
+
+class BroadcastApproveRequest(BaseModel):
+    campaign_key: str
+
+
+@admin_router.post("/broadcast/approve")
+async def admin_broadcast_approve(req: BroadcastApproveRequest):
+    """Send a previously created draft campaign to all subscribers."""
+    campaigns_token = await get_zoho_campaigns_token()
+    if not campaigns_token:
+        return {"status": "error", "reason": "Could not get Zoho Campaigns token"}
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        send_resp = await client.post(
+            "https://campaigns.zoho.com/api/v1.1/sendcampaign",
+            params={"resfmt": "JSON"},
+            data={"campaignkey": req.campaign_key},
+            headers={"Authorization": f"Zoho-oauthtoken {campaigns_token}",
+                     "Content-Type": "application/x-www-form-urlencoded"}
+        )
+        send_data = send_resp.json()
+        print(f"[Broadcast Approve] send: {send_data.get('code')} {send_data.get('message','')[:80]}")
+
+    return {
+        "status": "ok" if str(send_data.get("code")) in ("0", "200") else "error",
         "send_response": send_data,
     }
 
