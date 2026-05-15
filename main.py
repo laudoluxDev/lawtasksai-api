@@ -3489,6 +3489,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
             "license_credits": license.credits_remaining if license else None,
             "profile": user.profile or {},
             "platforms": user.platforms or [],
+            "product_id": license.product_id if license else None,
         })
     
     return {"users": users, "count": len(users)}
