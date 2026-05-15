@@ -106,6 +106,8 @@ class User(Base):
     product_id: Mapped[Optional[str]] = mapped_column(String(50), default="law")
     # Profile for document generation (firm info, letterhead, etc.)
     profile: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
+    # Platforms the user has selected (e.g. ["claude_desktop", "openclaw"])
+    platforms: Mapped[Optional[list]] = mapped_column(JSONB, default=list)
 
 class Category(Base):
     __tablename__ = "categories"
@@ -316,12 +318,14 @@ class UserCreate(BaseModel):
     name: Optional[str] = None
     firm_name: Optional[str] = None
     product_id: Optional[str] = None  # Multi-tenancy: which product they registered from
+    platforms: Optional[List[str]] = None  # e.g. ["claude_desktop", "openclaw"]
 
 class SimpleSignupRequest(BaseModel):
     """Password-free signup — name + email only. Password is auto-generated."""
     email: EmailStr
     name: Optional[str] = None
     product_id: Optional[str] = None
+    platforms: Optional[List[str]] = None  # e.g. ["claude_desktop", "openclaw"]
 
 class UserResponse(BaseModel):
     id: str
@@ -868,6 +872,14 @@ admin_router = APIRouter(
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Migration: add platforms column if it doesn't exist
+        try:
+            await conn.execute(text("""
+                ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS platforms JSONB DEFAULT '[]'::jsonb;
+            """))
+        except Exception as e:
+            print(f"[startup migration] platforms column: {e}")
 
 # CORS
 app.add_middleware(
@@ -940,6 +952,7 @@ async def register(
         firm_name=user_data.firm_name,
         credits_balance=5,  # Free signup credits
         product_id=resolved_product_id,
+        platforms=getattr(user_data, 'platforms', None) or [],
     )
     db.add(user)
     await db.flush()  # Ensure user row exists before license FK insert
@@ -1091,6 +1104,7 @@ async def simple_signup(
         name=data.name,
         password=auto_password,
         product_id=resolved_product_id,
+        platforms=data.platforms or [],
     )
     # Reuse register() — pass the assembled UserCreate
     return await register(user_create, db, resolved_product_id)
@@ -3372,6 +3386,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
             "license_type": license.type if license else None,
             "license_credits": license.credits_remaining if license else None,
             "profile": user.profile or {},
+            "platforms": user.platforms or [],
         })
     
     return {"users": users, "count": len(users)}
