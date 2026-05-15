@@ -47,11 +47,11 @@
 
     <div class="feedback-section">
       <h3>What got in the way?</h3>
-      <a href="{{FEEDBACK_URL}}?reason=installation" class="feedback-btn"><span class="emoji">🔧</span> Installation was confusing or didn't work</a>
-      <a href="{{FEEDBACK_URL}}?reason=forgot" class="feedback-btn"><span class="emoji">🕐</span> I forgot about it / got busy</a>
-      <a href="{{FEEDBACK_URL}}?reason=wrong_tool" class="feedback-btn"><span class="emoji">🖥️</span> I'm using a different AI tool than expected</a>
-      <a href="{{FEEDBACK_URL}}?reason=not_sure" class="feedback-btn"><span class="emoji">🤔</span> I'm not sure how it works yet</a>
-      <a href="{{FEEDBACK_URL}}?reason=other" class="feedback-btn"><span class="emoji">💬</span> Something else (reply to this email)</a>
+      <a href="{{FEEDBACK_BASE}}/installation?email={{USER_EMAIL}}&amp;product={{PRODUCT_ID}}" class="feedback-btn"><span class="emoji">🔧</span> Installation was confusing or didn't work</a>
+      <a href="{{FEEDBACK_BASE}}/forgot?email={{USER_EMAIL}}&amp;product={{PRODUCT_ID}}" class="feedback-btn"><span class="emoji">🕐</span> I forgot about it / got busy</a>
+      <a href="{{FEEDBACK_BASE}}/wrong_tool?email={{USER_EMAIL}}&amp;product={{PRODUCT_ID}}" class="feedback-btn"><span class="emoji">🖥️</span> I'm using a different AI tool than expected</a>
+      <a href="{{FEEDBACK_BASE}}/not_sure?email={{USER_EMAIL}}&amp;product={{PRODUCT_ID}}" class="feedback-btn"><span class="emoji">🤔</span> I'm not sure how it works yet</a>
+      <a href="{{FEEDBACK_BASE}}/other?email={{USER_EMAIL}}&amp;product={{PRODUCT_ID}}" class="feedback-btn"><span class="emoji">💬</span> Something else (reply to this email)</a>
     </div>
 
     <hr class="divider">

@@ -1993,16 +1993,17 @@ async def submit_feedback(
         print(f"[feedback/post] failed: {e}")
 
 
-@app.get("/v1/feedback")
+@app.get("/v1/feedback/{reason}")
 async def drip_feedback(
-    reason: str = Query(...),
+    reason: str,
     email: Optional[str] = Query(None),
     product: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
     One-click feedback from Email 3 drip sequence.
-    Stores reason + email, redirects to /feedback-thanks.html?reason=X
+    reason is a path segment to avoid Zoho click-tracking mangling query params.
+    Stores reason + email, redirects to /feedback-thanks?reason=X
     """
     from fastapi.responses import RedirectResponse
 

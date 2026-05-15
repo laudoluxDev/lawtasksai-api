@@ -7,7 +7,7 @@ Usage: python3 send_drip_test.py [email] [platform]
   platform: claude_desktop | openclaw | cursor | windsurf | cline | other (default: claude_desktop)
 """
 
-import json, os, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error, urllib.parse
 from pathlib import Path
 
 # ── Config ──────────────────────────────────────────────────────────────
@@ -243,7 +243,9 @@ def build_email(template_path: Path, p: dict, platform: str, email_num: int) -> 
         "{{TASK_LIBRARY_URL}}":   f"https://{domain}/task-library",
         "{{GETTING_STARTED_URL}}":f"https://{domain}/getting-started",
         "{{UNSUBSCRIBE_URL}}":    f"https://{domain}/unsubscribe",
-        "{{FEEDBACK_URL}}":       f"https://api.lawtasksai.com/v1/feedback?email=TEST_EMAIL_PLACEHOLDER&product={pid}",
+        "{{FEEDBACK_BASE}}": "https://api.lawtasksai.com/v1/feedback",
+        "{{USER_EMAIL}}": urllib.parse.quote(TEST_EMAIL),
+        "{{PRODUCT_ID}}": pid,
         "{{PRODUCT_WHY}}":        p.get("product_why", "professionals deserve better tools"),
         "{{INSTALL_BLOCK}}":      platform_install_block(platform, p),
         "{{TASK_CARDS}}":         task_cards_html(p["sample_tasks"]),
