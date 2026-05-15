@@ -271,6 +271,21 @@ class SkillSecurityScan(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class DripEmail(Base):
+    """Record of every drip email sent to a user."""
+    __tablename__ = "drip_emails"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    product_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    email_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1, 2, or 3
+    subject: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("email", "product_id", "email_number", name="uq_drip_email_per_user"),)
+
+
 class UserFeedback(Base):
     """Drip email feedback responses (Email 3 one-click buttons)."""
     __tablename__ = "user_feedback"
@@ -892,6 +907,22 @@ async def startup():
             """))
         except Exception as e:
             print(f"[startup migration] platforms column: {e}")
+        # Migration: create drip_emails table
+        try:
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS drip_emails (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID REFERENCES users(id),
+                    email VARCHAR(255) NOT NULL,
+                    product_id VARCHAR(50) NOT NULL,
+                    email_number INTEGER NOT NULL,
+                    subject VARCHAR(500),
+                    sent_at TIMESTAMP DEFAULT NOW(),
+                    CONSTRAINT uq_drip_email_per_user UNIQUE (email, product_id, email_number)
+                );
+            """))
+        except Exception as e:
+            print(f"[startup migration] drip_emails table: {e}")
         # Migration: backfill licenses.product_id from users.product_id where NULL
         try:
             await conn.execute(text("""
@@ -4774,6 +4805,61 @@ async def migrate_push_to_zoho(db: AsyncSession = Depends(get_db)):
             fail += 1
 
     return {"status": "ok", "total": len(rows), "zoho_added": ok, "failed": fail}
+
+
+class DripRecordRequest(BaseModel):
+    email: str
+    product_id: str
+    email_number: int
+    subject: Optional[str] = None
+
+
+@admin_router.post("/drip-record", status_code=201)
+async def record_drip_send(
+    data: DripRecordRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Record that a drip email was sent. Idempotent — ignores duplicates."""
+    try:
+        # Look up user_id if we can
+        u_result = await db.execute(select(User).where(User.email == data.email))
+        user = u_result.scalar_one_or_none()
+        rec = DripEmail(
+            user_id=user.id if user else None,
+            email=data.email,
+            product_id=data.product_id,
+            email_number=data.email_number,
+            subject=data.subject,
+        )
+        db.add(rec)
+        await db.commit()
+        return {"recorded": True}
+    except Exception as e:
+        # Unique constraint violation = already recorded, that's fine
+        await db.rollback()
+        return {"recorded": False, "reason": str(e)}
+
+
+@admin_router.get("/drip-status")
+async def drip_status(db: AsyncSession = Depends(get_db)):
+    """Show drip email send history per user."""
+    result = await db.execute(text("""
+        SELECT d.email, d.product_id, d.email_number, d.subject, d.sent_at
+        FROM drip_emails d
+        ORDER BY d.email, d.email_number
+    """))
+    rows = result.fetchall()
+    by_user = {}
+    for r in rows:
+        key = f"{r.email}|{r.product_id}"
+        if key not in by_user:
+            by_user[key] = {"email": r.email, "product_id": r.product_id, "emails_sent": []}
+        by_user[key]["emails_sent"].append({
+            "email_number": r.email_number,
+            "subject": r.subject,
+            "sent_at": r.sent_at.isoformat() if r.sent_at else None
+        })
+    return {"drip_records": list(by_user.values()), "count": len(by_user)}
 
 
 @admin_router.get("/email-subscribers")
