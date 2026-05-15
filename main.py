@@ -892,6 +892,18 @@ async def startup():
             """))
         except Exception as e:
             print(f"[startup migration] platforms column: {e}")
+        # Migration: backfill licenses.product_id from users.product_id where NULL
+        try:
+            await conn.execute(text("""
+                UPDATE licenses l
+                SET product_id = u.product_id
+                FROM users u
+                WHERE l.user_id = u.id
+                AND l.product_id IS NULL
+                AND u.product_id IS NOT NULL;
+            """))
+        except Exception as e:
+            print(f"[startup migration] licenses.product_id backfill: {e}")
         # Migration: create user_feedback table if it doesn't exist
         try:
             await conn.execute(text("""
@@ -987,6 +999,7 @@ async def register(
     license = License(
         license_key=generate_license_key(),
         user_id=user_id,
+        product_id=resolved_product_id,
         type="trial",
         valid_until=datetime.utcnow() + timedelta(days=14),
         credits_purchased=5,
@@ -3489,7 +3502,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
             "license_credits": license.credits_remaining if license else None,
             "profile": user.profile or {},
             "platforms": user.platforms or [],
-            "product_id": license.product_id if license else None,
+            "product_id": (license.product_id if license else None) or user.product_id or "law",
         })
     
     return {"users": users, "count": len(users)}
