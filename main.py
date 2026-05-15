@@ -4947,6 +4947,19 @@ async def admin_email_subscribers(
     }
 
 
+@app.get("/admin/unsubscribed-emails")
+async def admin_unsubscribed_emails(db: AsyncSession = Depends(get_db)):
+    """
+    GET /admin/unsubscribed-emails
+    Returns list of emails where subscribed=False (for drip skip logic).
+    """
+    result = await db.execute(
+        select(EmailSubscription.email).where(EmailSubscription.subscribed == False)
+    )
+    emails = [row[0] for row in result.all()]
+    return {"unsubscribed": emails, "count": len(emails)}
+
+
 # ============================================
 # Admin: Email Broadcast
 # ============================================
