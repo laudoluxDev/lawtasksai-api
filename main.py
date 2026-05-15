@@ -5084,6 +5084,72 @@ class ZohoUnsubscribePayload(BaseModel):
     product_id: Optional[str] = None
 
 
+@app.get("/unsubscribe")
+async def unsubscribe_get(
+    email: Optional[str] = Query(None),
+    product: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    One-click unsubscribe from drip emails.
+    Marks the user unsubscribed in email_subscriptions and redirects to
+    the vertical's /unsubscribe page with a confirmation message.
+    """
+    from fastapi.responses import RedirectResponse
+
+    safe_product = product or "law"
+
+    if email:
+        try:
+            # Mark unsubscribed in email_subscriptions
+            result = await db.execute(
+                select(EmailSubscription).where(
+                    EmailSubscription.product_id == safe_product
+                ).join(User, User.id == EmailSubscription.user_id).where(
+                    User.email == email
+                )
+            )
+            sub = result.scalar_one_or_none()
+            if sub:
+                sub.subscribed = False
+                sub.unsubscribed_at = datetime.utcnow()
+            else:
+                # User exists but no subscription row — find user and create one
+                u_result = await db.execute(select(User).where(User.email == email))
+                user = u_result.scalar_one_or_none()
+                if user:
+                    new_sub = EmailSubscription(
+                        user_id=user.id,
+                        product_id=safe_product,
+                        subscribed=False,
+                        unsubscribed_at=datetime.utcnow()
+                    )
+                    db.add(new_sub)
+            await db.commit()
+            print(f"[unsubscribe] {email} unsubscribed from {safe_product}")
+        except Exception as e:
+            print(f"[unsubscribe] error: {e}")
+
+    # Resolve domain for the vertical
+    domain = "lawtasksai.com"
+    try:
+        prod_result = await db.execute(
+            text("SELECT domain FROM products WHERE id = :pid AND is_active = TRUE"),
+            {"pid": safe_product}
+        )
+        row = prod_result.fetchone()
+        if row and row.domain:
+            domain = row.domain
+    except Exception:
+        pass
+
+    # Redirect to the vertical's unsubscribe confirmation page
+    return RedirectResponse(
+        url=f"https://{domain}/unsubscribe?confirmed=1",
+        status_code=302
+    )
+
+
 @app.post("/webhooks/zoho-unsubscribe")
 async def zoho_unsubscribe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     """
