@@ -4840,6 +4840,55 @@ async def record_drip_send(
         return {"recorded": False, "reason": str(e)}
 
 
+@admin_router.post("/migrate/fix-product-ids")
+async def fix_product_ids(db: AsyncSession = Depends(get_db)):
+    """
+    One-time migration: correct users.product_id and licenses.product_id
+    using email_subscriptions as ground truth (it was set correctly at registration).
+    """
+    result = await db.execute(text("""
+        WITH correct AS (
+            SELECT DISTINCT ON (es.user_id)
+                es.user_id,
+                es.product_id,
+                u.email
+            FROM email_subscriptions es
+            JOIN users u ON u.id = es.user_id
+            ORDER BY es.user_id, es.subscribed_at ASC
+        )
+        UPDATE users u
+        SET product_id = c.product_id
+        FROM correct c
+        WHERE u.id = c.user_id
+          AND u.product_id IS DISTINCT FROM c.product_id
+        RETURNING u.email, c.product_id AS new_product_id
+    """))
+    user_fixes = result.fetchall()
+
+    result2 = await db.execute(text("""
+        WITH correct AS (
+            SELECT DISTINCT ON (es.user_id)
+                es.user_id,
+                es.product_id
+            FROM email_subscriptions es
+            ORDER BY es.user_id, es.subscribed_at ASC
+        )
+        UPDATE licenses l
+        SET product_id = c.product_id
+        FROM correct c
+        WHERE l.user_id = c.user_id
+          AND l.product_id IS DISTINCT FROM c.product_id
+        RETURNING l.user_id, c.product_id AS new_product_id
+    """))
+    license_fixes = result2.fetchall()
+
+    await db.commit()
+    return {
+        "users_updated": [{"email": r.email, "new_product_id": r.new_product_id} for r in user_fixes],
+        "licenses_updated": len(license_fixes),
+    }
+
+
 @admin_router.get("/drip-status")
 async def drip_status(db: AsyncSession = Depends(get_db)):
     """Show drip email send history per user."""
