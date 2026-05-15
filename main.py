@@ -271,6 +271,18 @@ class SkillSecurityScan(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class UserFeedback(Base):
+    """Drip email feedback responses (Email 3 one-click buttons)."""
+    __tablename__ = "user_feedback"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    product_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    reason: Mapped[str] = mapped_column(String(100), nullable=False)
+    extra: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # free-text from 'other'
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class EmailSubscription(Base):
     """Per-vertical email subscription preferences for users."""
     __tablename__ = "email_subscriptions"
@@ -880,6 +892,20 @@ async def startup():
             """))
         except Exception as e:
             print(f"[startup migration] platforms column: {e}")
+        # Migration: create user_feedback table if it doesn't exist
+        try:
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS user_feedback (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    email VARCHAR(255),
+                    product_id VARCHAR(50),
+                    reason VARCHAR(100) NOT NULL,
+                    extra TEXT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """))
+        except Exception as e:
+            print(f"[startup migration] user_feedback table: {e}")
 
 # CORS
 app.add_middleware(
@@ -1939,6 +1965,80 @@ async def get_loader_latest(
 class GapReportRequest(BaseModel):
     search_terms: List[str]           # keywords that failed to match any skill
     loader_version: Optional[str] = None
+
+class FeedbackSubmit(BaseModel):
+    reason: str
+    email: Optional[str] = None
+    extra: Optional[str] = None
+    product: Optional[str] = None
+
+
+@app.post("/v1/feedback", status_code=204)
+async def submit_feedback(
+    data: FeedbackSubmit,
+    db: AsyncSession = Depends(get_db)
+):
+    """Accept free-text feedback from the 'other' block on feedback-thanks.html."""
+    try:
+        fb = UserFeedback(
+            email=data.email,
+            product_id=data.product or "law",
+            reason=data.reason,
+            extra=data.extra,
+        )
+        db.add(fb)
+        await db.commit()
+        print(f"[feedback/post] {data.reason} from {data.email or 'anon'}")
+    except Exception as e:
+        print(f"[feedback/post] failed: {e}")
+
+
+@app.get("/v1/feedback")
+async def drip_feedback(
+    reason: str = Query(...),
+    email: Optional[str] = Query(None),
+    product: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    One-click feedback from Email 3 drip sequence.
+    Stores reason + email, redirects to /feedback-thanks.html?reason=X
+    """
+    from fastapi.responses import RedirectResponse
+
+    VALID_REASONS = {"installation", "forgot", "wrong_tool", "not_sure", "other"}
+    safe_reason = reason if reason in VALID_REASONS else "other"
+    safe_product = product or "law"
+
+    # Store feedback (fire and forget — don't fail the redirect if DB is slow)
+    try:
+        fb = UserFeedback(
+            email=email,
+            product_id=safe_product,
+            reason=safe_reason,
+        )
+        db.add(fb)
+        await db.commit()
+        print(f"[feedback] {safe_reason} from {email or 'unknown'} ({safe_product})")
+    except Exception as e:
+        print(f"[feedback] DB store failed: {e}")
+
+    # Resolve the domain for the product so we redirect back to the right site
+    domain = "lawtasksai.com"
+    try:
+        prod_result = await db.execute(
+            text("SELECT domain FROM products WHERE id = :pid AND is_active = TRUE"),
+            {"pid": safe_product}
+        )
+        row = prod_result.fetchone()
+        if row and row.domain:
+            domain = row.domain
+    except Exception:
+        pass
+
+    redirect_url = f"https://{domain}/feedback-thanks.html?reason={safe_reason}"
+    return RedirectResponse(url=redirect_url, status_code=302)
+
 
 @app.post("/v1/feedback/gap", status_code=204)
 async def report_skill_gap(

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Have you run your first {{PRODUCT_NAME}} task yet?</title>
+<style>
+  body { margin:0; padding:0; background:#f4f5f7; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; }
+  .wrapper { max-width:600px; margin:32px auto; background:#ffffff; border-radius:10px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  .header { background:{{ACCENT_COLOR}}; padding:28px 40px; text-align:center; }
+  .header h1 { color:white; margin:0; font-size:1.3rem; font-weight:700; }
+  .body { padding:36px 40px; }
+  p { color:#4b5563; font-size:0.95rem; line-height:1.7; margin:0 0 16px; }
+  .install-reminder { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:16px 20px; margin:20px 0; font-size:0.9rem; color:#0c4a6e; }
+  .install-reminder a { color:#0369a1; font-weight:700; text-decoration:none; }
+  .task-showcase { margin:24px 0; }
+  .task-card { border:1px solid #e5e7eb; border-radius:8px; padding:14px 18px; margin-bottom:10px; }
+  .task-card .task-name { font-weight:700; color:#1a1a2e; font-size:0.95rem; margin-bottom:4px; }
+  .task-card .task-desc { font-size:0.85rem; color:#6b7280; line-height:1.5; }
+  .task-card .task-credit { font-size:0.78rem; color:#9ca3af; margin-top:6px; }
+  .cta-btn { display:block; background:{{ACCENT_COLOR}}; color:white !important; text-decoration:none; text-align:center; padding:14px 28px; border-radius:8px; font-weight:700; font-size:1rem; margin:24px 0; }
+  .divider { border:none; border-top:1px solid #e5e7eb; margin:28px 0; }
+  .footer { padding:24px 40px; background:#f9fafb; text-align:center; font-size:0.8rem; color:#9ca3af; }
+  .footer a { color:#9ca3af; text-decoration:none; }
+  .change-platform { font-size:0.82rem; color:#9ca3af; text-align:center; margin-top:12px; }
+  .change-platform a { color:#6b7280; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <div class="header">
+    <h1>Have you run your first task yet?</h1>
+  </div>
+
+  <div class="body">
+
+    <p>{{GREETING}}</p>
+
+    <p>You signed up for {{PRODUCT_NAME}} a couple of days ago and your 5 free credits are still waiting. Wanted to make sure setup didn't get in the way.</p>
+
+    <div class="install-reminder">
+      📥 <strong>Still need to install?</strong> It takes about 5 minutes.<br>
+      <a href="{{GETTING_STARTED_URL}}">→ Complete your setup at {{DOMAIN}}/getting-started</a>
+    </div>
+
+    <p>Here are three tasks you could be running right now — each one uses 1 credit:</p>
+
+    <div class="task-showcase">
+      {{TASK_CARDS}}
+    </div>
+
+    <a href="{{TASK_LIBRARY_URL}}" class="cta-btn">See all {{SKILL_COUNT}}+ tasks →</a>
+
+    <hr class="divider">
+
+    <p style="font-size:0.88rem;color:#6b7280;">Your credits don't expire — they're here whenever you're ready. No pressure.</p>
+
+    <p style="font-size:0.9rem;">— The {{PRODUCT_NAME}} Team</p>
+
+    <p class="change-platform">Using a different AI tool than expected? <a href="{{GETTING_STARTED_URL}}">Get updated install instructions →</a></p>
+
+  </div>
+
+  <div class="footer">
+    <p>You received this because you signed up for {{PRODUCT_NAME}}.</p>
+    <p style="margin-top:8px;">
+      <a href="{{TASK_LIBRARY_URL}}">Browse tasks</a> &nbsp;·&nbsp;
+      <a href="{{GETTING_STARTED_URL}}">Setup guide</a> &nbsp;·&nbsp;
+      <a href="{{UNSUBSCRIBE_URL}}">Unsubscribe</a>
+    </p>
+  </div>
+
+</div>
+</body>
+</html>

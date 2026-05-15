@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quick question about {{PRODUCT_NAME}}</title>
+<style>
+  body { margin:0; padding:0; background:#f4f5f7; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; }
+  .wrapper { max-width:600px; margin:32px auto; background:#ffffff; border-radius:10px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  .header { background:#1a1a2e; padding:28px 40px; text-align:center; }
+  .header h1 { color:white; margin:0; font-size:1.3rem; font-weight:700; }
+  .header p { color:rgba(255,255,255,0.7); margin:6px 0 0; font-size:0.88rem; }
+  .body { padding:36px 40px; }
+  p { color:#4b5563; font-size:0.95rem; line-height:1.7; margin:0 0 16px; }
+  .feedback-section { margin:24px 0; }
+  .feedback-section h3 { font-size:0.95rem; color:#1a1a2e; margin:0 0 12px; }
+  .feedback-btn {
+    display:block; text-decoration:none; padding:11px 18px;
+    border:1.5px solid #e5e7eb; border-radius:8px; margin-bottom:8px;
+    color:#374151; font-size:0.88rem; font-weight:500;
+    transition:background 0.15s;
+  }
+  .feedback-btn:hover { background:#f9fafb; }
+  .feedback-btn .emoji { margin-right:8px; }
+  .divider { border:none; border-top:1px solid #e5e7eb; margin:28px 0; }
+  .install-reminder { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:14px 18px; margin:20px 0; font-size:0.88rem; color:#0c4a6e; }
+  .install-reminder a { color:#0369a1; font-weight:700; text-decoration:none; }
+  .footer { padding:24px 40px; background:#f9fafb; text-align:center; font-size:0.8rem; color:#9ca3af; }
+  .footer a { color:#9ca3af; text-decoration:none; }
+  .change-platform { font-size:0.82rem; color:#9ca3af; text-align:center; margin-top:12px; }
+  .change-platform a { color:#6b7280; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <div class="header">
+    <h1>Quick question</h1>
+    <p>Takes 10 seconds — genuinely helps us improve</p>
+  </div>
+
+  <div class="body">
+
+    <p>{{GREETING}}</p>
+
+    <p>It's been a week since you signed up for {{PRODUCT_NAME}}. I noticed you haven't run a task yet, and I'd rather ask than guess why.</p>
+
+    <div class="feedback-section">
+      <h3>What got in the way?</h3>
+      <a href="{{FEEDBACK_URL}}?reason=installation" class="feedback-btn"><span class="emoji">🔧</span> Installation was confusing or didn't work</a>
+      <a href="{{FEEDBACK_URL}}?reason=forgot" class="feedback-btn"><span class="emoji">🕐</span> I forgot about it / got busy</a>
+      <a href="{{FEEDBACK_URL}}?reason=wrong_tool" class="feedback-btn"><span class="emoji">🖥️</span> I'm using a different AI tool than expected</a>
+      <a href="{{FEEDBACK_URL}}?reason=not_sure" class="feedback-btn"><span class="emoji">🤔</span> I'm not sure how it works yet</a>
+      <a href="{{FEEDBACK_URL}}?reason=other" class="feedback-btn"><span class="emoji">💬</span> Something else (reply to this email)</a>
+    </div>
+
+    <hr class="divider">
+
+    <div class="install-reminder">
+      📖 <strong>Still need to install?</strong> Setup takes 5 minutes.<br>
+      <a href="{{GETTING_STARTED_URL}}">→ Step-by-step guide at {{DOMAIN}}/getting-started</a>
+    </div>
+
+    <p style="font-size:0.88rem;color:#6b7280;">Your 5 credits are still here — no expiry, no pressure. We built {{PRODUCT_NAME}} because {{PRODUCT_WHY}}, and we'd love for you to actually try it.</p>
+
+    <p style="font-size:0.9rem;">— The {{PRODUCT_NAME}} Team</p>
+    <p style="font-size:0.82rem;color:#9ca3af;">P.S. If you reply directly, I'll read it.</p>
+
+    <p class="change-platform">Using a different AI tool? <a href="{{GETTING_STARTED_URL}}">Get updated install instructions →</a></p>
+
+  </div>
+
+  <div class="footer">
+    <p>You received this because you signed up for {{PRODUCT_NAME}}.</p>
+    <p style="margin-top:8px;">
+      <a href="{{TASK_LIBRARY_URL}}">Browse tasks</a> &nbsp;·&nbsp;
+      <a href="{{GETTING_STARTED_URL}}">Setup guide</a> &nbsp;·&nbsp;
+      <a href="{{UNSUBSCRIBE_URL}}">Unsubscribe</a>
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
