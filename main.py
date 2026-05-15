@@ -2036,7 +2036,8 @@ async def drip_feedback(
     except Exception:
         pass
 
-    redirect_url = f"https://{domain}/feedback-thanks.html?reason={safe_reason}"
+    # CF Workers strip .html extensions — use clean URL to avoid double-redirect
+    redirect_url = f"https://{domain}/feedback-thanks?reason={safe_reason}"
     return RedirectResponse(url=redirect_url, status_code=302)
 
 
