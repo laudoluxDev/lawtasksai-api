@@ -4954,7 +4954,9 @@ async def admin_unsubscribed_emails(db: AsyncSession = Depends(get_db)):
     Returns list of emails where subscribed=False (for drip skip logic).
     """
     result = await db.execute(
-        select(EmailSubscription.email).where(EmailSubscription.subscribed == False)
+        select(User.email)
+        .join(EmailSubscription, EmailSubscription.user_id == User.id)
+        .where(EmailSubscription.subscribed == False)
     )
     emails = [row[0] for row in result.all()]
     return {"unsubscribed": emails, "count": len(emails)}
