@@ -949,6 +949,25 @@ async def startup():
             """))
         except Exception as e:
             print(f"[startup migration] user_feedback table: {e}")
+        # Migration: create support_requests table
+        try:
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS support_requests (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    email VARCHAR(255) NOT NULL,
+                    name VARCHAR(255),
+                    product_id VARCHAR(50),
+                    subject VARCHAR(500),
+                    message TEXT,
+                    direction VARCHAR(10) NOT NULL DEFAULT 'inbound',
+                    status VARCHAR(50) NOT NULL DEFAULT 'open',
+                    zoho_message_id VARCHAR(255),
+                    replied_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """))
+        except Exception as e:
+            print(f"[startup migration] support_requests table: {e}")
 
 # CORS
 app.add_middleware(
@@ -3150,6 +3169,32 @@ async def download_loader(license_key: str, db: AsyncSession = Depends(get_db)):
 # Routes: Products (public branding endpoint)
 # ============================================
 
+@app.get("/v1/products")
+async def list_products_public(db: AsyncSession = Depends(get_db)):
+    """Public endpoint: list all active products with branding info."""
+    result = await db.execute(
+        text(
+            "SELECT id, name, display_name, domain, primary_color, accent_color, background_color "
+            "FROM products WHERE is_active = TRUE ORDER BY id"
+        )
+    )
+    rows = result.fetchall()
+    return [
+        {
+            "id": row.id,
+            "name": row.name,
+            "display_name": row.display_name or row.name,
+            "domain": row.domain,
+            "colors": {
+                "primary": row.primary_color,
+                "accent": row.accent_color,
+                "background": row.background_color,
+            },
+        }
+        for row in rows
+    ]
+
+
 @app.get("/v1/products/{product_id}")
 async def get_product(product_id: str, db: AsyncSession = Depends(get_db)):
     """
@@ -3463,6 +3508,75 @@ async def batch_update_triggers(
         "updated_skills": updated,
         "not_found": not_found
     }
+
+
+@admin_router.get("/skills/{skill_id}/versions")
+async def list_skill_versions(
+    skill_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """List all versions for a skill (admin only)."""
+    # Check skill exists
+    skill_result = await db.execute(select(Skill).where(Skill.id == skill_id))
+    skill = skill_result.scalar_one_or_none()
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_id}' not found")
+
+    ver_result = await db.execute(
+        select(SkillVersion)
+        .where(SkillVersion.skill_id == skill_id)
+        .order_by(SkillVersion.published_at.desc())
+    )
+    versions = ver_result.scalars().all()
+
+    return {
+        "skill_id": skill_id,
+        "current_version": skill.current_version,
+        "versions": [
+            {
+                "id": v.id,
+                "version": v.version,
+                "content": v.content,
+                "content_preview": (v.content[:120] + "...") if v.content and len(v.content) > 120 else v.content,
+                "changelog": v.changelog,
+                "is_stable": v.is_stable,
+                "is_beta": v.is_beta,
+                "is_current": v.version == skill.current_version,
+                "published_at": v.published_at.isoformat() if v.published_at else None,
+            }
+            for v in versions
+        ],
+    }
+
+
+@admin_router.post("/skills/{skill_id}/versions/{version}/restore")
+async def restore_skill_version(
+    skill_id: str,
+    version: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Restore a specific version as the current live version (admin only)."""
+    skill_result = await db.execute(select(Skill).where(Skill.id == skill_id))
+    skill = skill_result.scalar_one_or_none()
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_id}' not found")
+
+    ver_result = await db.execute(
+        select(SkillVersion)
+        .where(SkillVersion.skill_id == skill_id)
+        .where(SkillVersion.version == version)
+    )
+    ver = ver_result.scalar_one_or_none()
+    if not ver:
+        raise HTTPException(status_code=404, detail=f"Version '{version}' not found for skill '{skill_id}'")
+
+    await db.execute(
+        update(Skill)
+        .where(Skill.id == skill_id)
+        .values(current_version=version)
+    )
+    await db.commit()
+    return {"success": True, "skill_id": skill_id, "restored_version": version}
 
 
 @admin_router.post("/skills/{skill_id}/versions")
@@ -5209,6 +5323,104 @@ async def admin_broadcast_approve(req: BroadcastApproveRequest):
         "status": "ok" if str(send_data.get("code")) in ("0", "200") else "error",
         "send_response": send_data,
     }
+
+
+@admin_router.get("/support-requests")
+async def get_support_requests(
+    product_id: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    GET /admin/support-requests
+    List support requests, optionally filtered by product_id and/or status.
+    direction: 'inbound' = received from user, 'outbound' = reply sent by us
+    status: 'open', 'replied', 'closed'
+    """
+    filters = []
+    params = {"limit": limit}
+    if product_id:
+        filters.append("product_id = :product_id")
+        params["product_id"] = product_id
+    if status:
+        filters.append("status = :status")
+        params["status"] = status
+    where = ("WHERE " + " AND ".join(filters)) if filters else ""
+    rows = await db.execute(
+        text(f"SELECT * FROM support_requests {where} ORDER BY created_at DESC LIMIT :limit"),
+        params
+    )
+    requests = [dict(r._mapping) for r in rows]
+    return {"support_requests": requests, "total": len(requests)}
+
+
+@admin_router.post("/support-requests", status_code=201)
+async def log_support_request(
+    payload: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    POST /admin/support-requests
+    Log an inbound or outbound support message.
+    Fields: email, name, product_id, subject, message, direction, status, zoho_message_id, replied_at
+    """
+    from datetime import datetime as _dt, timezone as _tz
+    replied_at_raw = payload.get("replied_at")
+    if isinstance(replied_at_raw, str):
+        try:
+            # Parse ISO string and convert to naive UTC for asyncpg
+            dt = _dt.fromisoformat(replied_at_raw.replace("Z", "+00:00"))
+            replied_at = dt.astimezone(_tz.utc).replace(tzinfo=None)
+        except Exception:
+            replied_at = None
+    else:
+        replied_at = replied_at_raw
+    await db.execute(text("""
+        INSERT INTO support_requests
+            (email, name, product_id, subject, message, direction, status, zoho_message_id, replied_at)
+        VALUES
+            (:email, :name, :product_id, :subject, :message, :direction, :status, :zoho_message_id, :replied_at)
+    """), {
+        "email":           payload.get("email", ""),
+        "name":            payload.get("name"),
+        "product_id":      payload.get("product_id"),
+        "subject":         payload.get("subject"),
+        "message":         payload.get("message"),
+        "direction":       payload.get("direction", "inbound"),
+        "status":          payload.get("status", "open"),
+        "zoho_message_id": payload.get("zoho_message_id"),
+        "replied_at":      replied_at,
+    })
+    await db.commit()
+    return {"status": "logged"}
+
+
+@admin_router.patch("/support-requests/{request_id}")
+async def update_support_request(
+    request_id: str,
+    payload: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    PATCH /admin/support-requests/{request_id}
+    Update status (open/replied/closed) or notes on a support request.
+    """
+    allowed_fields = {"status", "replied_at", "notes"}
+    updates = {k: v for k, v in payload.items() if k in allowed_fields}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    set_clauses = ", ".join(f"{k} = :{k}" for k in updates)
+    updates["request_id"] = request_id
+    result = await db.execute(
+        text(f"UPDATE support_requests SET {set_clauses} WHERE id = :request_id"),
+        updates
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Support request not found")
+    return {"success": True, "id": request_id}
 
 
 app.include_router(admin_router)
