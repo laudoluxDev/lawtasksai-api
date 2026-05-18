@@ -2168,6 +2168,7 @@ async def submit_support_request(req: SupportRequest):
         f"Reply directly to this email to respond to the user.\n"
     )
 
+    zoho_message_id = None
     try:
         access_token = await get_zoho_access_token()
         if access_token:
@@ -2185,12 +2186,36 @@ async def submit_support_request(req: SupportRequest):
                     headers={"Authorization": f"Zoho-oauthtoken {access_token}"}
                 )
                 print(f"[Support] form from {req.email} ({req.product}): Zoho status {resp.status_code}")
+                if resp.status_code == 200:
+                    zoho_message_id = resp.json().get("data", {}).get("messageId")
         else:
             print(f"[Support] could not get Zoho access token — support email NOT sent for {req.email}")
     except Exception as e:
         print(f"[Support] failed to send support email for {req.email}: {e}")
         # Don't surface the error to the user — the 204 response is still sent
         # so they aren't left with a broken form. Log it for ops review.
+
+    # Always insert into support_requests DB regardless of email outcome
+    try:
+        async with db_engine.begin() as conn:
+            await conn.execute(
+                text("""
+                    INSERT INTO support_requests
+                        (email, name, product_id, subject, message, direction, status, zoho_message_id)
+                    VALUES
+                        (:email, :name, :product_id, :subject, :message, 'inbound', 'open', :zoho_message_id)
+                """),
+                {
+                    "email":           req.email,
+                    "name":            req.name,
+                    "product_id":      req.product.lower().replace("tasksai", "").replace(" ", ""),
+                    "subject":         subject,
+                    "message":         req.message,
+                    "zoho_message_id": zoho_message_id,
+                }
+            )
+    except Exception as e:
+        print(f"[Support] DB insert failed for {req.email}: {e}")
 
 
 # ============================================
