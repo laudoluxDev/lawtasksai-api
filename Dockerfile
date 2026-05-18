@@ -14,6 +14,9 @@ COPY zoho-listkeys.json .
 # Copy loader SKILL.md for download endpoint
 COPY loader/ /app/loader/
 
+# Copy drip email templates
+COPY drip/ /app/drip/
+
 # Run with uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
 
