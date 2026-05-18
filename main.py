@@ -4886,6 +4886,91 @@ async def process_drip_queue(
     return {"sent": sent_count, "failed": failed_count, "checked": len(rows)}
 
 
+@admin_router.get("/drip-template/{email_num}")
+async def get_drip_template(email_num: int):
+    """GET /admin/drip-template/{1|2|3} — returns HTML template content."""
+    if email_num not in (1, 2, 3):
+        raise HTTPException(status_code=400, detail="email_num must be 1, 2, or 3")
+    tpl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'drip', f'email{email_num}_template.html')
+    subjects = {
+        1: "You're in \u2014 your {{PRODUCT_NAME}} credits are ready",
+        2: "Have you run your first {{PRODUCT_NAME}} task yet?",
+        3: "Quick question about {{PRODUCT_NAME}}",
+    }
+    try:
+        with open(tpl_path) as f:
+            html = f.read()
+        return {"email_num": email_num, "html": html, "subject": subjects[email_num]}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Template {email_num} not found")
+
+
+@admin_router.post("/drip-template/{email_num}")
+async def save_drip_template(email_num: int, payload: dict):
+    """POST /admin/drip-template/{1|2|3} — saves HTML template to disk."""
+    if email_num not in (1, 2, 3):
+        raise HTTPException(status_code=400, detail="email_num must be 1, 2, or 3")
+    html = payload.get("html", "")
+    if not html:
+        raise HTTPException(status_code=400, detail="html is required")
+    tpl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'drip', f'email{email_num}_template.html')
+    try:
+        with open(tpl_path, 'w') as f:
+            f.write(html)
+        print(f"[Drip] Template {email_num} saved ({len(html)} chars)")
+        return {"saved": True, "email_num": email_num}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.post("/drip-test")
+async def send_drip_test_email(payload: dict):
+    """POST /admin/drip-test — sends a test drip email."""
+    import sys as _s, importlib as _il
+    _dp = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'drip')
+    if _dp not in _s.path: _s.path.insert(0, _dp)
+    drip_utils = _il.import_module('drip_utils')
+
+    email_num = payload.get("email_num", 1)
+    to_email = payload.get("email", "kentmercier@gmail.com")
+    platform = payload.get("platform", "claude_desktop")
+    product_id = payload.get("product_id", "law")
+
+    html = drip_utils.build_drip_email(
+        email_num=email_num, product_id=product_id,
+        product_name="LawTasksAI", domain="lawtasksai.com",
+        skill_count=206, platform=platform,
+        first_name="Kent", user_email=to_email,
+    )
+    subject = f"[TEST] {drip_utils.drip_subject(email_num, 'LawTasksAI')}"
+    access_token = await get_zoho_access_token()
+    if not access_token:
+        raise HTTPException(status_code=503, detail="Zoho token unavailable")
+    async with httpx.AsyncClient(timeout=15) as hc:
+        resp = await hc.post(
+            "https://mail.zoho.com/api/accounts/6556209000000008002/messages",
+            json={"fromAddress": "hello@lawtasksai.com", "toAddress": to_email,
+                  "subject": subject, "content": html, "mailFormat": "html"},
+            headers={"Authorization": f"Zoho-oauthtoken {access_token}"}
+        )
+    return {"sent": resp.status_code == 200, "zoho_status": resp.status_code}
+
+
+@admin_router.get("/drip-queue")
+async def drip_queue_stats(db: AsyncSession = Depends(get_db)):
+    """GET /admin/drip-queue — returns drip email queue counts."""
+    result = await db.execute(text("""
+        SELECT status, COUNT(*) FROM drip_emails GROUP BY status
+    """))
+    counts = {row[0]: row[1] for row in result.fetchall()}
+    return {
+        "sent": counts.get("sent", 0),
+        "scheduled": counts.get("scheduled", 0),
+        "failed": counts.get("failed", 0),
+        "total": sum(counts.values()),
+    }
+
+
 @admin_router.post("/drip-record", status_code=201)
 async def record_drip_send(
     data: DripRecordRequest,
