@@ -97,7 +97,7 @@ class User(Base):
     name: Mapped[Optional[str]] = mapped_column(String(255))
     firm_name: Mapped[Optional[str]] = mapped_column(String(255))
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    credits_balance: Mapped[int] = mapped_column(Integer, default=0)
+    _credits_balance: Mapped[int] = mapped_column("credits_balance", Integer, default=0)
     version_policy: Mapped[str] = mapped_column(String(20), default="latest")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -108,6 +108,24 @@ class User(Base):
     profile: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
     # Platforms the user has selected (e.g. ["claude_desktop", "openclaw"])
     platforms: Mapped[Optional[list]] = mapped_column(JSONB, default=list)
+
+    @property
+    def credits_balance(self) -> int:
+        """Single source of truth: always read from the active license."""
+        # licenses relationship loaded eagerly where needed; fall back to _credits_balance
+        try:
+            if hasattr(self, '_licenses') and self._licenses:
+                active = next((l for l in self._licenses if l.status == 'active'), None)
+                if active:
+                    return active.credits_remaining
+        except Exception:
+            pass
+        return self._credits_balance
+
+    @credits_balance.setter
+    def credits_balance(self, value: int):
+        """Write to _credits_balance for DB compat; caller should also update license."""
+        self._credits_balance = value
 
 class Category(Base):
     __tablename__ = "categories"
@@ -1194,7 +1212,7 @@ async def register(
         email=user.email,
         name=user.name,
         firm_name=user.firm_name,
-        credits_balance=user.credits_balance,
+        credits_balance=license.credits_remaining,
         created_at=user.created_at
     )
 
@@ -2554,7 +2572,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             await db.flush()  # get license.id
         else:
             # Existing customer — add credits, update product_id if this is a new product for them
-            user.credits_balance += credits
+            # credits_balance is derived from license — no write needed here
             # Only update product_id if account has no product yet
             if not user.product_id:
                 user.product_id = purchase_product_id
@@ -3568,11 +3586,11 @@ async def list_users(db: AsyncSession = Depends(get_db)):
             "email": user.email,
             "name": user.name,
             "firm_name": user.firm_name,
-            "credits_balance": user.credits_balance,
+            "credits_balance": license.credits_remaining if license else 0,
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "license_key": license.license_key if license else None,
             "license_type": license.type if license else None,
-            "license_credits": license.credits_remaining if license else None,
+            "license_credits": license.credits_remaining if license else 0,
             "profile": user.profile or {},
             "platforms": user.platforms or [],
             "product_id": (license.product_id if license else None) or user.product_id or "law",
@@ -4386,7 +4404,7 @@ async def admin_provision_user(
         # Update product_id if being provisioned for a different product
         if user.product_id != product_id:
             user.product_id = product_id
-        user.credits_balance += credits
+        # credits_balance derived from license — no write needed
         result2 = await db.execute(
             select(License).where(License.user_id == user.id, License.status == "active")
             .order_by(License.created_at.desc())
