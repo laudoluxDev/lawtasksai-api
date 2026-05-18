@@ -917,10 +917,23 @@ async def startup():
                     product_id VARCHAR(50) NOT NULL,
                     email_number INTEGER NOT NULL,
                     subject VARCHAR(500),
+                    status VARCHAR(20) NOT NULL DEFAULT 'sent',
+                    scheduled_for TIMESTAMP,
                     sent_at TIMESTAMP DEFAULT NOW(),
                     CONSTRAINT uq_drip_email_per_user UNIQUE (email, product_id, email_number)
                 );
             """))
+            # Add columns if missing (idempotent)
+            for col_def in [
+                "ALTER TABLE drip_emails ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'sent'",
+                "ALTER TABLE drip_emails ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMP",
+                "ALTER TABLE drip_emails ADD COLUMN IF NOT EXISTS platform VARCHAR(50)",
+                "ALTER TABLE drip_emails ADD COLUMN IF NOT EXISTS first_name VARCHAR(100)",
+            ]:
+                try:
+                    await conn.execute(text(col_def))
+                except Exception:
+                    pass
         except Exception as e:
             print(f"[startup migration] drip_emails table: {e}")
         # Migration: backfill licenses.product_id from users.product_id where NULL
@@ -1060,11 +1073,19 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    # Send welcome email with license key
+    # Send drip Email 1 (HTML welcome) with license key
     try:
-        # Resolve product domain and name
+        import sys as _sys
+        import importlib
+        _drip_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'drip')
+        if _drip_path not in _sys.path:
+            _sys.path.insert(0, _drip_path)
+        drip_utils = importlib.import_module('drip_utils')
+
+        # Resolve product domain, name, skill count
         reg_product_domain = "lawtasksai.com"
         reg_product_name = "LawTasksAI"
+        reg_skill_count = 206
         try:
             prod_result = await db.execute(
                 text("SELECT domain, name FROM products WHERE id = :pid AND is_active = TRUE"),
@@ -1074,81 +1095,85 @@ async def register(
             if prod_row and prod_row.domain:
                 reg_product_domain = prod_row.domain
                 reg_product_name = prod_row.name
+            # Get skill count
+            sc_result = await db.execute(
+                text("SELECT COUNT(*) FROM skills WHERE product_id = :pid AND is_active = TRUE"),
+                {"pid": resolved_product_id}
+            )
+            sc_row = sc_result.fetchone()
+            if sc_row:
+                reg_skill_count = sc_row[0] or reg_skill_count
         except Exception:
             pass
 
         first_name = (user.name or "").split()[0] if user.name else ""
-        greeting = f"Hi {first_name}," if first_name else "Hi there,"
-        success_url = f"https://{reg_product_domain}/success.html?signup=1"
-        task_library_url = f"https://{reg_product_domain}/task-library"
+        user_platform = (user.platforms or [{}])[0].get("platform", "other") if user.platforms else "other"
 
-        welcome_subject = f"You're in — your {reg_product_name} license key"
-        welcome_body = f"""{greeting}
+        email1_html = drip_utils.build_drip_email(
+            email_num=1,
+            product_id=resolved_product_id,
+            product_name=reg_product_name,
+            domain=reg_product_domain,
+            skill_count=reg_skill_count,
+            platform=user_platform,
+            first_name=first_name,
+            user_email=user.email,
+            license_key=license.license_key,
+        )
+        email1_subject = drip_utils.drip_subject(1, reg_product_name)
 
-Your free {reg_product_name} account is ready — 5 credits are waiting.
-
-YOUR LICENSE KEY
-{license.license_key}
-
-Keep this somewhere safe. It's how you authenticate and download your skills.
-
-NEXT STEP
-Download and install your skills package:
-{success_url}
-
-Then browse 150+ tasks ready to run:
-{task_library_url}
-
-Each credit runs one task. Your 5 free credits don't expire — take your time.
-
-Questions? Reply to this email or reach us at hello@{reg_product_domain}
-
-— The {reg_product_name} Team
-"""
-
-        zoho_client_id = os.getenv("ZOHO_CLIENT_ID", "")
-        zoho_client_secret = os.getenv("ZOHO_CLIENT_SECRET", "")
-        zoho_refresh_token = os.getenv("ZOHO_MAIL_REFRESH_TOKEN", "") or os.getenv("ZOHO_REFRESH_TOKEN", "")
-        zoho_account_id = "6556209000000008002"
-
-        if zoho_client_id and zoho_refresh_token:
-            token_resp = await asyncio.get_event_loop().run_in_executor(None, lambda: __import__('urllib.request', fromlist=['urlopen']).urlopen(
-                __import__('urllib.request', fromlist=['Request']).Request(
-                    "https://accounts.zoho.com/oauth/v2/token",
-                    data=f"refresh_token={zoho_refresh_token}&client_id={zoho_client_id}&client_secret={zoho_client_secret}&grant_type=refresh_token".encode(),
-                    method="POST"
-                ), timeout=10
-            ))
-            token_data = json.loads(token_resp.read())
-            access_token = token_data.get("access_token")
-
-            if access_token:
-                import urllib.request as _ur2
-                mail_payload = json.dumps({
-                    "fromAddress": f"hello@{reg_product_domain}",
-                    "toAddress": user.email,
-                    "subject": welcome_subject,
-                    "content": welcome_body,
-                    "mailFormat": "plaintext"
-                }).encode()
-                mail_req = _ur2.Request(
-                    f"https://mail.zoho.com/api/accounts/{zoho_account_id}/messages",
-                    data=mail_payload,
-                    headers={
-                        "Authorization": f"Zoho-oauthtoken {access_token}",
-                        "Content-Type": "application/json"
+        access_token = await get_zoho_access_token()
+        if access_token:
+            async with httpx.AsyncClient(timeout=15) as _hc:
+                _resp = await _hc.post(
+                    f"https://mail.zoho.com/api/accounts/6556209000000008002/messages",
+                    json={
+                        "fromAddress": f"hello@{reg_product_domain}",
+                        "toAddress": user.email,
+                        "subject": email1_subject,
+                        "content": email1_html,
+                        "mailFormat": "html",
                     },
-                    method="POST"
+                    headers={"Authorization": f"Zoho-oauthtoken {access_token}"}
                 )
-                with _ur2.urlopen(mail_req, timeout=10) as mr:
-                    resp_data = json.loads(mr.read())
-                    print(f"[Email] welcome sent via Zoho to {user.email}: {resp_data.get('status', {}).get('code')}")
-            else:
-                print(f"[Email] welcome Zoho token refresh failed: {token_data}")
+                print(f"[Drip] Email 1 sent to {user.email} ({resolved_product_id}): Zoho {_resp.status_code}")
+                # Record in drip_emails table
+                try:
+                    await db.execute(text("""
+                        INSERT INTO drip_emails (email, product_id, email_number, status)
+                        VALUES (:email, :pid, 1, 'sent')
+                        ON CONFLICT (email, product_id, email_number) DO NOTHING
+                    """), {"email": user.email, "pid": resolved_product_id})
+                    await db.commit()
+                except Exception:
+                    pass
         else:
-            print(f"[Email] welcome skipped for {user.email}: Zoho not configured")
+            print(f"[Drip] Email 1 skipped for {user.email}: no Zoho token")
+
+        # Schedule Emails 2 (Day 2) and 3 (Day 7)
+        try:
+            now_utc = datetime.utcnow()
+            for email_num, days_delay in [(2, 2), (3, 7)]:
+                await db.execute(text("""
+                    INSERT INTO drip_emails
+                        (email, product_id, email_number, status, scheduled_for, platform, first_name)
+                    VALUES
+                        (:email, :pid, :num, 'scheduled', :send_at, :platform, :fname)
+                    ON CONFLICT (email, product_id, email_number) DO NOTHING
+                """), {
+                    "email":    user.email,
+                    "pid":      resolved_product_id,
+                    "num":      email_num,
+                    "send_at":  now_utc + timedelta(days=days_delay),
+                    "platform": user_platform,
+                    "fname":    first_name,
+                })
+            await db.commit()
+            print(f"[Drip] Emails 2+3 scheduled for {user.email} ({resolved_product_id})")
+        except Exception as sched_err:
+            print(f"[Drip] scheduling failed for {user.email}: {sched_err}")
     except Exception as email_err:
-        print(f"[Email] welcome failed for {user.email}: {email_err}")
+        print(f"[Drip] Email 1 failed for {user.email}: {email_err}")
 
     # Add to Zoho Campaigns subscriber list (fire-and-forget)
     try:
@@ -4764,6 +4789,101 @@ class DripRecordRequest(BaseModel):
     product_id: str
     email_number: int
     subject: Optional[str] = None
+
+
+@admin_router.post("/drip-process", status_code=200)
+async def process_drip_queue(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    POST /admin/drip-process
+    Called by cron hourly. Finds scheduled drip emails due to send and sends them.
+    """
+    import sys as _sys2, importlib as _il2
+    _dp = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'drip')
+    if _dp not in _sys2.path:
+        _sys2.path.insert(0, _dp)
+    drip_utils = _il2.import_module('drip_utils')
+
+    now_utc = datetime.utcnow()
+    # Find all scheduled emails due
+    result = await db.execute(text("""
+        SELECT id, email, product_id, email_number, platform, first_name
+        FROM drip_emails
+        WHERE status = 'scheduled' AND scheduled_for <= :now
+        ORDER BY scheduled_for
+        LIMIT 50
+    """), {"now": now_utc})
+    rows = result.fetchall()
+
+    sent_count = 0
+    failed_count = 0
+    access_token = await get_zoho_access_token()
+
+    for row in rows:
+        row_id, email, product_id, email_num, platform, first_name = row
+        try:
+            # Get product details
+            prod_r = await db.execute(
+                text("SELECT domain, name FROM products WHERE id = :pid"),
+                {"pid": product_id}
+            )
+            prod_row = prod_r.fetchone()
+            domain = prod_row.domain if prod_row else "lawtasksai.com"
+            product_name = prod_row.name if prod_row else "LawTasksAI"
+
+            # Get skill count
+            sc_r = await db.execute(
+                text("SELECT COUNT(*) FROM skills WHERE product_id = :pid AND is_active = TRUE"),
+                {"pid": product_id}
+            )
+            sc_row = sc_r.fetchone()
+            skill_count = sc_row[0] if sc_row else 150
+
+            html = drip_utils.build_drip_email(
+                email_num=email_num,
+                product_id=product_id,
+                product_name=product_name,
+                domain=domain,
+                skill_count=skill_count,
+                platform=platform or "other",
+                first_name=first_name or "",
+                user_email=email,
+            )
+            subject = drip_utils.drip_subject(email_num, product_name)
+
+            if access_token:
+                async with httpx.AsyncClient(timeout=15) as _hc:
+                    _resp = await _hc.post(
+                        "https://mail.zoho.com/api/accounts/6556209000000008002/messages",
+                        json={
+                            "fromAddress": f"hello@{domain}",
+                            "toAddress": email,
+                            "subject": subject,
+                            "content": html,
+                            "mailFormat": "html",
+                        },
+                        headers={"Authorization": f"Zoho-oauthtoken {access_token}"}
+                    )
+                    if _resp.status_code == 200:
+                        await db.execute(text("""
+                            UPDATE drip_emails SET status='sent', sent_at=NOW()
+                            WHERE id=:id
+                        """), {"id": row_id})
+                        sent_count += 1
+                        print(f"[Drip] Email {email_num} sent to {email} ({product_id})")
+                    else:
+                        await db.execute(text("""
+                            UPDATE drip_emails SET status='failed' WHERE id=:id
+                        """), {"id": row_id})
+                        failed_count += 1
+                        print(f"[Drip] Email {email_num} failed for {email}: Zoho {_resp.status_code}")
+        except Exception as e:
+            failed_count += 1
+            print(f"[Drip] Error processing {email} email {email_num}: {e}")
+
+    await db.commit()
+    return {"sent": sent_count, "failed": failed_count, "checked": len(rows)}
 
 
 @admin_router.post("/drip-record", status_code=201)
