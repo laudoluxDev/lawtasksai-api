@@ -2197,7 +2197,7 @@ async def submit_support_request(req: SupportRequest):
 
     # Always insert into support_requests DB regardless of email outcome
     try:
-        async with db_engine.begin() as conn:
+        async with engine.begin() as conn:
             await conn.execute(
                 text("""
                     INSERT INTO support_requests
