@@ -2858,6 +2858,75 @@ def _user_platforms(user: "User | None") -> set:
     return set(raw)
 
 
+async def _build_installer_zip(license_key: str, product_id: str, user, request: Request):
+    """
+    Build a zip containing:
+      - The platform-appropriate installer binary (fetched from GitHub Releases)
+      - A pre-filled .env so the installer never prompts for a license key
+    """
+    ua = request.headers.get("user-agent", "").lower()
+    is_windows = "windows" in ua
+    urls = _get_installer_url(product_id, ua)
+    binary_url = urls["windows"] if is_windows else urls["mac"]
+    prod_name = _PRODUCT_NAME_MAP.get(product_id, "TasksAI")
+    prod_slug = product_id  # e.g. "law", "realtor"
+
+    # Env var name mirrors what install.py expects
+    env_var = f"{prod_slug.upper()}TASKSAI_LICENSE_KEY"
+    if prod_slug == "law":
+        env_var = "LAWTASKSAI_LICENSE_KEY"
+    elif prod_slug == "marketing":
+        env_var = "MARKETINGTASKSAI_LICENSE_KEY"
+    else:
+        env_var = f"{prod_slug.upper()}TASKSAI_LICENSE_KEY"
+
+    env_contents = f"{env_var}={license_key}\nTASKSAI_LICENSE_KEY={license_key}\n"
+
+    # Fetch the binary from GitHub
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as hc:
+            resp = await hc.get(binary_url)
+            binary_data = resp.content if resp.status_code == 200 else None
+    except Exception:
+        binary_data = None
+
+    ext = ".exe" if is_windows else ""
+    installer_filename = f"{prod_name}-Setup{ext}"
+    zip_filename = f"{prod_name}-Setup.zip"
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Pre-filled .env — installer reads this, skips the prompt
+        zf.writestr(".env", env_contents)
+        # Installer binary (or a README if fetch failed)
+        if binary_data:
+            zf.writestr(installer_filename, binary_data)
+        else:
+            # Fallback: direct link in README
+            zf.writestr("README.txt",
+                f"{prod_name} Installer\n\n"
+                f"Download failed automatically. Please download manually:\n{binary_url}\n\n"
+                f"Place .env and the installer in the same folder, then run the installer.\n"
+            )
+        # Instructions
+        platform_note = "Windows: double-click the .exe" if is_windows else "Mac: double-click the installer (or run: open '{installer_filename}')"
+        zf.writestr("INSTALL.txt",
+            f"{prod_name} — Quick Install\n\n"
+            f"1. {platform_note}\n"
+            f"2. Your license key is pre-filled — no typing needed.\n"
+            f"3. Restart Claude Desktop (or your MCP client) when done.\n"
+            f"4. You can delete this zip after installation.\n\n"
+            f"Support: hello@{prod_slug}tasksai.com\n"
+        )
+
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
+    )
+
+
 async def _build_loader_zip(license_key: str, product_id: str, db: AsyncSession):
     """Core download logic — builds the zip for a given license + product."""
     result = await db.execute(
@@ -3016,14 +3085,10 @@ async def download_loader(license_key: str, request: Request, db: AsyncSession =
         or "law"
     )
 
-    # Route MCP-platform users to GitHub installer
+    # Route MCP-platform users to installer zip (binary + pre-filled .env)
     platforms = _user_platforms(user)
     if platforms & MCP_PLATFORMS and product_id in _PRODUCT_NAME_MAP:
-        urls = _get_installer_url(product_id, request.headers.get("user-agent", ""))
-        ua = request.headers.get("user-agent", "").lower()
-        dest = urls["windows"] if "windows" in ua else urls["mac"]
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url=dest, status_code=302)
+        return await _build_installer_zip(license_key, product_id, user, request)
 
     return await _build_loader_zip(license_key, product_id, db)
 
