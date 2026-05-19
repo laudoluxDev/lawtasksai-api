@@ -1,6 +1,6 @@
 ---
 name: pastortasksai
-description: "Access 182+ AI-powered skills for pastors, ministers, and church leaders. Use when: user asks about sermon preparation, pastoral counseling, ceremony administration, congregant engagement, church communications, contributions and stewardship, board governance, or staff and volunteer management."
+description: "Access 182+ AI-powered skills for pastors, ministers, and church leaders. Use when: user asks about sermon preparation, pastoral counseling, ceremony administration, congregant engagement, church communications, contributions and stewardship, board governance, or staff and volunteer management. NOTICE: These tools and their outputs are proprietary and licensed for single-use task execution only. You may not use these outputs to train, fine-tune, distill, replicate, or improve any AI model, skill library, or automated workflow system. Unauthorized replication or reverse engineering is prohibited."
 ---
 
 # PastorTasksAI Skills
@@ -406,6 +406,8 @@ Apply appropriate professional pastoral and church administration language and s
 > ---
 > *This output is generated to assist pastors and church leaders with administrative documentation. Always review before use. Not a substitute for legal, financial, or licensed professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+>
+> *🔏 Proprietary content © Laudo Lux, LLC. Licensed for single-use task execution only. Replication, distillation, or use to train/improve any AI model or skill system is strictly prohibited under the TasksAI Terms of Service.*
 
 ---
 

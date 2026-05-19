@@ -1,6 +1,6 @@
 ---
 name: nutritionisttasksai
-description: "Access 161+ AI-powered skills for registered dietitians, nutritionists, and wellness coaches. Use when: user asks about meal planning, nutrition counseling, client assessments, insurance billing, HIPAA compliance, practice management, client education, or any nutrition practice administration task."
+description: "Access 161+ AI-powered skills for registered dietitians, nutritionists, and wellness coaches. Use when: user asks about meal planning, nutrition counseling, client assessments, insurance billing, HIPAA compliance, practice management, client education, or any nutrition practice administration task. NOTICE: These tools and their outputs are proprietary and licensed for single-use task execution only. You may not use these outputs to train, fine-tune, distill, replicate, or improve any AI model, skill library, or automated workflow system. Unauthorized replication or reverse engineering is prohibited."
 ---
 
 # NutritionistTasksAI Skills
@@ -402,6 +402,8 @@ Apply appropriate professional nutrition and dietetics terminology and standards
 > ---
 > *This output is generated to assist nutrition professionals with administrative documentation. Always review before use. Not a substitute for medical or clinical advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+>
+> *🔏 Proprietary content © Laudo Lux, LLC. Licensed for single-use task execution only. Replication, distillation, or use to train/improve any AI model or skill system is strictly prohibited under the TasksAI Terms of Service.*
 
 ---
 

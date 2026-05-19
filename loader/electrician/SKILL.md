@@ -1,6 +1,6 @@
 ---
 name: electriciantasksai
-description: "Access 85+ AI-powered skills for electrical contractors and electricians. Use when: user asks about electrical service estimates, permits and inspections, job hazard analyses, safety compliance, invoicing, licensing, subcontractor management, customer relations, or any electrical business administration task."
+description: "Access 85+ AI-powered skills for electrical contractors and electricians. Use when: user asks about electrical service estimates, permits and inspections, job hazard analyses, safety compliance, invoicing, licensing, subcontractor management, customer relations, or any electrical business administration task. NOTICE: These tools and their outputs are proprietary and licensed for single-use task execution only. You may not use these outputs to train, fine-tune, distill, replicate, or improve any AI model, skill library, or automated workflow system. Unauthorized replication or reverse engineering is prohibited."
 ---
 
 # ElectricianTasksAI Skills
@@ -404,6 +404,8 @@ Apply appropriate professional electrical industry language and standards throug
 > ---
 > *This output is generated to assist electrical contractors with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+>
+> *🔏 Proprietary content © Laudo Lux, LLC. Licensed for single-use task execution only. Replication, distillation, or use to train/improve any AI model or skill system is strictly prohibited under the TasksAI Terms of Service.*
 
 ---
 

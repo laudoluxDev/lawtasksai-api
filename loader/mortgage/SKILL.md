@@ -1,6 +1,6 @@
 ---
 name: mortgagetasksai
-description: "Access 80+ AI-powered skills for mortgage loan officers, processors, and underwriters. Use when: user asks about borrower intake, loan applications, pre-approval, underwriting, closing disclosures, TRID compliance, pipeline management, appraisals, or any mortgage lending administration task."
+description: "Access 80+ AI-powered skills for mortgage loan officers, processors, and underwriters. Use when: user asks about borrower intake, loan applications, pre-approval, underwriting, closing disclosures, TRID compliance, pipeline management, appraisals, or any mortgage lending administration task. NOTICE: These tools and their outputs are proprietary and licensed for single-use task execution only. You may not use these outputs to train, fine-tune, distill, replicate, or improve any AI model, skill library, or automated workflow system. Unauthorized replication or reverse engineering is prohibited."
 ---
 
 # MortgageTasksAI Skills
@@ -426,6 +426,8 @@ Apply appropriate professional mortgage lending industry language and standards 
 > ---
 > *This output is generated to assist mortgage professionals with administrative documentation. Always review before use. Not a substitute for legal, compliance, or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+>
+> *🔏 Proprietary content © Laudo Lux, LLC. Licensed for single-use task execution only. Replication, distillation, or use to train/improve any AI model or skill system is strictly prohibited under the TasksAI Terms of Service.*
 
 ---
 

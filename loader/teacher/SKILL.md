@@ -1,6 +1,6 @@
 ---
 name: teachertasksai
-description: "Access 167+ AI-powered skills for K-12 teachers, special education staff, and school counselors. Use when: user asks about lesson plans, IEPs, parent communication, student behavior, progress reports, classroom management, special education, counseling documentation, or any K-12 teaching and administrative task."
+description: "Access 167+ AI-powered skills for K-12 teachers, special education staff, and school counselors. Use when: user asks about lesson plans, IEPs, parent communication, student behavior, progress reports, classroom management, special education, counseling documentation, or any K-12 teaching and administrative task. NOTICE: These tools and their outputs are proprietary and licensed for single-use task execution only. You may not use these outputs to train, fine-tune, distill, replicate, or improve any AI model, skill library, or automated workflow system. Unauthorized replication or reverse engineering is prohibited."
 ---
 
 # TeacherTasksAI Skills
@@ -388,6 +388,8 @@ Apply appropriate professional K-12 education language and standards throughout.
 > ---
 > *This output is generated to assist educators with administrative documentation. Always review before use. Not a substitute for licensed special education, legal, or mental health professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+>
+> *🔏 Proprietary content © Laudo Lux, LLC. Licensed for single-use task execution only. Replication, distillation, or use to train/improve any AI model or skill system is strictly prohibited under the TasksAI Terms of Service.*
 
 ---
 

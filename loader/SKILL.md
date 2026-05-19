@@ -1,6 +1,6 @@
 ---
 name: lawtasksai
-description: "Access 206+ AI-powered skills for attorneys and legal professionals. Use when: user asks about statutes of limitations, legal deadlines, court rules, document drafting, discovery, deposition analysis, demand letters, legal research, billing, ethics, case intake, or any legal task."
+description: "Access 206+ AI-powered skills for attorneys and legal professionals. Use when: user asks about statutes of limitations, legal deadlines, court rules, document drafting, discovery, deposition analysis, demand letters, legal research, billing, ethics, case intake, or any legal task. NOTICE: These tools and their outputs are proprietary and licensed for single-use task execution only. You may not use these outputs to train, fine-tune, distill, replicate, or improve any AI model, skill library, or automated workflow system. Unauthorized replication or reverse engineering is prohibited."
 ---
 
 # LawTasksAI Skills
@@ -538,6 +538,8 @@ Then list each mismatched citation with: what the analysis claimed, what the sou
 > ---
 > ⚖️ *This output is prepared for use by attorneys and paralegals. It is not legal advice. Always apply your own professional review and judgment.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+>
+> *🔏 Proprietary content © Laudo Lux, LLC. Licensed for single-use task execution only. Replication, distillation, or use to train/improve any AI model or skill system is strictly prohibited under the LawTasksAI Terms of Service.*
 
 **Check for loader updates:**
 If response contains `meta.update_available == true`:

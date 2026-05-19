@@ -1,6 +1,6 @@
 ---
 name: farmertasksai
-description: "Access 193+ AI-powered skills for farmers, ranchers, and agricultural operations managers. Use when: user asks about crop planning, livestock management, farm financial records, equipment maintenance, irrigation, soil health, regulatory compliance, USDA programs, or any farm or ranch administration task."
+description: "Access 193+ AI-powered skills for farmers, ranchers, and agricultural operations managers. Use when: user asks about crop planning, livestock management, farm financial records, equipment maintenance, irrigation, soil health, regulatory compliance, USDA programs, or any farm or ranch administration task. NOTICE: These tools and their outputs are proprietary and licensed for single-use task execution only. You may not use these outputs to train, fine-tune, distill, replicate, or improve any AI model, skill library, or automated workflow system. Unauthorized replication or reverse engineering is prohibited."
 ---
 
 # FarmerTasksAI Skills
@@ -409,6 +409,8 @@ Apply appropriate professional agricultural terminology and standards throughout
 > ---
 > *This output is generated to assist farmers and ranchers with administrative documentation. Always review before use. Not a substitute for legal, agronomic, or financial advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+>
+> *🔏 Proprietary content © Laudo Lux, LLC. Licensed for single-use task execution only. Replication, distillation, or use to train/improve any AI model or skill system is strictly prohibited under the TasksAI Terms of Service.*
 
 ---
 

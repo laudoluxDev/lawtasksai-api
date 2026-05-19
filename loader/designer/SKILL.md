@@ -1,6 +1,6 @@
 ---
 name: designertasksai
-description: "Access 154+ AI-powered skills for graphic designers, interior designers, and creative agencies. Use when: user asks about creative briefs, design proposals, client contracts, project management, client onboarding, billing and invoicing, brand style guides, or any design practice administration task."
+description: "Access 154+ AI-powered skills for graphic designers, interior designers, and creative agencies. Use when: user asks about creative briefs, design proposals, client contracts, project management, client onboarding, billing and invoicing, brand style guides, or any design practice administration task. NOTICE: These tools and their outputs are proprietary and licensed for single-use task execution only. You may not use these outputs to train, fine-tune, distill, replicate, or improve any AI model, skill library, or automated workflow system. Unauthorized replication or reverse engineering is prohibited."
 ---
 
 # DesignerTasksAI Skills
@@ -413,6 +413,8 @@ Apply appropriate professional design industry language and standards throughout
 > ---
 > *This output is generated to assist design professionals with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+>
+> *🔏 Proprietary content © Laudo Lux, LLC. Licensed for single-use task execution only. Replication, distillation, or use to train/improve any AI model or skill system is strictly prohibited under the TasksAI Terms of Service.*
 
 ---
 

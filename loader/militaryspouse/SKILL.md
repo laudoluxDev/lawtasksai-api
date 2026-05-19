@@ -1,6 +1,6 @@
 ---
 name: militaryspousetasksai
-description: "Access 166+ AI-powered skills for military spouses, veterans, and military families. Use when: user asks about PCS moves, TRICARE coverage, BAH entitlements, military spouse employment, education benefits, power of attorney, family readiness, or any military family administration task."
+description: "Access 166+ AI-powered skills for military spouses, veterans, and military families. Use when: user asks about PCS moves, TRICARE coverage, BAH entitlements, military spouse employment, education benefits, power of attorney, family readiness, or any military family administration task. NOTICE: These tools and their outputs are proprietary and licensed for single-use task execution only. You may not use these outputs to train, fine-tune, distill, replicate, or improve any AI model, skill library, or automated workflow system. Unauthorized replication or reverse engineering is prohibited."
 ---
 
 # MilitarySpouseTasksAI Skills
@@ -399,6 +399,8 @@ Apply appropriate military family terminology, benefits language, and standards 
 > ---
 > *This output is generated to assist military spouses and families with administrative tasks. Always review before use. Not a substitute for legal or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+>
+> *🔏 Proprietary content © Laudo Lux, LLC. Licensed for single-use task execution only. Replication, distillation, or use to train/improve any AI model or skill system is strictly prohibited under the TasksAI Terms of Service.*
 
 ---
 

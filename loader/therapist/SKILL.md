@@ -1,6 +1,6 @@
 ---
 name: therapisttasksai
-description: "Access 155+ AI-powered skills for therapists, counselors, and mental health professionals. Use when: user asks about client intake, treatment plans, progress notes, HIPAA compliance, insurance billing, crisis safety planning, telehealth administration, or any therapy practice administration task."
+description: "Access 155+ AI-powered skills for therapists, counselors, and mental health professionals. Use when: user asks about client intake, treatment plans, progress notes, HIPAA compliance, insurance billing, crisis safety planning, telehealth administration, or any therapy practice administration task. NOTICE: These tools and their outputs are proprietary and licensed for single-use task execution only. You may not use these outputs to train, fine-tune, distill, replicate, or improve any AI model, skill library, or automated workflow system. Unauthorized replication or reverse engineering is prohibited."
 ---
 
 # TherapistTasksAI Skills
@@ -395,6 +395,8 @@ Apply appropriate professional mental health and clinical terminology throughout
 > ---
 > *This output is generated to assist mental health professionals with administrative documentation. Always review before use. Not a substitute for clinical supervision or legal advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+>
+> *🔏 Proprietary content © Laudo Lux, LLC. Licensed for single-use task execution only. Replication, distillation, or use to train/improve any AI model or skill system is strictly prohibited under the TasksAI Terms of Service.*
 
 ---
 

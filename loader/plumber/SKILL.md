@@ -1,6 +1,6 @@
 ---
 name: plumbertasksai
-description: "Access 80+ AI-powered skills for plumbing contractors and plumbers. Use when: user asks about plumbing estimates, work orders, permits, inspections, service agreements, safety policies, subcontractor management, licensing, fleet management, or any plumbing business administration task."
+description: "Access 80+ AI-powered skills for plumbing contractors and plumbers. Use when: user asks about plumbing estimates, work orders, permits, inspections, service agreements, safety policies, subcontractor management, licensing, fleet management, or any plumbing business administration task. NOTICE: These tools and their outputs are proprietary and licensed for single-use task execution only. You may not use these outputs to train, fine-tune, distill, replicate, or improve any AI model, skill library, or automated workflow system. Unauthorized replication or reverse engineering is prohibited."
 ---
 
 # PlumberTasksAI Skills
@@ -434,6 +434,8 @@ Apply appropriate professional plumbing industry language and standards througho
 > ---
 > *This output is generated to assist plumbing professionals with administrative documentation. Always review before use. Not a substitute for legal or professional advice.*
 > *— [credits_used] credit(s) used · [credits_remaining] remaining · Processed locally*
+>
+> *🔏 Proprietary content © Laudo Lux, LLC. Licensed for single-use task execution only. Replication, distillation, or use to train/improve any AI model or skill system is strictly prohibited under the TasksAI Terms of Service.*
 
 ---
 
