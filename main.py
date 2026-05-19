@@ -1062,33 +1062,62 @@ async def register(
     db: AsyncSession = Depends(get_db),
     product_id: str = Depends(get_product_id),
 ):
-    """Create a new user account."""
-    # Check if email exists
-    result = await db.execute(select(User).where(User.email == user_data.email))
-    if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email already registered")
+    """Create a new user account.
 
+    Multi-vertical logic:
+    - If email is brand new: create user + license for this product.
+    - If email exists but has no license for this product: reuse the user,
+      create a new license for this product (new vertical signup).
+    - If email exists AND already has a license for this product: 400 duplicate.
+    """
     # Resolve product_id: body field takes priority (explicit), then dependency (header/query/default)
     resolved_product_id = user_data.product_id or product_id
 
-    # Generate user ID explicitly so it's available for license FK before flush
-    user_id = uuid.uuid4()
+    # Check if email exists
+    result = await db.execute(select(User).where(User.email == user_data.email))
+    existing_user = result.scalar_one_or_none()
 
-    # Create user
-    user = User(
-        id=user_id,
-        email=user_data.email,
-        password_hash=hash_password(user_data.password),
-        name=user_data.name,
-        firm_name=user_data.firm_name,
-        credits_balance=5,  # Free signup credits
-        product_id=resolved_product_id,
-        platforms=getattr(user_data, 'platforms', None) or [],
-    )
-    db.add(user)
-    await db.flush()  # Ensure user row exists before license FK insert
+    if existing_user:
+        # Check whether this user already has a license for THIS product
+        lic_result = await db.execute(
+            select(License).where(
+                License.user_id == existing_user.id,
+                License.product_id == resolved_product_id,
+                License.status == "active",
+            )
+        )
+        if lic_result.scalar_one_or_none():
+            # Genuine duplicate — same email, same vertical
+            raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Create trial license
+        # New vertical for an existing user — add a license only
+        user = existing_user
+        user_id = existing_user.id
+        # Merge platforms if provided
+        new_platforms = getattr(user_data, 'platforms', None) or []
+        if new_platforms:
+            existing_platforms = user.platforms or []
+            merged = {p.get('platform'): p for p in existing_platforms}
+            for p in new_platforms:
+                merged[p.get('platform')] = p
+            user.platforms = list(merged.values())
+    else:
+        # Brand new user
+        user_id = uuid.uuid4()
+        user = User(
+            id=user_id,
+            email=user_data.email,
+            password_hash=hash_password(user_data.password),
+            name=user_data.name,
+            firm_name=user_data.firm_name,
+            credits_balance=5,  # Free signup credits
+            product_id=resolved_product_id,
+            platforms=getattr(user_data, 'platforms', None) or [],
+        )
+        db.add(user)
+        await db.flush()  # Ensure user row exists before license FK insert
+
+    # Create trial license for this product (always — new user or new vertical)
     license = License(
         license_key=generate_license_key(),
         user_id=user_id,
@@ -1099,7 +1128,7 @@ async def register(
         credits_remaining=5
     )
     db.add(license)
-    
+
     await db.commit()
     await db.refresh(user)
 
@@ -1328,6 +1357,78 @@ async def recover_license(request: RecoverLicenseRequest, db: AsyncSession = Dep
         message="Your license key has been recovered. Update your config.json with this key."
     )
 
+
+class AccountLicenseItem(BaseModel):
+    license_key: str
+    product_id: str
+    product_name: str
+    product_domain: str
+    credits_remaining: int
+    license_type: str
+    created_at: Optional[datetime] = None
+
+
+class AccountLicensesResponse(BaseModel):
+    email: str
+    licenses: List[AccountLicenseItem]
+
+
+@app.post("/auth/account-licenses")
+async def account_licenses(request: RecoverLicenseRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Return all active licenses for an email across all verticals.
+    Used by the download page to render a per-vertical account dashboard.
+    """
+    result = await db.execute(select(User).where(User.email == request.email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="No account found with this email")
+
+    lic_result = await db.execute(
+        select(License).where(
+            License.user_id == user.id,
+            License.status == "active",
+        ).order_by(License.created_at.asc())
+    )
+    licenses = lic_result.scalars().all()
+
+    if not licenses:
+        raise HTTPException(status_code=404, detail="No active licenses found for this account")
+
+    # Look up product metadata for each unique product_id
+    product_ids = list({lic.product_id for lic in licenses if lic.product_id})
+    prod_result = await db.execute(
+        text("SELECT id, name, domain FROM products WHERE id = ANY(:pids) AND is_active = TRUE"),
+        {"pids": product_ids}
+    )
+    prod_map = {row.id: {"name": row.name, "domain": row.domain} for row in prod_result.fetchall()}
+
+    # Fallback display names for products not in the products table
+    def product_display(pid: str) -> dict:
+        if pid in prod_map:
+            return prod_map[pid]
+        # Derive a readable name from the product_id (e.g. "realtor" -> "RealtorTasksAI")
+        name = pid.capitalize() + "TasksAI" if pid else "TasksAI"
+        domain = f"{pid}tasksai.com" if pid else "lawtasksai.com"
+        return {"name": name, "domain": domain}
+
+    items = []
+    for lic in licenses:
+        pid = lic.product_id or "law"
+        meta = product_display(pid)
+        items.append(AccountLicenseItem(
+            license_key=lic.license_key,
+            product_id=pid,
+            product_name=meta["name"],
+            product_domain=meta["domain"],
+            credits_remaining=lic.credits_remaining,
+            license_type=lic.type,
+            created_at=lic.created_at,
+        ))
+
+    return AccountLicensesResponse(email=user.email, licenses=items)
+
+
 # ============================================
 # Routes: Skills
 # ============================================
@@ -1527,6 +1628,8 @@ def check_loader_update(loader_version: Optional[str]) -> Optional[LoaderMeta]:
 
 @app.get("/skills/{skill_id}/schema", response_model=SkillSchemaResponse)
 @app.get("/v1/skills/{skill_id}/schema", response_model=SkillSchemaResponse)
+@app.get("/skills/{skill_id}/execute", response_model=SkillSchemaResponse)
+@app.get("/v1/skills/{skill_id}/execute", response_model=SkillSchemaResponse)
 async def get_skill_schema(
     skill_id: str,
     license: License = Depends(get_current_license),
@@ -2371,14 +2474,19 @@ async def create_checkout_session(
             raise HTTPException(status_code=400, detail="Invalid credit pack")
         pack = CREDIT_PACKS[request.pack]
 
-    # Enforce one-time trial/starter pack per email
+    # Enforce one-time trial/starter pack per email per vertical
     if pack.get("one_time"):
         if not request.email:
             raise HTTPException(status_code=400, detail="Email is required for the Trial pack")
-        # Check if this email has already purchased a trial/starter pack
+        # Check if this email has already purchased a trial/starter pack FOR THIS VERTICAL
+        # Each vertical gets its own one-time trial — buying on RealtorTasksAI doesn't block TeacherTasksAI
         result = await db.execute(
-            select(CreditTransaction).join(User, CreditTransaction.user_id == User.id).where(
+            select(CreditTransaction)
+            .join(User, CreditTransaction.user_id == User.id)
+            .join(License, CreditTransaction.license_id == License.id)
+            .where(
                 User.email == request.email.lower().strip(),
+                License.product_id == resolved_product_id,
                 or_(
                     CreditTransaction.description.contains("Trial"),
                     CreditTransaction.description.contains("Starter")
@@ -2387,7 +2495,7 @@ async def create_checkout_session(
         )
         existing = result.scalar_one_or_none()
         if existing:
-            raise HTTPException(status_code=400, detail="The Trial package is only available once per customer. Check out our other packages for better value!")
+            raise HTTPException(status_code=400, detail="The Trial package is only available once per product. Check out our other packages for better value!")
     
     # Resolve product domain for success/cancel URLs
     product_domain = None
@@ -2637,16 +2745,18 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             if bar_profile.get('firm_name') and not user.firm_name:
                 user.firm_name = bar_profile['firm_name']
 
-            # Find or create license
+            # Find the license for THIS specific product — never touch licenses from other verticals
             lic_result = await db.execute(
                 select(License).where(
                     License.user_id == user.id,
+                    License.product_id == purchase_product_id,
                     License.status == "active",
                 ).order_by(License.created_at.desc())
             )
             license = lic_result.scalar_one_or_none()
 
             if not license:
+                # New vertical purchase for this user — create a fresh license
                 license = License(
                     license_key=generate_license_key(),
                     user_id=user.id,
@@ -2658,10 +2768,9 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                 db.add(license)
                 await db.flush()  # get license.id
             else:
+                # Top-up on existing vertical license — add credits, never change product_id
                 license.credits_remaining += credits
                 license.credits_purchased += credits
-                # Always update license product_id to match the purchase site
-                license.product_id = purchase_product_id
 
         # Log transaction
         tx = CreditTransaction(
@@ -2872,7 +2981,7 @@ async def download_loader_by_session(
     if not license:
         raise HTTPException(status_code=404, detail="No active license found")
 
-    # Route MCP-platform users to GitHub installer
+    # Route MCP-platform users to direct GitHub installer download
     platforms = _user_platforms(user)
     if platforms & MCP_PLATFORMS and product_id in _PRODUCT_NAME_MAP:
         urls = _get_installer_url(product_id, request.headers.get("user-agent", ""))
@@ -2893,14 +3002,36 @@ GITHUB_RELEASES_BASE = "https://github.com/laudoluxDev/lawtasksai-mcp/releases/l
 
 # Map product_id → ProductName used in the GitHub Release asset filenames
 _PRODUCT_NAME_MAP = {
-    "law":        "LawTasksAI",
-    "realtor":    "RealtorTasksAI",
-    "farmer":     "FarmerTasksAI",
-    "teacher":    "TeacherTasksAI",
-    "therapist":  "TherapistTasksAI",
-    "marketing":  "MarketingTasksAI",
-    "contractor": "ContractorTasksAI",
-    # Add more as installers are built for additional verticals
+    "law":            "LawTasksAI",
+    "realtor":        "RealtorTasksAI",
+    "farmer":         "FarmerTasksAI",
+    "teacher":        "TeacherTasksAI",
+    "therapist":      "TherapistTasksAI",
+    "marketing":      "MarketingTasksAI",
+    "contractor":     "ContractorTasksAI",
+    "accounting":     "AccountingTasksAI",
+    "chiropractor":   "ChiropractorTasksAI",
+    "church":         "ChurchTasksAI",
+    "dentist":        "DentistTasksAI",
+    "designer":       "DesignerTasksAI",
+    "electrician":    "ElectricianTasksAI",
+    "eventplanner":   "EventPlannerTasksAI",
+    "funeral":        "FuneralTasksAI",
+    "hr":             "HRTasksAI",
+    "insurance":      "InsuranceTasksAI",
+    "landlord":       "LandlordTasksAI",
+    "militaryspouse": "MilitarySpouseTasksAI",
+    "mortgage":       "MortgageTasksAI",
+    "mortuary":       "MortuaryTasksAI",
+    "nutritionist":   "NutritionistTasksAI",
+    "pastor":         "PastorTasksAI",
+    "personaltrainer":"PersonalTrainerTasksAI",
+    "plumber":        "PlumberTasksAI",
+    "principal":      "PrincipalTasksAI",
+    "restaurant":     "RestaurantTasksAI",
+    "salon":          "SalonTasksAI",
+    "travelagent":    "TravelAgentTasksAI",
+    "vet":            "VetTasksAI",
 }
 
 
@@ -2928,57 +3059,68 @@ def _user_platforms(user: "User | None") -> set:
 
 async def _build_installer_zip(license_key: str, product_id: str, user, request: Request):
     """
-    Generate a one-time token, store it in download_tokens,
-    then redirect to the GitHub .exe with ?token=... appended.
-    The GUI installer fetches the token on startup to get the license key
-    without the user ever typing anything.
+    Build a zip containing:
+      - The platform-appropriate installer binary (fetched from GitHub Releases)
+      - A pre-filled .env so the installer never prompts for a license key
+    User downloads one zip, extracts, double-clicks the .exe — done.
     """
-    from fastapi.responses import RedirectResponse
     ua = request.headers.get("user-agent", "").lower()
+    is_windows = "windows" in ua
     urls = _get_installer_url(product_id, ua)
-    binary_url = urls["windows"] if "windows" in ua else urls["mac"]
-
-    # Generate a one-time token and store it
-    token = secrets.token_urlsafe(32)
-    try:
-        async with httpx.AsyncClient(timeout=5) as hc:
-            # Store via internal DB call — use raw SQL since we're outside a route
-            pass  # handled below via direct insert
-    except Exception:
-        pass
-
-    # We need a DB session here — store token directly
-    # Since we don't have db in scope, embed key in a short-lived signed token instead
-    # Format: base64(license_key) — simple, no DB needed
-    import base64 as _b64
-    encoded = _b64.urlsafe_b64encode(license_key.encode()).decode().rstrip("=")
-    installer_url = f"{binary_url}"  # GitHub release URL
-
-    # Return the binary directly, streaming it through with token as header
-    # Actually: redirect to a per-user download URL that serves the binary
+    binary_url = urls["windows"] if is_windows else urls["mac"]
     prod_name = _PRODUCT_NAME_MAP.get(product_id, "TasksAI")
-    ext = ".exe" if "windows" in ua else ""
-    filename = f"{prod_name}-Setup{ext}"
+    prod_slug = product_id
 
-    # Fetch binary and stream it with the key embedded as a custom response header
-    # that the OS/browser ignores but gives us a hook if needed
+    # Build env var name matching what the installer expects
+    if prod_slug == "law":
+        env_var = "LAWTASKSAI_LICENSE_KEY"
+    else:
+        env_var = f"{prod_slug.upper()}TASKSAI_LICENSE_KEY"
+
+    env_contents = f"{env_var}={license_key}\nTASKSAI_LICENSE_KEY={license_key}\n"
+
+    # Fetch the binary from GitHub
+    binary_data = None
     try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as hc:
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as hc:
             resp = await hc.get(binary_url)
             if resp.status_code == 200:
-                return StreamingResponse(
-                    iter([resp.content]),
-                    media_type="application/octet-stream",
-                    headers={
-                        "Content-Disposition": f'attachment; filename="{filename}"',
-                        "X-License-Token": encoded,
-                    }
-                )
+                binary_data = resp.content
     except Exception:
         pass
 
-    # Fallback: direct redirect to GitHub
-    return RedirectResponse(url=binary_url, status_code=302)
+    ext = ".exe" if is_windows else ""
+    installer_filename = f"{prod_name}-Setup{ext}"
+    zip_filename = f"{prod_name}-Installer.zip"
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(".env", env_contents)
+        if binary_data:
+            zf.writestr(installer_filename, binary_data)
+        else:
+            zf.writestr("README.txt",
+                f"{prod_name} Installer\n\n"
+                f"The installer could not be downloaded automatically.\n"
+                f"Download it manually from:\n{binary_url}\n\n"
+                f"Place the .env file and installer in the same folder, then run the installer.\n"
+            )
+        zf.writestr("INSTALL.txt",
+            f"{prod_name} - Quick Install\n\n"
+            f"1. Extract this zip\n"
+            f"2. Double-click {installer_filename}\n"
+            f"3. Your license key is pre-filled - no typing needed\n"
+            f"4. Click Install, then restart Claude Desktop\n"
+            f"5. You can delete this zip after installation\n\n"
+            f"Support: hello@{prod_slug}tasksai.com\n"
+        )
+
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
+    )
 
 
 async def _build_loader_zip(license_key: str, product_id: str, db: AsyncSession):
@@ -3139,10 +3281,14 @@ async def download_loader(license_key: str, request: Request, db: AsyncSession =
         or "law"
     )
 
-    # Route MCP-platform users to installer zip (binary + pre-filled .env)
+    # Route MCP-platform users to direct GitHub installer download
     platforms = _user_platforms(user)
     if platforms & MCP_PLATFORMS and product_id in _PRODUCT_NAME_MAP:
-        return await _build_installer_zip(license_key, product_id, user, request)
+        urls = _get_installer_url(product_id, request.headers.get("user-agent", ""))
+        ua = request.headers.get("user-agent", "").lower()
+        dest = urls["windows"] if "windows" in ua else urls["mac"]
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=dest, status_code=302)
 
     return await _build_loader_zip(license_key, product_id, db)
 
