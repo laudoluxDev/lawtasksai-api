@@ -992,6 +992,27 @@ async def startup():
             """))
         except Exception as e:
             print(f"[startup migration] download_tokens table: {e}")
+        # Migration: create magic_link_tokens table
+        try:
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS magic_link_tokens (
+                    token       VARCHAR(64) PRIMARY KEY,
+                    email       VARCHAR(255) NOT NULL,
+                    product_id  VARCHAR(50) NOT NULL DEFAULT 'law',
+                    used        BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+                    expires_at  TIMESTAMP NOT NULL
+                )
+            """))
+        except Exception as e:
+            print(f"[startup migration] magic_link_tokens table: {e}")
+        try:
+            await conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_magic_link_email
+                    ON magic_link_tokens(email, created_at)
+            """))
+        except Exception as e:
+            print(f"[startup migration] magic_link_tokens index: {e}")
         # Migration: create support_requests table
         try:
             await conn.execute(text("""
@@ -1408,6 +1429,210 @@ async def account_licenses(request: RecoverLicenseRequest, db: AsyncSession = De
         if pid in prod_map:
             return prod_map[pid]
         # Derive a readable name from the product_id (e.g. "realtor" -> "RealtorTasksAI")
+        name = pid.capitalize() + "TasksAI" if pid else "TasksAI"
+        domain = f"{pid}tasksai.com" if pid else "lawtasksai.com"
+        return {"name": name, "domain": domain}
+
+    items = []
+    for lic in licenses:
+        pid = lic.product_id or "law"
+        meta = product_display(pid)
+        items.append(AccountLicenseItem(
+            license_key=lic.license_key,
+            product_id=pid,
+            product_name=meta["name"],
+            product_domain=meta["domain"],
+            credits_remaining=lic.credits_remaining,
+            license_type=lic.type,
+            created_at=lic.created_at,
+        ))
+
+    return AccountLicensesResponse(email=user.email, licenses=items)
+
+
+# ============================================
+# Routes: Magic Link Auth
+# ============================================
+
+class MagicLinkRequest(BaseModel):
+    email: EmailStr
+
+class MagicLinkVerifyRequest(BaseModel):
+    token: str
+
+
+async def _check_magic_link_rate_limit(email: str, db: AsyncSession) -> bool:
+    """
+    Returns True if rate limit exceeded.
+    Max 3 magic link requests per email per 15 minutes.
+    """
+    result = await db.execute(text("""
+        SELECT COUNT(*) FROM magic_link_tokens
+        WHERE email = :email
+          AND created_at > NOW() - INTERVAL '15 minutes'
+    """), {"email": email.lower().strip()})
+    count = result.scalar()
+    return count >= 3
+
+
+@app.post("/auth/magic-link")
+async def request_magic_link(
+    request: MagicLinkRequest,
+    db: AsyncSession = Depends(get_db),
+    product_id: str = Depends(get_product_id),
+):
+    """
+    Send a magic link to the provided email address.
+    Always returns the same response whether the email exists or not
+    (prevents email enumeration).
+    Rate limited: max 3 per email per 15 minutes.
+    """
+    GENERIC_RESPONSE = {
+        "message": "If that email is registered, you'll receive a login link shortly. Check your inbox (and spam folder)."
+    }
+
+    email = request.email.lower().strip()
+
+    # Rate limit check (same response even if rate-limited, to prevent enumeration)
+    if await _check_magic_link_rate_limit(email, db):
+        return GENERIC_RESPONSE
+
+    # Look up user — silently do nothing if not found
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        return GENERIC_RESPONSE
+
+    # Resolve product domain for the link URL
+    resolved_product_id = product_id or "law"
+    product_domain = "lawtasksai.com"
+    product_name = "LawTasksAI"
+    try:
+        prod_result = await db.execute(
+            text("SELECT domain, name FROM products WHERE id = :pid AND is_active = TRUE"),
+            {"pid": resolved_product_id}
+        )
+        prod_row = prod_result.fetchone()
+        if prod_row:
+            product_domain = prod_row.domain
+            product_name = prod_row.name
+    except Exception:
+        pass
+
+    # Generate token and store it
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(minutes=15)
+    await db.execute(text("""
+        INSERT INTO magic_link_tokens (token, email, product_id, used, created_at, expires_at)
+        VALUES (:token, :email, :pid, FALSE, NOW(), :expires_at)
+    """), {"token": token, "email": email, "pid": resolved_product_id, "expires_at": expires_at})
+    await db.commit()
+
+    # Build the magic link URL
+    magic_url = f"https://{product_domain}/download.html?token={token}"
+
+    # Send email via Zoho
+    try:
+        access_token = await get_zoho_access_token()
+        if access_token:
+            first_name = (user.name or "").split()[0] if user.name else ""
+            greeting = f"Hi {first_name}," if first_name else "Hi,"
+            subject = f"Your {product_name} account access link"
+            html_body = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head><body style="font-family:Inter,Arial,sans-serif;background:#fafbfc;margin:0;padding:0;">
+<div style="max-width:480px;margin:40px auto;background:white;border-radius:12px;padding:40px;box-shadow:0 4px 12px rgba(0,0,0,0.08);">
+  <h2 style="margin:0 0 8px;font-size:1.3rem;color:#1a1a2e;">{product_name}</h2>
+  <p style="color:#374151;margin:0 0 24px;">{greeting}</p>
+  <p style="color:#374151;margin:0 0 24px;">Click the button below to access your {product_name} account. This link expires in <strong>15 minutes</strong> and can only be used once.</p>
+  <div style="text-align:center;margin:32px 0;">
+    <a href="{magic_url}" style="background:#2563eb;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:1rem;display:inline-block;">Access My Account &rarr;</a>
+  </div>
+  <p style="color:#9ca3af;font-size:0.82rem;margin:24px 0 0;">Didn&rsquo;t request this? You can safely ignore this email &mdash; your account is unchanged.</p>
+  <p style="color:#9ca3af;font-size:0.8rem;margin:8px 0 0;">If the button doesn&rsquo;t work, copy this link: <br><span style="color:#6b7280;word-break:break-all;">{magic_url}</span></p>
+</div>
+</body></html>"""
+
+            async with httpx.AsyncClient(timeout=15) as _hc:
+                _resp = await _hc.post(
+                    "https://mail.zoho.com/api/accounts/6556209000000008002/messages",
+                    json={
+                        "fromAddress": f"hello@{product_domain}",
+                        "toAddress": email,
+                        "subject": subject,
+                        "content": html_body,
+                        "mailFormat": "html",
+                    },
+                    headers={"Authorization": f"Zoho-oauthtoken {access_token}"}
+                )
+                print(f"[MagicLink] sent to {email} ({resolved_product_id}): Zoho {_resp.status_code}")
+        else:
+            print(f"[MagicLink] no Zoho token — skipping email for {email}")
+    except Exception as e:
+        print(f"[MagicLink] email send failed for {email}: {e}")
+
+    return GENERIC_RESPONSE
+
+
+@app.post("/auth/magic-link/verify")
+async def verify_magic_link(
+    request: MagicLinkVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Exchange a magic link token for account data.
+    Returns all licenses for the associated email (same as account-licenses).
+    Token is single-use and expires after 15 minutes.
+    """
+    token = request.token.strip()
+
+    # Look up token
+    result = await db.execute(text("""
+        SELECT email, product_id, used, expires_at
+        FROM magic_link_tokens
+        WHERE token = :token
+    """), {"token": token})
+    row = result.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Invalid or expired link. Please request a new one.")
+
+    if row.used:
+        raise HTTPException(status_code=410, detail="This link has already been used. Please request a new one.")
+
+    if datetime.utcnow() > row.expires_at:
+        raise HTTPException(status_code=410, detail="This link has expired. Please request a new one.")
+
+    # Mark token as used
+    await db.execute(text("""
+        UPDATE magic_link_tokens SET used = TRUE WHERE token = :token
+    """), {"token": token})
+    await db.commit()
+
+    # Return all licenses for this email (reuse account_licenses logic)
+    email = row.email
+    user_result = await db.execute(select(User).where(User.email == email))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Account not found.")
+
+    lic_result = await db.execute(
+        select(License).where(
+            License.user_id == user.id,
+            License.status == "active",
+        ).order_by(License.created_at.asc())
+    )
+    licenses = lic_result.scalars().all()
+
+    product_ids = list({lic.product_id for lic in licenses if lic.product_id})
+    prod_result = await db.execute(
+        text("SELECT id, name, domain FROM products WHERE id = ANY(:pids) AND is_active = TRUE"),
+        {"pids": product_ids}
+    )
+    prod_map = {r.id: {"name": r.name, "domain": r.domain} for r in prod_result.fetchall()}
+
+    def product_display(pid: str) -> dict:
+        if pid in prod_map:
+            return prod_map[pid]
         name = pid.capitalize() + "TasksAI" if pid else "TasksAI"
         domain = f"{pid}tasksai.com" if pid else "lawtasksai.com"
         return {"name": name, "domain": domain}
