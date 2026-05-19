@@ -1867,14 +1867,18 @@ async def get_me(
     Used by the MCP server at startup to self-configure tool names and prompts.
     """
     meta = _vertical_from_key(license.license_key)
+
+    # Always fetch user row — needed for email and product_id fallback
+    user_result = await db.execute(
+        text("SELECT email, product_id FROM users WHERE id = :uid"),
+        {"uid": str(license.user_id)},
+    )
+    user_row = user_result.fetchone()
+    user_email = user_row.email if user_row else None
+
     if not meta:
-        # Fallback: try products table via user's product_id
-        user_result = await db.execute(
-            text("SELECT product_id FROM users WHERE id = :uid"),
-            {"uid": str(license.user_id)},
-        )
-        user_row = user_result.fetchone()
-        product_id = user_row.product_id if user_row else "law"
+        # Fallback: derive from license.product_id first, then user.product_id
+        product_id = license.product_id or (user_row.product_id if user_row else "law") or "law"
         meta = {
             "product_id":    product_id,
             "product_name":  f"{product_id.title()}TasksAI",
@@ -1894,6 +1898,7 @@ async def get_me(
 
     return {
         **meta,
+        "email":             user_email,
         "domain":            domain,
         "license_type":      license.type,
         "credits_remaining": license.credits_remaining,
