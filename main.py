@@ -3274,7 +3274,7 @@ def _get_installer_url(product_id: str, user_agent: str = "") -> dict:
     return {
         "product_name": prod_name,
         "windows": f"{GITHUB_RELEASES_BASE}/{prod_name}-Setup.exe",
-        "mac":     f"{GITHUB_RELEASES_BASE}/{prod_name}-Setup-mac",
+        "mac":     f"{GITHUB_RELEASES_BASE}/{prod_name}-Setup",
         "release_page": "https://github.com/laudoluxDev/lawtasksai-mcp/releases/latest",
     }
 
