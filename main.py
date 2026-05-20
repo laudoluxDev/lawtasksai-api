@@ -120,7 +120,7 @@ class User(Base):
     profile: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
     # Platforms the user has selected (e.g. ["claude_desktop", "openclaw"])
     platforms: Mapped[Optional[list]] = mapped_column(JSONB, default=list)
-    # Engagement tracking: set when user executes their first skill
+    # Last time user executed a skill — used for activation/engagement tracking
     last_active_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     @property
@@ -1826,8 +1826,13 @@ async def get_skill_schema(
         if active_user:
             active_user.last_active_at = datetime.utcnow()
     except Exception:
+<<<<<<< HEAD
         pass  # non-fatal
 
+=======
+        pass  # non-fatal — don't block skill execution
+    
+>>>>>>> e73f6cf (feat: email open tracking endpoint, last_active_at on User, stamp on skill execution)
     # Log usage
     usage_log = UsageLog(
         license_id=license.id,
@@ -2333,6 +2338,41 @@ async def list_categories(db: AsyncSession = Depends(get_db)):
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "lawtasksai-api", "version": "1.0.0"}
+
+
+# Routes: Email Tracking
+@app.get("/track/email-open")
+async def track_email_open(
+    mid: Optional[str] = Query(None),
+    product: Optional[str] = Query(None),
+    email: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    1x1 pixel endpoint for email open tracking.
+    Logs the open to email_opens table and returns a transparent GIF.
+    """
+    # Log to DB (fire-and-forget style — never fail the pixel response)
+    try:
+        await db.execute(
+            text("""
+                INSERT INTO email_opens (message_id, product_id, email, opened_at)
+                VALUES (:mid, :product, :email, NOW())
+                ON CONFLICT DO NOTHING
+            """),
+            {"mid": mid or "", "product": product or "", "email": email or ""}
+        )
+        await db.commit()
+    except Exception:
+        pass
+
+    # Return 1x1 transparent GIF
+    gif = b'GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00!\xf9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;'
+    from fastapi.responses import Response
+    return Response(content=gif, media_type="image/gif", headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+    })
 
 
 @app.get("/v1/loader/latest")
