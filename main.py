@@ -1826,13 +1826,8 @@ async def get_skill_schema(
         if active_user:
             active_user.last_active_at = datetime.utcnow()
     except Exception:
-<<<<<<< HEAD
-        pass  # non-fatal
-
-=======
         pass  # non-fatal — don't block skill execution
-    
->>>>>>> e73f6cf (feat: email open tracking endpoint, last_active_at on User, stamp on skill execution)
+
     # Log usage
     usage_log = UsageLog(
         license_id=license.id,
@@ -5538,6 +5533,32 @@ async def process_drip_queue(
 
     await db.commit()
     return {"sent": sent_count, "failed": failed_count, "checked": len(rows)}
+
+
+@admin_router.get("/email-opens")
+async def get_email_opens(
+    limit: int = Query(100),
+    product: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """GET /admin/email-opens — list email open tracking events."""
+    where = "WHERE product_id = :product" if product else ""
+    params = {"limit": limit, "product": product or ""}
+    result = await db.execute(
+        text(f"""
+            SELECT message_id, product_id, email, opened_at
+            FROM email_opens
+            {where}
+            ORDER BY opened_at DESC
+            LIMIT :limit
+        """),
+        params
+    )
+    rows = result.fetchall()
+    opens = [{"message_id": r[0], "product_id": r[1], "email": r[2],
+              "opened_at": r[3].isoformat() if r[3] else None} for r in rows]
+    unique_emails = len(set(r["email"] for r in opens))
+    return {"opens": opens, "total": len(opens), "unique_emails": unique_emails}
 
 
 @admin_router.get("/drip-template/{email_num}")
