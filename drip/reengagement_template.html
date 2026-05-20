@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your {{PRODUCT_NAME}} credits are waiting — new installer inside</title>
+<style>
+  body { margin:0; padding:0; background:#f4f5f7; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; }
+  .wrapper { max-width:600px; margin:32px auto; background:#ffffff; border-radius:10px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  .header { background:{{ACCENT_COLOR}}; padding:32px 40px; text-align:center; }
+  .header h1 { color:white; margin:0 0 6px; font-size:1.4rem; font-weight:700; }
+  .header p { color:rgba(255,255,255,0.85); margin:0; font-size:0.9rem; }
+  .body { padding:36px 40px; }
+  p { color:#4b5563; font-size:0.95rem; line-height:1.7; margin:0 0 16px; }
+  .highlight-box { background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:16px 20px; margin:20px 0; }
+  .highlight-box p { margin:0; color:#1e40af; font-size:0.9rem; }
+  .steps { background:#f9fafb; border-radius:8px; padding:20px 24px; margin:20px 0; }
+  .steps h3 { margin:0 0 12px; font-size:0.95rem; color:#1a1a2e; font-weight:700; }
+  .steps ol { margin:0; padding-left:20px; color:#4b5563; font-size:0.9rem; line-height:2; }
+  .steps code { background:#e5e7eb; padding:1px 5px; border-radius:4px; font-size:0.85em; font-family:monospace; }
+  .cta-btn { display:block; background:{{ACCENT_COLOR}}; color:white !important; text-decoration:none; text-align:center; padding:16px 28px; border-radius:8px; font-weight:700; font-size:1rem; margin:24px 0; }
+  .verify-box { background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:14px 18px; margin:20px 0; }
+  .verify-box p { margin:0; color:#166534; font-size:0.88rem; }
+  .verify-box code { background:#dcfce7; padding:2px 6px; border-radius:4px; font-family:monospace; font-size:0.88em; color:#14532d; }
+  .footer { background:#f9fafb; padding:24px 40px; text-align:center; border-top:1px solid #e5e7eb; }
+  .footer p { margin:0; font-size:0.8rem; color:#9ca3af; }
+  .footer a { color:#9ca3af; }
+  .warning-box { background:#fffbeb; border:1px solid #fcd34d; border-radius:6px; padding:10px 14px; margin:12px 0; font-size:0.82rem; color:#92400e; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <div class="header">
+    <h1>{{PRODUCT_NAME}}</h1>
+    <p>{{SKILL_COUNT}} AI-powered {{OCCUPATION}} task frameworks</p>
+  </div>
+
+  <div class="body">
+    <p>Hi {{FIRST_NAME}},</p>
+
+    <p>You signed up for {{PRODUCT_NAME}} a little while back and grabbed your 5 free credits — but we noticed you haven't run a task yet.</p>
+
+    <p>We think we know why: <strong>the installer had a bug.</strong></p>
+
+    <p>We've migrated to a native <strong>Windows .exe installer</strong> (and a Mac equivalent) — a much smoother experience than before. It's a single double-click file: no terminal, no config files, no JSON editing. It finds your Claude Desktop, Cursor, Windsurf, or Cline automatically and has you running in under a minute.</p>
+
+    <div class="highlight-box">
+      <p>✅ <strong>Your credits are still there.</strong> They never expire — so nothing was lost. You're picking up right where you left off.</p>
+    </div>
+
+    <div class="steps">
+      <h3>Here's all you need to do:</h3>
+      <ol>
+        <li>Click the button below to go to your account page</li>
+        <li>Click <strong>Download Installer</strong> (Mac or Windows)</li>
+        <li>Double-click it — your license key is pre-filled automatically</li>
+        <li>Restart Claude Desktop (or Cursor / Windsurf / Cline)</li>
+      </ol>
+    </div>
+
+    <div class="warning-box">
+      🪟 <strong>Windows users:</strong> If you see a blue "Windows protected your PC" screen, click <strong>More info → Run anyway</strong>. This is normal for new software.
+    </div>
+
+    <a href="https://{{DOMAIN}}/getting-started.html?utm_source=email&utm_medium=reengagement&utm_campaign=installer-v2&utm_content=cta-button" class="cta-btn">Download the New Installer →</a>
+
+    <div class="verify-box">
+      <p>🚀 <strong>To confirm it's working</strong>, open your AI client and type:<br/>
+      <code>Check my {{PRODUCT_NAME}} balance</code><br/>
+      You should see your 5 credits. Then try: <code>Search {{PRODUCT_NAME}} for tasks that can help me today</code></p>
+    </div>
+
+    <p>If you run into anything, reply to this email or visit <a href="https://{{DOMAIN}}/support.html?utm_source=email&utm_medium=reengagement&utm_campaign=installer-v2&utm_content=support-link" style="color:{{ACCENT_COLOR}};">{{DOMAIN}}/support.html</a>. We respond to every message.</p>
+
+    <p>Your license key: <code style="background:#f3f4f6;padding:2px 7px;border-radius:4px;font-family:monospace;">{{LICENSE_KEY}}</code></p>
+
+    <p style="margin-top:24px;">— The {{PRODUCT_NAME}} Team</p>
+  </div>
+
+  <div class="footer">
+    <p>You're receiving this because you signed up at {{DOMAIN}}.<br/>
+    <a href="https://{{DOMAIN}}/unsubscribe.html?email={{EMAIL_ENCODED}}&utm_source=email&utm_medium=reengagement&utm_campaign=installer-v2">Unsubscribe</a> &nbsp;·&nbsp;
+    <a href="https://{{DOMAIN}}/privacy.html">Privacy Policy</a></p>
+    <!-- open tracking pixel -->
+    <img src="https://api.lawtasksai.com/track/email-open?mid={{MESSAGE_ID}}&product={{PRODUCT_ID}}&email={{EMAIL_ENCODED}}" width="1" height="1" style="display:block;width:1px;height:1px;border:0;" alt="" />
+  </div>
+
+</div>
+</body>
+</html>
