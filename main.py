@@ -2094,16 +2094,29 @@ def _vertical_from_key(key: str) -> dict | None:
     return None
 
 
+def _vertical_from_product_id(pid: str) -> dict | None:
+    """Return vertical metadata dict by product_id string, or None if not found."""
+    for _, meta in _VERTICAL_BY_PREFIX:
+        if meta.get("product_id") == pid:
+            return meta
+    return None
+
+
 @app.get("/v1/me")
 async def get_me(
     license: License = Depends(get_current_license),
     db: AsyncSession = Depends(get_db),
+    product_id: Optional[str] = Query(None, alias="product_id"),
 ):
     """
     Return identity + vertical metadata for the calling license key.
     Used by the MCP server at startup to self-configure tool names and prompts.
     """
-    meta = _vertical_from_key(license.license_key)
+    # If caller passes ?product_id=farmer, use that vertical directly
+    if product_id:
+        meta = _vertical_from_product_id(product_id)
+    else:
+        meta = _vertical_from_key(license.license_key)
 
     # Always fetch user row — needed for email and product_id fallback
     user_result = await db.execute(
@@ -2115,7 +2128,8 @@ async def get_me(
 
     if not meta:
         # Fallback: derive from license.product_id first, then user.product_id
-        product_id = license.product_id or (user_row.product_id if user_row else "law") or "law"
+        resolved_pid = product_id or license.product_id or (user_row.product_id if user_row else "law") or "law"
+        product_id = resolved_pid
         meta = {
             "product_id":    product_id,
             "product_name":  f"{product_id.title()}TasksAI",
