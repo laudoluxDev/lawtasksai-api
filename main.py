@@ -1153,6 +1153,14 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
+    # Capture scalar values now while session is healthy — used in error handlers below
+    _user_id = user.id
+    _user_email = user.email
+    _user_name = user.name or ""
+    _user_firm_name = user.firm_name
+    _user_created_at = user.created_at
+    _license_credits = license.credits_remaining
+
     # Send drip Email 1 (HTML welcome) with license key
     try:
         import sys as _sys
@@ -1251,31 +1259,35 @@ async def register(
             await db.commit()
             print(f"[Drip] Emails 2+3 scheduled for {user.email} ({resolved_product_id})")
         except Exception as sched_err:
-            print(f"[Drip] scheduling failed for {user.email}: {sched_err}")
+            print(f"[Drip] scheduling failed for {_user_email}: {sched_err}")
     except Exception as email_err:
-        print(f"[Drip] Email 1 failed for {user.email}: {email_err}")
+        print(f"[Drip] Email 1 failed for {_user_email}: {email_err}")
 
     # Add to Zoho Campaigns subscriber list (fire-and-forget)
     try:
-        await add_to_zoho_list(user.email, user.name or "", resolved_product_id)
+        await add_to_zoho_list(_user_email, _user_name, resolved_product_id)
     except Exception as zoho_err:
-        print(f"[Zoho Campaigns] signup hook failed for {user.email}: {zoho_err}")
+        print(f"[Zoho Campaigns] signup hook failed for {_user_email}: {zoho_err}")
 
     # Insert email_subscriptions row
     try:
-        sub = EmailSubscription(user_id=user_id, product_id=resolved_product_id, subscribed=True)
+        sub = EmailSubscription(user_id=_user_id, product_id=resolved_product_id, subscribed=True)
         db.add(sub)
         await db.commit()
     except Exception as sub_err:
-        print(f"[EmailSub] failed to insert subscription for {user.email}: {sub_err}")
+        print(f"[EmailSub] failed to insert subscription for {_user_email}: {sub_err}")
+        try:
+            await db.rollback()
+        except Exception:
+            pass
 
     return UserResponse(
-        id=str(user.id),
-        email=user.email,
-        name=user.name,
-        firm_name=user.firm_name,
-        credits_balance=license.credits_remaining,
-        created_at=user.created_at
+        id=str(_user_id),
+        email=_user_email,
+        name=_user_name,
+        firm_name=_user_firm_name,
+        credits_balance=_license_credits,
+        created_at=_user_created_at
     )
 
 @app.post("/v1/signup", response_model=UserResponse, status_code=201)
