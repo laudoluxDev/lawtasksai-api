@@ -320,7 +320,7 @@ VERTICAL_CONFIG = {
 # ── Platform install blocks ──────────────────────────────────────────────
 
 def platform_install_block(platform: str, product_id: str, product_name: str, domain: str) -> str:
-    gs_url = f"https://{domain}/getting-started"
+    gs_url = f"https://{domain}/getting-started?platform={platform}"
 
     blocks = {
         "claude_desktop": f"""

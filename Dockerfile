@@ -17,6 +17,10 @@ COPY loader/ /app/loader/
 # Copy drip email templates
 COPY drip/ /app/drip/
 
+# Security preamble for skill execution
+COPY scripts/__init__.py /app/scripts/__init__.py
+COPY scripts/SECURITY_PREAMBLE.py /app/scripts/SECURITY_PREAMBLE.py
+
 # Run with uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
 
