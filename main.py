@@ -4040,13 +4040,19 @@ async def list_products(db: AsyncSession = Depends(get_db)):
 @admin_router.get("/waitlist")
 async def admin_list_waitlist(product_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     """Admin: list waitlist signups, optionally filtered by product_id."""
-    query = text("""
-        SELECT product_id, email, name, created_at, notified_at
-        FROM waitlist
-        WHERE (:product_id IS NULL OR product_id = :product_id)
-        ORDER BY product_id, created_at DESC
-    """)
-    result = await db.execute(query, {"product_id": product_id})
+    if product_id:
+        query = text("""
+            SELECT product_id, email, name, created_at, notified_at
+            FROM waitlist WHERE product_id = :product_id
+            ORDER BY product_id, created_at DESC
+        """)
+        result = await db.execute(query, {"product_id": product_id})
+    else:
+        query = text("""
+            SELECT product_id, email, name, created_at, notified_at
+            FROM waitlist ORDER BY product_id, created_at DESC
+        """)
+        result = await db.execute(query)
     rows = result.fetchall()
 
     # Group by product
