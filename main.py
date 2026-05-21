@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import os
 import secrets
 import hashlib
+import hmac
 import io
 import zipfile
 import json
@@ -60,6 +61,17 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 # Admin authentication
 ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")  # Set via Cloud Run env var — never hardcode
+
+# Signing key for unsubscribe tokens — derived from ADMIN_SECRET so no extra env var needed
+def _waitlist_unsub_token(email: str, product_id: str) -> str:
+    """Generate a short HMAC token for waitlist unsubscribe links."""
+    key = (ADMIN_SECRET or "fallback-dev-key").encode()
+    msg = f"{email}:{product_id}".encode()
+    return hmac.new(key, msg, digestmod=hashlib.sha256).hexdigest()[:32]
+
+def _verify_waitlist_unsub_token(email: str, product_id: str, token: str) -> bool:
+    expected = _waitlist_unsub_token(email, product_id)
+    return hmac.compare_digest(expected, token)
 
 def verify_admin(x_admin_secret: Optional[str] = Header(None, alias="X-Admin-Secret")):
     """Dependency that enforces admin secret on all /admin/* routes."""
@@ -1508,6 +1520,44 @@ async def join_waitlist(request: WaitlistRequest, db: AsyncSession = Depends(get
     db.add(entry)
     await db.commit()
     return {"success": True, "already_registered": False}
+
+
+@app.get("/waitlist/unsubscribe")
+async def waitlist_unsubscribe(email: str, product_id: str, token: str, db: AsyncSession = Depends(get_db)):
+    """One-click unsubscribe from a vertical waitlist. Linked from emails."""
+    from fastapi.responses import HTMLResponse
+
+    if not _verify_waitlist_unsub_token(email, product_id, token):
+        return HTMLResponse(content="<h2>Invalid or expired unsubscribe link.</h2>", status_code=400)
+
+    await db.execute(
+        text("DELETE FROM waitlist WHERE email = :email AND product_id = :pid"),
+        {"email": email.lower().strip(), "pid": product_id}
+    )
+    await db.commit()
+
+    product_label = product_id.title() + "TasksAI"
+    html = f"""
+    <!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Unsubscribed</title>
+    <style>body{{font-family:system-ui,sans-serif;max-width:480px;margin:80px auto;padding:0 24px;color:#374151;}}
+    h1{{color:#111827;}}p{{line-height:1.6;color:#6b7280;}}</style></head><body>
+    <h1>You\'re unsubscribed.</h1>
+    <p>We\'ve removed <strong>{email}</strong> from the {product_label} waitlist. You won\'t hear from us again.</p>
+    <p style="margin-top:32px;"><a href="https://{product_id}tasksai.com" style="color:#6366f1;">Back to {product_label}</a></p>
+    </body></html>
+    """
+    return HTMLResponse(content=html)
+
+
+@app.get("/waitlist/unsubscribe-token")
+async def get_waitlist_unsub_token(email: str, product_id: str, x_admin_secret: Optional[str] = Header(None, alias="X-Admin-Secret")):
+    """Admin helper: generate an unsubscribe token for a given email+product. Used when composing emails."""
+    if x_admin_secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    token = _waitlist_unsub_token(email, product_id)
+    url = f"https://api.lawtasksai.com/waitlist/unsubscribe?email={email}&product_id={product_id}&token={token}"
+    return {"token": token, "unsubscribe_url": url}
 
 
 # ============================================
