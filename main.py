@@ -3971,17 +3971,22 @@ async def list_products(db: AsyncSession = Depends(get_db)):
 async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a user and all associated data (admin only)."""
     uid = uuid.UUID(user_id)
-    # Delete FK-dependent rows one statement at a time (async driver doesn't support multi-statement)
-    for stmt in [
-        text("DELETE FROM credit_transactions WHERE user_id = :uid"),
-        text("DELETE FROM usage_logs WHERE user_id = :uid"),
-        text("DELETE FROM drip_emails WHERE user_id = :uid"),
-        text("DELETE FROM user_feedback WHERE user_id = :uid"),
-        text("DELETE FROM email_subscriptions WHERE user_id = :uid"),
-        text("DELETE FROM licenses WHERE user_id = :uid"),
-        text("DELETE FROM users WHERE id = :uid"),
+    # Look up user email (needed for non-user_id FK tables)
+    user_row = await db.execute(text("SELECT email FROM users WHERE id = :uid"), {"uid": uid})
+    user_email = user_row.scalar_one_or_none()
+    # Delete FK-dependent rows one statement at a time
+    for stmt, params in [
+        (text("DELETE FROM credit_transactions WHERE user_id = :uid"), {"uid": uid}),
+        (text("DELETE FROM usage_logs WHERE user_id = :uid"), {"uid": uid}),
+        (text("DELETE FROM drip_emails WHERE user_id = :uid"), {"uid": uid}),
+        (text("DELETE FROM email_subscriptions WHERE user_id = :uid"), {"uid": uid}),
+        (text("DELETE FROM licenses WHERE user_id = :uid"), {"uid": uid}),
+        (text("DELETE FROM users WHERE id = :uid"), {"uid": uid}),
     ]:
-        await db.execute(stmt, {"uid": uid})
+        await db.execute(stmt, params)
+    # user_feedback uses email not user_id (no FK constraint, cleanup only)
+    if user_email:
+        await db.execute(text("DELETE FROM user_feedback WHERE email = :email"), {"email": user_email})
     await db.commit()
     return {"success": True, "deleted_user_id": user_id}
 
