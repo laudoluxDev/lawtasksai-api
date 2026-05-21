@@ -3970,14 +3970,8 @@ async def list_products(db: AsyncSession = Depends(get_db)):
 @admin_router.delete("/users/{user_id}")
 async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a user and all associated data (admin only)."""
-    uid = uuid.UUID(user_id)
-    # Delete in FK order
-    await db.execute(select(License).where(License.user_id == uid))
-    licenses = (await db.execute(select(License).where(License.user_id == uid))).scalars().all()
-    for lic in licenses:
-        await db.execute(select(CreditTransaction).where(CreditTransaction.license_id == lic.id))
-        await db.execute(select(UsageLog).where(UsageLog.license_id == lic.id))
     from sqlalchemy import delete as sql_delete
+    uid = uuid.UUID(user_id)
     await db.execute(sql_delete(CreditTransaction).where(CreditTransaction.user_id == uid))
     await db.execute(sql_delete(UsageLog).where(UsageLog.user_id == uid))
     await db.execute(sql_delete(License).where(License.user_id == uid))
@@ -3985,6 +3979,19 @@ async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
     await db.commit()
     return {"success": True, "deleted_user_id": user_id}
 
+
+@admin_router.patch("/users/{user_id}")
+async def update_user(user_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Update user fields (name, firm_name, email) — admin only."""
+    from sqlalchemy import update as sql_update
+    uid = uuid.UUID(user_id)
+    body = await request.json()
+    allowed = {k: v for k, v in body.items() if k in ('name', 'firm_name', 'email')}
+    if not allowed:
+        raise HTTPException(400, "No updatable fields provided")
+    await db.execute(sql_update(User).where(User.id == uid).values(**allowed))
+    await db.commit()
+    return {"success": True, "updated": allowed}
 
 @admin_router.post("/credits/add")
 async def add_credits(
