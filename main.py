@@ -1198,7 +1198,7 @@ async def register(
                 _resp = await _hc.post(
                     f"https://mail.zoho.com/api/accounts/6556209000000008002/messages",
                     json={
-                        "fromAddress": f"{reg_product_name} <hello@{reg_product_domain}>",
+                        "fromAddress": f"=?UTF-8?B?{base64.b64encode(reg_product_name.encode()).decode()}?= <hello@{reg_product_domain}>",
                         "toAddress": user.email,
                         "subject": email1_subject,
                         "content": email1_html,

@@ -1,5 +1,7 @@
 """Corrective Email 1 blast — sends correct vertical email to users who were mislabeled as law."""
-import json, pathlib, urllib.request, urllib.parse, time
+import json, pathlib, urllib.request, urllib.parse, time, base64
+
+def rfc2047(name): return f"=?UTF-8?B?{base64.b64encode(name.encode()).decode()}?="
 
 ACCOUNT_ID = "6556209000000008002"
 ADMIN_SECRET = "2e3b1d4149297c9fe9bb0a4ea5be5a57b6dc28ed7f38cd3a5bf0092c44398643"
@@ -129,7 +131,7 @@ for pid, users in USERS.items():
             html = html.replace(k,v)
         subject = f"{pname}: New one-click installer is here"
         print(f"  {email}...", end=" ", flush=True)
-        if send(email, f"{pname} Team <hello@{domain}>", subject, html):
+        if send(email, f"{rfc2047(pname)} <hello@{domain}>", subject, html):
             print("✅"); sent+=1; record(email, pid, subject)
         else:
             print("❌"); failed+=1
