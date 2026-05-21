@@ -3972,8 +3972,12 @@ async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a user and all associated data (admin only)."""
     from sqlalchemy import delete as sql_delete
     uid = uuid.UUID(user_id)
+    # Delete all FK-dependent tables in safe order
     await db.execute(sql_delete(CreditTransaction).where(CreditTransaction.user_id == uid))
     await db.execute(sql_delete(UsageLog).where(UsageLog.user_id == uid))
+    await db.execute(sql_delete(DripEmail).where(DripEmail.user_id == uid))
+    await db.execute(sql_delete(UserFeedback).where(UserFeedback.user_id == uid))
+    await db.execute(sql_delete(EmailSubscription).where(EmailSubscription.user_id == uid))
     await db.execute(sql_delete(License).where(License.user_id == uid))
     await db.execute(sql_delete(User).where(User.id == uid))
     await db.commit()
