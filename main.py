@@ -3970,18 +3970,18 @@ async def list_products(db: AsyncSession = Depends(get_db)):
 @admin_router.delete("/users/{user_id}")
 async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a user and all associated data (admin only)."""
-    from sqlalchemy import text as sql_text
     uid = uuid.UUID(user_id)
-    # Delete all dependent rows unconditionally, then delete the user
-    await db.execute(sql_text(
-        "DELETE FROM credit_transactions WHERE user_id = :uid;"
-        "DELETE FROM usage_logs WHERE user_id = :uid;"
-        "DELETE FROM drip_emails WHERE user_id = :uid;"
-        "DELETE FROM user_feedback WHERE user_id = :uid;"
-        "DELETE FROM email_subscriptions WHERE user_id = :uid;"
-        "DELETE FROM licenses WHERE user_id = :uid;"
-        "DELETE FROM users WHERE id = :uid;"
-    ), {"uid": uid})
+    # Delete FK-dependent rows one statement at a time (async driver doesn't support multi-statement)
+    for stmt in [
+        text("DELETE FROM credit_transactions WHERE user_id = :uid"),
+        text("DELETE FROM usage_logs WHERE user_id = :uid"),
+        text("DELETE FROM drip_emails WHERE user_id = :uid"),
+        text("DELETE FROM user_feedback WHERE user_id = :uid"),
+        text("DELETE FROM email_subscriptions WHERE user_id = :uid"),
+        text("DELETE FROM licenses WHERE user_id = :uid"),
+        text("DELETE FROM users WHERE id = :uid"),
+    ]:
+        await db.execute(stmt, {"uid": uid})
     await db.commit()
     return {"success": True, "deleted_user_id": user_id}
 
