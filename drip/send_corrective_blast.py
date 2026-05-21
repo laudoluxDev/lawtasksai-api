@@ -55,9 +55,44 @@ def task_cards_html(cards_str):
 
 def install_block(domain):
     gs = f"https://{domain}/getting-started"
-    btns = "".join(f"<a href='{gs}#{slug}' style='display:inline-block;background:#e0e7ff;color:#3730a3;padding:6px 14px;border-radius:20px;font-size:0.82rem;font-weight:600;text-decoration:none;margin:3px;'>{label}</a>"
-                   for slug,label in [("claude-desktop","Claude Desktop"),("claude-code","Claude Code"),("cursor","Cursor"),("windsurf","Windsurf"),("cline","Cline"),("openclaw","OpenClaw")])
-    return f"<div style='background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;'><h3 style='margin:0 0 12px;font-size:1rem;color:#1a1a2e;'>Get set up in 5 minutes</h3><p style='font-size:0.9rem;color:#4b5563;margin:0 0 14px;'>Choose your AI client for step-by-step instructions:</p><div style='margin-bottom:16px;'>{btns}</div><p style='margin:0;font-size:0.82rem;background:#ecfdf5;border-radius:6px;padding:10px 12px;color:#065f46;'>✅ The installer handles everything automatically — no manual config needed.</p></div>"
+    platforms = [
+        ("claude-desktop", "Claude Desktop",  "Most popular",        "Anthropic's free app"),
+        ("cursor",         "Cursor",           "AI code editor",      "Great for professionals"),
+        ("windsurf",       "Windsurf",         "AI code editor",      "Clean, fast interface"),
+        ("cline",          "Cline",            "VS Code extension",   "Inside VS Code"),
+        ("claude-code",    "Claude Code",      "Anthropic CLI",       "Terminal-based"),
+        ("openclaw",       "OpenClaw",         "Alternative",         "One command, no config"),
+    ]
+    selector_style = ("display:inline-block;text-decoration:none;border:2px solid #e5e7eb;"
+                      "border-radius:8px;padding:10px 16px;margin:4px;background:#ffffff;"
+                      "min-width:130px;text-align:center;vertical-align:top;")
+    label_style = "display:block;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#9ca3af;margin-bottom:2px;"
+    name_style  = "display:block;font-size:0.92rem;font-weight:700;color:#1a1a2e;"
+    note_style  = "display:block;font-size:0.75rem;color:#6b7280;margin-top:2px;"
+    cards = "".join(
+        f"<a href='{gs}?platform={slug}' style='{selector_style}'>"
+        f"<span style='{label_style}'>{sub}</span>"
+        f"<span style='{name_style}'>{label}</span>"
+        f"<span style='{note_style}'>{note}</span>"
+        f"</a>"
+        for slug, label, sub, note in platforms
+    )
+    return (
+        f"<div style='background:#f9fafb;border:2px solid #e5e7eb;border-radius:10px;padding:24px;margin:20px 0;'>"
+        f"<div style='margin-bottom:6px;'>"
+        f"<span style='font-size:1.1rem;font-weight:800;color:#1a1a2e;'>Experience our new installer!</span>&nbsp;"
+        f"<span style='display:inline-block;background:#f59e0b;color:#ffffff;font-size:0.7rem;font-weight:800;"
+        f"padding:2px 9px;border-radius:20px;letter-spacing:0.05em;text-transform:uppercase;'>✨ New</span>"
+        f"</div>"
+        f"<p style='font-size:0.88rem;color:#4b5563;margin:0 0 16px;line-height:1.5;'>"
+        f"One-click setup — no terminal, no config files. Select your AI client to get started:"
+        f"</p>"
+        f"<div style='margin-bottom:16px;'>{cards}</div>"
+        f"<p style='margin:0;font-size:0.82rem;background:#ecfdf5;border:1px solid #bbf7d0;border-radius:6px;"
+        f"padding:10px 14px;color:#065f46;'>"
+        f"✅ The installer handles everything automatically — enter your license key, click Install, restart your AI client."
+        f"</p></div>"
+    )
 
 def send(to, from_addr, subject, html):
     payload = json.dumps({"fromAddress":from_addr,"toAddress":to,"subject":subject,"content":html,"mailFormat":"html"}).encode()
@@ -92,9 +127,9 @@ for pid, users in USERS.items():
             "{{UNSUBSCRIBE_URL}}":f"https://{domain}/unsubscribe?email={enc}",
         }.items():
             html = html.replace(k,v)
-        subject = f"Your {pname} credits are ready — here's how to use them"
+        subject = f"{pname}: New one-click installer is here"
         print(f"  {email}...", end=" ", flush=True)
-        if send(email, f"hello@{domain}", subject, html):
+        if send(email, f"{pname} Team <hello@{domain}>", subject, html):
             print("✅"); sent+=1; record(email, pid, subject)
         else:
             print("❌"); failed+=1

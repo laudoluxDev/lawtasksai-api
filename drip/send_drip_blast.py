@@ -273,7 +273,7 @@ tmpl = (DRIP_DIR / f"email{EMAIL_NUM}_template.html").read_text()
 sent = 0; failed = 0
 for pid, p, u, greeting in send_list:
     email      = u["email"]
-    from_addr  = f"hello@{p['domain']}"
+    from_addr  = f"{p['product_name']} <hello@{p['domain']}>"
     subject    = f"Have you run your first {p['product_name']} task yet?" if EMAIL_NUM == 2 else \
                  f"What would make {p['product_name']} useful for you?" if EMAIL_NUM == 3 else \
                  f"Your {p['product_name']} credits are ready — here's how to use them"
