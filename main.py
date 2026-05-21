@@ -108,6 +108,8 @@ class User(Base):
     profile: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
     # Platforms the user has selected (e.g. ["claude_desktop", "openclaw"])
     platforms: Mapped[Optional[list]] = mapped_column(JSONB, default=list)
+    # Engagement tracking: set when user executes their first skill
+    last_active_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     @property
     def credits_balance(self) -> int:
@@ -994,10 +996,11 @@ async def startup():
             """))
         except Exception as e:
             print(f"[startup migration] download_tokens table: {e}")
-        # Migration: add funnel tracking columns to licenses
+        # Migration: add funnel tracking columns to licenses + users
         try:
             await conn.execute(text("ALTER TABLE licenses ADD COLUMN IF NOT EXISTS downloaded_at TIMESTAMP"))
             await conn.execute(text("ALTER TABLE licenses ADD COLUMN IF NOT EXISTS first_connected_at TIMESTAMP"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP"))
         except Exception as e:
             print(f"[startup migration] funnel tracking columns: {e}")
         # Migration: create support_requests table
@@ -1695,7 +1698,16 @@ async def get_skill_schema(
     # Deduct credits and increment usage
     license.credits_remaining -= skill.credits_per_use
     license.usage_count += 1
-    
+
+    # Stamp last_active_at on user for engagement tracking
+    try:
+        user_result = await db.execute(select(User).where(User.id == license.user_id))
+        active_user = user_result.scalar_one_or_none()
+        if active_user:
+            active_user.last_active_at = datetime.utcnow()
+    except Exception:
+        pass  # non-fatal
+
     # Log usage
     usage_log = UsageLog(
         license_id=license.id,
