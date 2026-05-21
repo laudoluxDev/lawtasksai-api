@@ -333,6 +333,20 @@ class EmailSubscription(Base):
 
     __table_args__ = (UniqueConstraint("user_id", "product_id", name="uq_email_sub_user_product"),)
 
+
+class WaitlistEntry(Base):
+    """Waitlist signup for a vertical that doesn't have an installer yet."""
+    __tablename__ = "waitlist"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    product_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (UniqueConstraint("email", "product_id", name="uq_waitlist_email_product"),)
+
 # ============================================
 # Database Session
 # ============================================
@@ -1023,6 +1037,23 @@ async def startup():
         except Exception as e:
             print(f"[startup migration] support_requests table: {e}")
 
+        # Migration: create waitlist table
+        try:
+            await db.execute(text("""
+                CREATE TABLE IF NOT EXISTS waitlist (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    email VARCHAR(255) NOT NULL,
+                    name VARCHAR(200),
+                    product_id VARCHAR(50) NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    notified_at TIMESTAMP,
+                    UNIQUE(email, product_id)
+                );
+            """))
+            await db.commit()
+        except Exception as e:
+            print(f"[startup migration] waitlist table: {e}")
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -1438,6 +1469,45 @@ async def account_licenses(request: RecoverLicenseRequest, db: AsyncSession = De
         ))
 
     return AccountLicensesResponse(email=user.email, licenses=items)
+
+
+# ============================================
+# Routes: Waitlist
+# ============================================
+
+# Verticals with working installers — waitlist is NOT needed for these
+READY_VERTICALS = {"law", "realtor", "farmer", "teacher", "therapist", "marketing", "contractor"}
+
+
+class WaitlistRequest(BaseModel):
+    email: str
+    name: Optional[str] = None
+    product_id: str
+
+
+@app.post("/auth/waitlist", status_code=200)
+async def join_waitlist(request: WaitlistRequest, db: AsyncSession = Depends(get_db)):
+    """Join the waitlist for a vertical that doesn't have an installer yet."""
+    email = request.email.lower().strip()
+    product_id = request.product_id.lower().strip()
+
+    if product_id in READY_VERTICALS:
+        raise HTTPException(status_code=400, detail="This product is already available — please register instead.")
+
+    # Upsert — idempotent if they sign up twice
+    existing = await db.execute(
+        select(WaitlistEntry).where(
+            WaitlistEntry.email == email,
+            WaitlistEntry.product_id == product_id
+        )
+    )
+    if existing.scalar_one_or_none():
+        return {"success": True, "already_registered": True}
+
+    entry = WaitlistEntry(email=email, name=request.name, product_id=product_id)
+    db.add(entry)
+    await db.commit()
+    return {"success": True, "already_registered": False}
 
 
 # ============================================
@@ -3965,6 +4035,50 @@ async def list_products(db: AsyncSession = Depends(get_db)):
         }
         for row in rows
     ]
+
+
+@admin_router.get("/waitlist")
+async def admin_list_waitlist(product_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    """Admin: list waitlist signups, optionally filtered by product_id."""
+    query = text("""
+        SELECT product_id, email, name, created_at, notified_at
+        FROM waitlist
+        WHERE (:product_id IS NULL OR product_id = :product_id)
+        ORDER BY product_id, created_at DESC
+    """)
+    result = await db.execute(query, {"product_id": product_id})
+    rows = result.fetchall()
+
+    # Group by product
+    from collections import defaultdict
+    by_product = defaultdict(list)
+    for row in rows:
+        by_product[row.product_id].append({
+            "email": row.email,
+            "name": row.name,
+            "signed_up": row.created_at.isoformat() if row.created_at else None,
+            "notified": row.notified_at.isoformat() if row.notified_at else None,
+        })
+
+    summary = [
+        {"product_id": pid, "count": len(entries), "entries": entries}
+        for pid, entries in sorted(by_product.items())
+    ]
+    return {"total": len(rows), "products": summary}
+
+
+@admin_router.post("/waitlist/notify/{product_id}")
+async def admin_notify_waitlist(product_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Admin: mark all waitlist entries for a product as notified (set notified_at = now).
+    Call this after you've sent the launch email blast so you don't double-notify.
+    """
+    result = await db.execute(
+        text("UPDATE waitlist SET notified_at = NOW() WHERE product_id = :pid AND notified_at IS NULL"),
+        {"pid": product_id}
+    )
+    await db.commit()
+    return {"success": True, "product_id": product_id, "notified": result.rowcount}
 
 
 @admin_router.delete("/users/{user_id}")
