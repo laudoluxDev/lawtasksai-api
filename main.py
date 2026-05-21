@@ -4004,6 +4004,25 @@ async def update_user(user_id: str, request: Request, db: AsyncSession = Depends
     await db.commit()
     return {"success": True, "updated": allowed}
 
+@admin_router.post("/credits/set")
+async def set_credits(
+    license_key: str,
+    credits: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Set credits on a license to an exact value (admin only)."""
+    result = await db.execute(select(License).where(License.license_key == license_key))
+    license = result.scalar_one_or_none()
+    if not license:
+        raise HTTPException(status_code=404, detail="License not found")
+    old = license.credits_remaining
+    license.credits_remaining = credits
+    license.credits_purchased = credits
+    license.updated_at = datetime.utcnow()
+    await db.commit()
+    return {"success": True, "old_balance": old, "new_balance": credits}
+
+
 @admin_router.post("/credits/add")
 async def add_credits(
     license_key: str,
