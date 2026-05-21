@@ -3972,16 +3972,16 @@ async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a user and all associated data (admin only)."""
     from sqlalchemy import text as sql_text
     uid = uuid.UUID(user_id)
-    # Use raw SQL to handle any FK constraints regardless of ORM model state
-    for tbl in ("credit_transactions", "usage_logs", "drip_emails",
-                "user_feedback", "email_subscriptions", "zoho_campaigns_log",
-                "support_requests", "licenses"):
-        try:
-            await db.execute(sql_text(f"DELETE FROM {tbl} WHERE user_id = :uid"), {"uid": uid})
-        except Exception:
-            await db.rollback()
-            pass
-    await db.execute(sql_text("DELETE FROM users WHERE id = :uid"), {"uid": uid})
+    # Delete all dependent rows unconditionally, then delete the user
+    await db.execute(sql_text(
+        "DELETE FROM credit_transactions WHERE user_id = :uid;"
+        "DELETE FROM usage_logs WHERE user_id = :uid;"
+        "DELETE FROM drip_emails WHERE user_id = :uid;"
+        "DELETE FROM user_feedback WHERE user_id = :uid;"
+        "DELETE FROM email_subscriptions WHERE user_id = :uid;"
+        "DELETE FROM licenses WHERE user_id = :uid;"
+        "DELETE FROM users WHERE id = :uid;"
+    ), {"uid": uid})
     await db.commit()
     return {"success": True, "deleted_user_id": user_id}
 
