@@ -3970,16 +3970,18 @@ async def list_products(db: AsyncSession = Depends(get_db)):
 @admin_router.delete("/users/{user_id}")
 async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a user and all associated data (admin only)."""
-    from sqlalchemy import delete as sql_delete
     uid = uuid.UUID(user_id)
-    # Delete all FK-dependent tables in safe order
-    await db.execute(sql_delete(CreditTransaction).where(CreditTransaction.user_id == uid))
-    await db.execute(sql_delete(UsageLog).where(UsageLog.user_id == uid))
-    await db.execute(sql_delete(DripEmail).where(DripEmail.user_id == uid))
-    await db.execute(sql_delete(UserFeedback).where(UserFeedback.user_id == uid))
-    await db.execute(sql_delete(EmailSubscription).where(EmailSubscription.user_id == uid))
-    await db.execute(sql_delete(License).where(License.user_id == uid))
-    await db.execute(sql_delete(User).where(User.id == uid))
+    # Use raw SQL to handle any FK constraints regardless of ORM model state
+    for tbl in ("credit_transactions", "usage_logs", "drip_emails",
+                "user_feedback", "email_subscriptions", "zoho_campaigns_log",
+                "support_requests", "licenses"):
+        try:
+            await db.execute(sa.text(f"DELETE FROM {tbl} WHERE user_id = :uid"), {"uid": uid})
+        except Exception:
+            await db.rollback()
+            # Table may not have user_id or may not exist — skip and continue
+            pass
+    await db.execute(sa.text("DELETE FROM users WHERE id = :uid"), {"uid": uid})
     await db.commit()
     return {"success": True, "deleted_user_id": user_id}
 
