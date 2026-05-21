@@ -211,6 +211,8 @@ class License(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    downloaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    first_connected_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 class UsageLog(Base):
     __tablename__ = "usage_logs"
@@ -992,6 +994,12 @@ async def startup():
             """))
         except Exception as e:
             print(f"[startup migration] download_tokens table: {e}")
+        # Migration: add funnel tracking columns to licenses
+        try:
+            await conn.execute(text("ALTER TABLE licenses ADD COLUMN IF NOT EXISTS downloaded_at TIMESTAMP"))
+            await conn.execute(text("ALTER TABLE licenses ADD COLUMN IF NOT EXISTS first_connected_at TIMESTAMP"))
+        except Exception as e:
+            print(f"[startup migration] funnel tracking columns: {e}")
         # Migration: create support_requests table
         try:
             await conn.execute(text("""
@@ -2989,6 +2997,13 @@ async def download_loader_by_session(
     # Route MCP-platform users to direct GitHub installer download
     platforms = _user_platforms(user)
     if platforms & MCP_PLATFORMS and product_id in _PRODUCT_NAME_MAP:
+        # Stamp first download (funnel tracking)
+        if license.downloaded_at is None:
+            license.downloaded_at = datetime.utcnow()
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
         urls = _get_installer_url(product_id, request.headers.get("user-agent", ""))
         ua = request.headers.get("user-agent", "").lower()
         dest = urls["windows"] if "windows" in ua else urls["mac"]
@@ -3136,6 +3151,14 @@ async def _build_loader_zip(license_key: str, product_id: str, db: AsyncSession)
     license = result.scalar_one_or_none()
     if not license:
         raise HTTPException(status_code=404, detail="Invalid license key")
+
+    # Stamp first download time (funnel tracking)
+    if license.downloaded_at is None:
+        license.downloaded_at = datetime.utcnow()
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
 
     user_product_id = product_id or "law"
 
@@ -3289,6 +3312,13 @@ async def download_loader(license_key: str, request: Request, db: AsyncSession =
     # Route MCP-platform users to direct GitHub installer download
     platforms = _user_platforms(user)
     if platforms & MCP_PLATFORMS and product_id in _PRODUCT_NAME_MAP:
+        # Stamp first download (funnel tracking)
+        if license and license.downloaded_at is None:
+            license.downloaded_at = datetime.utcnow()
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
         urls = _get_installer_url(product_id, request.headers.get("user-agent", ""))
         ua = request.headers.get("user-agent", "").lower()
         dest = urls["windows"] if "windows" in ua else urls["mac"]
@@ -3356,6 +3386,33 @@ async def get_product(product_id: str, db: AsyncSession = Depends(get_db)):
             "background": row.background_color,
         },
     }
+
+
+# ============================================
+# Tracking Endpoints (public, key-authenticated)
+# ============================================
+
+@app.get("/track/first-connection")
+async def track_first_connection(
+    license_key: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Called by server.py on startup to record the first time the MCP server
+    successfully connects. Idempotent — only sets first_connected_at once.
+    No auth beyond the license key itself.
+    """
+    result = await db.execute(
+        select(License).where(License.license_key == license_key, License.status == "active")
+    )
+    license = result.scalar_one_or_none()
+    if not license:
+        # Return 200 anyway — don't leak whether key exists
+        return {"ok": True}
+    if license.first_connected_at is None:
+        license.first_connected_at = datetime.utcnow()
+        await db.commit()
+    return {"ok": True}
 
 
 # ============================================
@@ -3781,9 +3838,77 @@ async def list_users(db: AsyncSession = Depends(get_db)):
             "profile": user.profile or {},
             "platforms": user.platforms or [],
             "product_id": (license.product_id if license else None) or user.product_id or "law",
+            "last_active_at": user.last_active_at.isoformat() if user.last_active_at else None,
+            "downloaded_at": license.downloaded_at.isoformat() if license and license.downloaded_at else None,
+            "first_connected_at": license.first_connected_at.isoformat() if license and license.first_connected_at else None,
         })
-    
-    return {"users": users, "count": len(users)}
+
+    activated = sum(1 for u in users if u["last_active_at"] is not None)
+    return {"users": users, "count": len(users), "activated": activated, "never_activated": len(users) - activated}
+
+
+@admin_router.get("/funnel")
+async def get_funnel(db: AsyncSession = Depends(get_db)):
+    """
+    Activation funnel breakdown:
+      signed_up → downloaded → connected → used_credits
+    Excludes internal/test accounts.
+    """
+    result = await db.execute(
+        select(User, License)
+        .outerjoin(License, User.id == License.user_id)
+        .order_by(User.created_at.desc())
+    )
+    rows = result.all()
+
+    SKIP = {"test", "internal", "clio", "kentmercier"}
+
+    def is_real(email: str) -> bool:
+        low = email.lower()
+        return not any(s in low for s in SKIP)
+
+    per_user = []
+    for user, license in rows:
+        if not is_real(user.email):
+            continue
+        credits_purchased = license.credits_purchased if license else 0
+        credits_remaining = license.credits_remaining if license else 0
+        credits_used = max(0, credits_purchased - credits_remaining)
+        per_user.append({
+            "email": user.email,
+            "product_id": (license.product_id if license else None) or user.product_id or "law",
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "downloaded": license.downloaded_at is not None if license else False,
+            "connected": license.first_connected_at is not None if license else False,
+            "used_credits": credits_used > 0,
+            "credits_used": credits_used,
+            "downloaded_at": license.downloaded_at.isoformat() if license and license.downloaded_at else None,
+            "connected_at": license.first_connected_at.isoformat() if license and license.first_connected_at else None,
+            "last_active_at": user.last_active_at.isoformat() if user.last_active_at else None,
+        })
+
+    total = len(per_user)
+    downloaded = sum(1 for u in per_user if u["downloaded"])
+    connected = sum(1 for u in per_user if u["connected"])
+    used = sum(1 for u in per_user if u["used_credits"])
+
+    def pct(n, d):
+        return f"{round(100 * n / d)}%" if d else "—"
+
+    return {
+        "total": total,
+        "signed_up_only": total - downloaded,
+        "downloaded": downloaded,
+        "connected": connected,
+        "used_credits": used,
+        "rates": {
+            "signup_to_download": pct(downloaded, total),
+            "download_to_connect": pct(connected, downloaded),
+            "connect_to_use": pct(used, connected),
+            "overall": pct(used, total),
+        },
+        "per_user": per_user,
+    }
 
 
 @admin_router.get("/products")
