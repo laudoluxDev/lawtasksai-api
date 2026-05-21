@@ -321,6 +321,7 @@ VERTICAL_CONFIG = {
 
 def platform_install_block(platform: str, product_id: str, product_name: str, domain: str) -> str:
     gs_url = f"https://{domain}/getting-started"
+    new_badge = "<span style='display:inline-block;background:#f59e0b;color:#ffffff;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;letter-spacing:0.04em;text-transform:uppercase;margin-left:8px;'>✨ New Installer!</span>"
 
     blocks = {
         "claude_desktop": f"""
@@ -329,7 +330,8 @@ def platform_install_block(platform: str, product_id: str, product_name: str, do
   <a href="https://claude.ai/download" style="color:#92400e;font-weight:700;">Download Claude Desktop free →</a>
 </div>
 <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Install on Claude Desktop</h3>
+  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get set up in 5 minutes {new_badge}</h3>
+  <p style="margin:0 0 12px;font-size:0.88rem;color:#4b5563;">Our new one-click installer handles everything automatically:</p>
   <ol style="margin:0;padding-left:20px;color:#4b5563;font-size:0.9rem;line-height:1.9;">
     <li>Click the download button above to get your installer</li>
     <li>Double-click <code style="background:#e5e7eb;padding:1px 5px;border-radius:3px;font-size:0.85em;">{product_name}-Setup.exe</code> (Windows) or <code style="background:#e5e7eb;padding:1px 5px;border-radius:3px;font-size:0.85em;">{product_name}-Setup</code> (Mac)</li>
@@ -346,7 +348,7 @@ def platform_install_block(platform: str, product_id: str, product_name: str, do
 
         "openclaw": f"""
 <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Install on OpenClaw</h3>
+  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get set up in 5 minutes {new_badge}</h3>
   <p style="margin:0 0 10px;color:#4b5563;font-size:0.9rem;">Open OpenClaw and run:</p>
   <code style="background:#1a1a2e;color:#7dd3fc;padding:10px 16px;border-radius:6px;display:block;font-size:0.88rem;margin-bottom:10px;">openclaw skills install {product_id}</code>
   <p style="margin:0;color:#6b7280;font-size:0.85rem;">That's it. OpenClaw downloads and configures everything automatically.</p>
@@ -357,7 +359,8 @@ def platform_install_block(platform: str, product_id: str, product_name: str, do
 
         "cursor": f"""
 <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Install on Cursor</h3>
+  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get set up in 5 minutes {new_badge}</h3>
+  <p style="margin:0 0 10px;font-size:0.88rem;color:#4b5563;">Our new one-click installer handles everything automatically:</p>
   <ol style="margin:0;padding-left:20px;color:#4b5563;font-size:0.9rem;line-height:1.9;">
     <li>Click the download button above to get your installer</li>
     <li>Double-click the installer and enter your license key</li>
@@ -371,7 +374,8 @@ def platform_install_block(platform: str, product_id: str, product_name: str, do
 
         "windsurf": f"""
 <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Install on Windsurf</h3>
+  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get set up in 5 minutes {new_badge}</h3>
+  <p style="margin:0 0 10px;font-size:0.88rem;color:#4b5563;">Our new one-click installer handles everything automatically:</p>
   <ol style="margin:0;padding-left:20px;color:#4b5563;font-size:0.9rem;line-height:1.9;">
     <li>Click the download button above to get your installer</li>
     <li>Double-click the installer and enter your license key</li>
@@ -385,7 +389,8 @@ def platform_install_block(platform: str, product_id: str, product_name: str, do
 
         "cline": f"""
 <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Install on Cline (VS Code)</h3>
+  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get set up in 5 minutes {new_badge}</h3>
+  <p style="margin:0 0 10px;font-size:0.88rem;color:#4b5563;">Our new one-click installer handles everything automatically:</p>
   <ol style="margin:0;padding-left:20px;color:#4b5563;font-size:0.9rem;line-height:1.9;">
     <li>Click the download button above to get your installer</li>
     <li>Double-click the installer and enter your license key</li>
@@ -399,7 +404,8 @@ def platform_install_block(platform: str, product_id: str, product_name: str, do
 
         "claude_code": f"""
 <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Install on Claude Code</h3>
+  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get set up in 5 minutes {new_badge}</h3>
+  <p style="margin:0 0 10px;font-size:0.88rem;color:#4b5563;">Our new one-click installer handles everything automatically:</p>
   <ol style="margin:0;padding-left:20px;color:#4b5563;font-size:0.9rem;line-height:1.9;">
     <li>Click the download button above to get your installer</li>
     <li>Double-click the installer and enter your license key</li>
