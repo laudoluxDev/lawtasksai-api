@@ -278,7 +278,7 @@ for pid, p, u, greeting in send_list:
     from_addr  = f"{rfc2047(p['product_name'])} <hello@{p['domain']}>"
     subject    = f"Have you run your first {p['product_name']} task yet?" if EMAIL_NUM == 2 else \
                  f"What would make {p['product_name']} useful for you?" if EMAIL_NUM == 3 else \
-                 f"Your {p['product_name']} credits are ready — here's how to use them"
+                 "New Installer Makes It Easy!"
     html = build_html(tmpl, p, pid, email, greeting)
     print(f"  [{p['product_name']}] {email}...", end=" ", flush=True)
     if send_email(email, from_addr, subject, html, token):

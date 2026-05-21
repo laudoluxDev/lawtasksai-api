@@ -129,7 +129,7 @@ for pid, users in USERS.items():
             "{{UNSUBSCRIBE_URL}}":f"https://{domain}/unsubscribe?email={enc}",
         }.items():
             html = html.replace(k,v)
-        subject = f"{pname}: New one-click installer is here"
+        subject = "New Installer Makes It Easy!"
         print(f"  {email}...", end=" ", flush=True)
         if send(email, f"{rfc2047(pname)} <hello@{domain}>", subject, html):
             print("✅"); sent+=1; record(email, pid, subject)
