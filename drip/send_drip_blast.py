@@ -23,11 +23,25 @@ TOKEN_FILE      = pathlib.Path.home() / ".config/zoho-mail-tokens.json"
 DRIP_DIR        = pathlib.Path(__file__).parent
 
 SKIP_EMAILS = {
+    # internal test accounts
     "clio-test-hr@internal.test",
     "clio_test_probe_1777461218@example.com",
     "test-signup-realtor@mailinator.com",
     "test-signup-1778257956@example.com",
+    "clio+curltest-law2@gmail.com",
+    "clio+curltest-law@gmail.com",
+    "clio+signuptest-1779289941@gmail.com",
+    "clio+signuptest-1779290123@gmail.com",
+    "clio+test-law-7a3b8e1f@lawtasksai.com",
+    "clio+test-law-d3918434@lawtasksai.com",
+    "kent+farmer@lawtasksai.com",
+    # duplicate/case variants — normalize to lowercase on comparison
+    "Kentmercier@gmail.com",
+    "Kamrynmallon@gmail.com",
 }
+
+# Normalize skip set to lowercase for case-insensitive matching
+SKIP_EMAILS = {e.lower() for e in SKIP_EMAILS}
 
 # ── Product metadata ─────────────────────────────────────────────────────
 PRODUCT_META = {
@@ -211,21 +225,29 @@ print(f"  Total users in DB: {len(all_users)}")
 print(f"  Already sent email {EMAIL_NUM}: {sum(1 for e,n in already_sent if n==EMAIL_NUM)}")
 print(f"  Unsubscribed: {len(unsubscribed)}")
 
-# Filter and group by product_id
+# Filter and group by product_id — deduplicate by normalized email
 from collections import defaultdict
 by_product = defaultdict(list)
+seen_emails = set()
 for u in all_users:
     email = u.get("email", "")
     pid   = u.get("product_id", "law")
-    if (email in SKIP_EMAILS
+    if (email.lower() in SKIP_EMAILS
             or "@example.com" in email
             or "@mailinator.com" in email
-            or "@internal.test" in email):
+            or "@internal.test" in email
+            or email.lower().startswith("clio+")
+            or email.lower().startswith("clio_test")
+            or email.lower().startswith("test-signup")):
         continue
     if PRODUCT_FILTER and pid != PRODUCT_FILTER:
         continue
     if pid not in PRODUCT_META:
         continue  # unknown vertical, skip
+    norm = email.lower()
+    if norm in seen_emails:
+        continue  # deduplicate case variants
+    seen_emails.add(norm)
     by_product[pid].append(u)
 
 # Build send list with skip reasons
