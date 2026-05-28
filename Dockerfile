@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
 COPY main.py .
+COPY scripts/ /app/scripts/
 COPY zoho-listkeys.json .
 
 # Copy loader SKILL.md for download endpoint
