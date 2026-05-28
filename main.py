@@ -3161,9 +3161,9 @@ async def download_loader_by_session(
     if not license:
         raise HTTPException(status_code=404, detail="No active license found")
 
-    # Route MCP-platform users to direct GitHub installer download
-    platforms = _user_platforms(user)
-    if platforms & MCP_PLATFORMS and product_id in _PRODUCT_NAME_MAP:
+    # Route to GitHub installer for all users with a supported product.
+    # The zip/OpenClaw path is legacy — only used if product has no installer.
+    if product_id in _PRODUCT_NAME_MAP:
         # Stamp first download (funnel tracking)
         if license.downloaded_at is None:
             license.downloaded_at = datetime.utcnow()
@@ -3476,9 +3476,9 @@ async def download_loader(license_key: str, request: Request, db: AsyncSession =
         or "law"
     )
 
-    # Route MCP-platform users to direct GitHub installer download
-    platforms = _user_platforms(user)
-    if platforms & MCP_PLATFORMS and product_id in _PRODUCT_NAME_MAP:
+    # Route to GitHub installer for all users with a supported product.
+    # The zip/OpenClaw path is legacy — only used if product has no installer.
+    if product_id in _PRODUCT_NAME_MAP:
         # Stamp first download (funnel tracking)
         if license and license.downloaded_at is None:
             license.downloaded_at = datetime.utcnow()
