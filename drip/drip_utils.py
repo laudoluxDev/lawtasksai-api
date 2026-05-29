@@ -479,7 +479,7 @@ def build_drip_email(
         "{{PRODUCT_WHY}}":         cfg["product_why"],
         "{{INSTALL_BLOCK}}":       platform_install_block(platform, product_id, product_name, domain),
         "{{TASK_CARDS}}":          task_cards_html(cfg["sample_tasks"]),
-        "{{FIRST_PROMPT}}":        f'"What {occ_singular} tasks can you help me with?"',
+        "{{FIRST_PROMPT}}":        f'"Use {product_name} to show me what {occ_singular} tasks are available"',
         "{{LICENSE_KEY}}":         license_key,
     }
 

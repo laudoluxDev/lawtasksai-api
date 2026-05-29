@@ -61,8 +61,12 @@
 
     <hr class="divider">
 
-    <p style="font-size:0.85rem;color:#6b7280;">Once installed, try this to verify everything works:</p>
-    <div class="first-prompt">{{FIRST_PROMPT}}</div>
+    <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:8px;padding:14px 18px;margin:20px 0;">
+      <p style="font-weight:800;color:#92400e;font-size:0.88rem;margin:0 0 6px;">🎯 Your user trigger — remember this one rule</p>
+      <p style="font-size:0.85rem;color:#78350f;margin:0 0 10px;">Start every prompt with <strong>"Use {{PRODUCT_NAME}} to…"</strong> and Claude will always invoke your skills.</p>
+      <div class="first-prompt">{{FIRST_PROMPT}}</div>
+      <p style="font-size:0.8rem;color:#92400e;margin:8px 0 0;">That prefix is your trigger. Without it, Claude may answer from its own training instead of using your {{PRODUCT_NAME}} skills.</p>
+    </div>
 
     <p style="font-size:0.88rem;color:#6b7280;">Each task uses 1 credit. You can check your balance anytime by asking <em>"Check my {{PRODUCT_ID}} credits."</em></p>
 
