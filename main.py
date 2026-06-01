@@ -3983,33 +3983,57 @@ async def create_skill_version(
 
 @admin_router.get("/users")
 async def list_users(db: AsyncSession = Depends(get_db)):
-    """List all users with their licenses (admin only - protect in production!)."""
+    """List all users with their licenses (admin only). Handles multi-vertical users correctly."""
     result = await db.execute(
         select(User, License)
         .outerjoin(License, User.id == License.user_id)
         .order_by(User.created_at.desc())
     )
-    
-    users = []
+
+    # Group licenses by user_id — users may have multiple (one per vertical)
+    from collections import defaultdict
+    user_map: dict = {}
+    user_licenses: dict = defaultdict(list)
+
     for user, license in result.all():
+        uid = str(user.id)
+        if uid not in user_map:
+            user_map[uid] = user
+        if license:
+            user_licenses[uid].append(license)
+
+    users = []
+    for uid, user in user_map.items():
+        licenses = user_licenses[uid]
+        # Sum credits across all verticals
+        total_credits = sum(lic.credits_remaining for lic in licenses)
+        # Primary license = highest credits, or first
+        primary = max(licenses, key=lambda l: l.credits_remaining) if licenses else None
         users.append({
-            "id": str(user.id),
+            "id": uid,
             "email": user.email,
             "name": user.name,
             "firm_name": user.firm_name,
-            "credits_balance": license.credits_remaining if license else 0,
+            "credits_balance": total_credits,
             "created_at": user.created_at.isoformat() if user.created_at else None,
-            "license_key": license.license_key if license else None,
-            "license_type": license.type if license else None,
-            "license_credits": license.credits_remaining if license else 0,
+            "license_key": primary.license_key if primary else None,
+            "license_type": primary.type if primary else None,
+            "license_credits": total_credits,
+            "licenses": [
+                {"product_id": l.product_id or "law", "credits": l.credits_remaining,
+                 "type": l.type, "key": l.license_key[:12] + "..."}
+                for l in licenses
+            ],
             "profile": user.profile or {},
             "platforms": user.platforms or [],
-            "product_id": (license.product_id if license else None) or user.product_id or "law",
+            "product_id": (primary.product_id if primary else None) or user.product_id or "law",
             "last_active_at": user.last_active_at.isoformat() if user.last_active_at else None,
-            "downloaded_at": license.downloaded_at.isoformat() if license and license.downloaded_at else None,
-            "first_connected_at": license.first_connected_at.isoformat() if license and license.first_connected_at else None,
+            "downloaded_at": primary.downloaded_at.isoformat() if primary and primary.downloaded_at else None,
+            "first_connected_at": primary.first_connected_at.isoformat() if primary and primary.first_connected_at else None,
         })
 
+    # Re-sort by created_at desc
+    users.sort(key=lambda u: u["created_at"] or "", reverse=True)
     activated = sum(1 for u in users if u["last_active_at"] is not None)
     return {"users": users, "count": len(users), "activated": activated, "never_activated": len(users) - activated}
 
