@@ -4264,6 +4264,56 @@ async def add_credits(
     }
 
 
+@admin_router.get("/transactions")
+async def list_transactions(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(100, ge=1, le=500),
+    type: Optional[str] = Query(None, description="Filter by type: purchase, usage, refund, bonus"),
+    product_id: Optional[str] = Query(None)
+):
+    """Admin: list credit transactions with user email and product info."""
+    query = (
+        select(CreditTransaction, User, License)
+        .join(User, CreditTransaction.user_id == User.id)
+        .outerjoin(License, CreditTransaction.license_id == License.id)
+        .order_by(CreditTransaction.created_at.desc())
+        .limit(limit)
+    )
+    if type:
+        query = query.where(CreditTransaction.type == type)
+    if product_id:
+        query = query.where(License.product_id == product_id)
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    transactions = []
+    for tx, user, license in rows:
+        transactions.append({
+            "id": tx.id,
+            "type": tx.type,
+            "amount": tx.amount,
+            "balance_after": tx.balance_after,
+            "description": tx.description,
+            "reference_id": tx.reference_id,
+            "created_at": tx.created_at.isoformat() if tx.created_at else None,
+            "email": user.email if user else None,
+            "name": user.name if user else None,
+            "product_id": license.product_id if license else None,
+            "license_key": license.license_key[:12] + "..." if license else None,
+        })
+
+    total_revenue = sum(
+        t["amount"] for t in transactions if t["type"] == "purchase"
+    )
+
+    return {
+        "transactions": transactions,
+        "count": len(transactions),
+        "total_purchase_credits": total_revenue,
+    }
+
+
 @admin_router.get("/gaps")
 async def list_skill_gaps(
     db: AsyncSession = Depends(get_db),
