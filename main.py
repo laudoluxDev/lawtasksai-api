@@ -575,23 +575,27 @@ def generate_token(user_id: str, license_key: str) -> str:
     data = f"{user_id}:{license_key}:{secrets.token_hex(8)}"
     return hashlib.sha256(data.encode()).hexdigest()[:32]
 
-# Credit pack pricing
+# Credit pack pricing — 3 tiers (redesigned 2026-06-05)
 CREDIT_PACKS = {
-    "tryit":       {"credits": 2,    "price_cents": 500,    "one_time": False, "name": "Try It"},
-    "starter":     {"credits": 15,   "price_cents": 2900,   "one_time": False, "name": "Starter"},
-    "pro":         {"credits": 60,   "price_cents": 9900,   "one_time": False, "name": "Pro"},
-    "business":    {"credits": 150,  "price_cents": 19900,  "one_time": False, "name": "Business"},
-    "power":       {"credits": 350,  "price_cents": 34900,  "one_time": False, "name": "Power"},
-    "unlimited":   {"credits": 800,  "price_cents": 59900,  "one_time": False, "name": "Unlimited"},
-    "enterprise":  {"credits": 2000, "price_cents": 99900,  "one_time": False, "name": "Enterprise"},
-    # Legacy aliases
-    "peek":        {"credits": 5,    "price_cents": 500,    "one_time": False, "name": "Peek"},
-    "trial":       {"credits": 15,   "price_cents": 2900,   "one_time": False, "name": "Starter"},
-    "essentials":  {"credits": 60,   "price_cents": 9900,   "one_time": False, "name": "Pro"},
-    "accelerator": {"credits": 150,  "price_cents": 19900,  "one_time": False, "name": "Business"},
-    "efficient":   {"credits": 350,  "price_cents": 34900,  "one_time": False, "name": "Power"},
-    "unstoppable": {"credits": 800,  "price_cents": 59900,  "one_time": False, "name": "Unlimited"},
-    "apex":        {"credits": 2000, "price_cents": 99900,  "one_time": False, "name": "Enterprise"},
+    "starter":       {"credits": 50,   "price_cents": 2900,   "one_time": False, "name": "Starter"},
+    "professional":  {"credits": 150,  "price_cents": 7900,   "one_time": False, "name": "Professional"},
+    "office":        {"credits": 500,  "price_cents": 19900,  "one_time": False, "name": "Office"},
+    # Legacy aliases — map old pack names to closest new tier
+    "tryit":       {"credits": 50,   "price_cents": 2900,   "one_time": False, "name": "Starter"},
+    "peek":        {"credits": 50,   "price_cents": 2900,   "one_time": False, "name": "Starter"},
+    "trial":       {"credits": 50,   "price_cents": 2900,   "one_time": False, "name": "Starter"},
+    "pro":         {"credits": 150,  "price_cents": 7900,   "one_time": False, "name": "Professional"},
+    "essentials":  {"credits": 150,  "price_cents": 7900,   "one_time": False, "name": "Professional"},
+    "business":    {"credits": 150,  "price_cents": 7900,   "one_time": False, "name": "Professional"},
+    "accelerator": {"credits": 500,  "price_cents": 19900,  "one_time": False, "name": "Office"},
+    "power":       {"credits": 500,  "price_cents": 19900,  "one_time": False, "name": "Office"},
+    "efficient":   {"credits": 500,  "price_cents": 19900,  "one_time": False, "name": "Office"},
+    "poweruser":   {"credits": 500,  "price_cents": 19900,  "one_time": False, "name": "Office"},
+    "studio":      {"credits": 500,  "price_cents": 19900,  "one_time": False, "name": "Office"},
+    "unlimited":   {"credits": 500,  "price_cents": 19900,  "one_time": False, "name": "Office"},
+    "unstoppable": {"credits": 500,  "price_cents": 19900,  "one_time": False, "name": "Office"},
+    "enterprise":  {"credits": 500,  "price_cents": 19900,  "one_time": False, "name": "Office"},
+    "apex":        {"credits": 500,  "price_cents": 19900,  "one_time": False, "name": "Office"},
 }
 
 # ============================================
@@ -1065,6 +1069,41 @@ async def startup():
             await db.commit()
         except Exception as e:
             print(f"[startup migration] waitlist table: {e}")
+
+        # Migration: create magic_link_tokens table
+        try:
+            await db.execute(text("""
+                CREATE TABLE IF NOT EXISTS magic_link_tokens (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    token VARCHAR(64) NOT NULL UNIQUE,
+                    email VARCHAR(255) NOT NULL,
+                    product_id VARCHAR(50) NOT NULL DEFAULT 'law',
+                    campaign VARCHAR(100),
+                    redirect_url TEXT,
+                    used BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    expires_at TIMESTAMP NOT NULL,
+                    used_at TIMESTAMP
+                );
+            """))
+            await db.commit()
+        except Exception as e:
+            print(f"[startup migration] magic_link_tokens table: {e}")
+
+        # Migration: create campaign_clicks table
+        try:
+            await db.execute(text("""
+                CREATE TABLE IF NOT EXISTS campaign_clicks (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    campaign VARCHAR(100) NOT NULL,
+                    email VARCHAR(255) NOT NULL,
+                    product_id VARCHAR(50) NOT NULL DEFAULT 'law',
+                    clicked_at TIMESTAMP DEFAULT NOW()
+                );
+            """))
+            await db.commit()
+        except Exception as e:
+            print(f"[startup migration] campaign_clicks table: {e}")
 
 # CORS
 app.add_middleware(
@@ -2036,6 +2075,11 @@ async def get_me(
     prod_row = prod_result.fetchone()
     domain = prod_row.domain if prod_row else f"{meta['product_id']}tasksai.com"
 
+    # Record first connection (idempotent — only writes once)
+    if license.first_connected_at is None:
+        license.first_connected_at = datetime.utcnow()
+        await db.commit()
+
     return {
         **meta,
         "email":             user_email,
@@ -2368,6 +2412,121 @@ async def track_email_open(
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Pragma": "no-cache",
     })
+
+
+async def _generate_magic_link_token(
+    db: AsyncSession,
+    email: str,
+    product_id: str,
+    campaign: str,
+    redirect_url: str = "",
+    ttl_hours: int = 72,
+) -> str:
+    """
+    Shared helper: insert a single-use magic link token into magic_link_tokens.
+    Returns the full tracking URL: https://api.lawtasksai.com/track/click?token=...
+    Safe to call from drip-process, campaign/send, or any future email send path.
+    """
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
+    domain = "lawtasksai.com" if product_id == "law" else f"{product_id}tasksai.com"
+    redir = redirect_url or f"https://{domain}/download.html"
+    await db.execute(
+        text("""
+            INSERT INTO magic_link_tokens
+                (token, email, product_id, campaign, redirect_url, expires_at)
+            VALUES (:token, :email, :product_id, :campaign, :redirect_url, :expires_at)
+            ON CONFLICT (token) DO NOTHING
+        """),
+        {
+            "token": token, "email": email, "product_id": product_id,
+            "campaign": campaign, "redirect_url": redir, "expires_at": expires_at,
+        }
+    )
+    await db.commit()
+    return f"{API_BASE_URL}/track/click?token={token}"
+
+
+@app.get("/track/click")
+async def track_campaign_click(
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Campaign click tracking + magic link auth endpoint.
+    Called when a user clicks a link in a re-engagement or campaign email.
+    - Validates the signed token
+    - Logs the click to campaign_clicks
+    - Marks the token as used (single-use)
+    - Redirects to the download page, auto-logged-in via ?key= param
+    """
+    from fastapi.responses import RedirectResponse
+
+    # Look up token
+    result = await db.execute(
+        text("""
+            SELECT id, email, product_id, campaign, redirect_url, used, expires_at
+            FROM magic_link_tokens
+            WHERE token = :token
+        """),
+        {"token": token}
+    )
+    row = result.fetchone()
+
+    if not row:
+        # Unknown token — redirect to homepage gracefully
+        return RedirectResponse(url="https://lawtasksai.com", status_code=302)
+
+    token_id, email, product_id, campaign, redirect_url, used, expires_at = row
+
+    # Check expiry
+    now = datetime.utcnow()
+    if expires_at and now > expires_at:
+        # Expired — redirect to download page without auth
+        domain = f"{product_id}tasksai.com" if product_id != "law" else "lawtasksai.com"
+        return RedirectResponse(url=f"https://{domain}/download.html?expired=1", status_code=302)
+
+    # Mark token used (single-use, but don't block if already used — just don't re-log)
+    if not used:
+        await db.execute(
+            text("UPDATE magic_link_tokens SET used=TRUE, used_at=NOW() WHERE id=:id"),
+            {"id": str(token_id)}
+        )
+        # Log the click
+        await db.execute(
+            text("""
+                INSERT INTO campaign_clicks (campaign, email, product_id, clicked_at)
+                VALUES (:campaign, :email, :product_id, NOW())
+            """),
+            {"campaign": campaign or "unknown", "email": email, "product_id": product_id}
+        )
+        await db.commit()
+
+    # Build redirect URL with license key injected so download page auto-logs them in
+    # Fetch their license key
+    lic_result = await db.execute(
+        text("""
+            SELECT l.license_key FROM licenses l
+            JOIN users u ON u.id = l.user_id
+            WHERE u.email = :email AND l.product_id = :product_id AND l.status = 'active'
+            ORDER BY l.created_at DESC LIMIT 1
+        """),
+        {"email": email, "product_id": product_id}
+    )
+    lic_row = lic_result.fetchone()
+    license_key = lic_row[0] if lic_row else ""
+
+    domain = f"{product_id}tasksai.com" if product_id != "law" else "lawtasksai.com"
+    base_redirect = redirect_url or f"https://{domain}/download.html"
+
+    # Append tracking params
+    sep = "&" if "?" in base_redirect else "?"
+    final_url = (
+        f"{base_redirect}{sep}"
+        f"utm_source=email&utm_medium=reengagement&utm_campaign={campaign or 'campaign'}"
+        f"&key={license_key}"
+    )
+    return RedirectResponse(url=final_url, status_code=302)
 
 
 @app.get("/v1/loader/latest")
@@ -5563,6 +5722,32 @@ async def process_drip_queue(
             sc_row = sc_r.fetchone()
             skill_count = sc_row[0] if sc_row else 150
 
+            # Fetch license key for this user+vertical
+            lic_r = await db.execute(
+                text("""
+                    SELECT l.license_key FROM licenses l
+                    JOIN users u ON u.id = l.user_id
+                    WHERE u.email = :email AND l.product_id = :pid AND l.status = 'active'
+                    ORDER BY l.created_at DESC LIMIT 1
+                """),
+                {"email": email, "pid": product_id}
+            )
+            lic_row = lic_r.fetchone()
+            license_key = lic_row[0] if lic_row else ""
+
+            # Generate per-email magic link token
+            campaign_name = f"drip-email-{email_num}"
+            try:
+                magic_link = await _generate_magic_link_token(
+                    db=db, email=email, product_id=product_id,
+                    campaign=campaign_name,
+                    redirect_url=f"https://{domain}/download.html",
+                    ttl_hours=168,  # 7 days for drip emails
+                )
+            except Exception as ml_err:
+                print(f"[Drip] Magic link generation failed for {email}: {ml_err}")
+                magic_link = f"https://{domain}/download.html"
+
             html = drip_utils.build_drip_email(
                 email_num=email_num,
                 product_id=product_id,
@@ -5572,6 +5757,8 @@ async def process_drip_queue(
                 platform=platform or "other",
                 first_name=first_name or "",
                 user_email=email,
+                license_key=license_key,
+                magic_link=magic_link,
             )
             subject = drip_utils.drip_subject(email_num, product_name)
 
@@ -6213,6 +6400,238 @@ async def update_support_request(
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Support request not found")
     return {"success": True, "id": request_id}
+
+
+# ============================================
+# Admin: Campaign Send
+# ============================================
+
+class CampaignSendRequest(BaseModel):
+    campaign: str                          # e.g. "reengagement-v2"
+    subject: str                           # Email subject line
+    template_html: str                     # Full HTML — use {{MAGIC_LINK}}, {{FIRST_NAME}}, {{PRODUCT_NAME}}, {{LICENSE_KEY}}, {{DOMAIN}}
+    product_ids: Optional[List[str]] = None  # None = all active verticals; or e.g. ["law","farmer"]
+    dry_run: bool = False                  # If true, generates tokens but does NOT send email
+    token_ttl_hours: int = 72              # Magic link expiry (hours)
+
+
+class CampaignSendResponse(BaseModel):
+    campaign: str
+    queued: int
+    skipped: int
+    errors: List[str]
+    dry_run: bool
+    preview: Optional[dict] = None         # First user preview when dry_run=True
+
+
+@admin_router.post("/campaign/send", response_model=CampaignSendResponse)
+async def send_campaign(
+    req: CampaignSendRequest,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_admin),
+):
+    """
+    POST /admin/campaign/send
+    Generates a unique magic-link token per user, builds a personalised email,
+    and sends via Zoho Mail transactional API.
+
+    Supported template variables:
+      {{FIRST_NAME}}    - user's first name
+      {{PRODUCT_NAME}}  - e.g. "LawTasksAI"
+      {{DOMAIN}}        - e.g. "lawtasksai.com"
+      {{LICENSE_KEY}}   - user's license key
+      {{MAGIC_LINK}}    - full click-tracking + auto-login URL
+    """
+    import urllib.parse as _urlparse
+
+    # Vertical display name map
+    PRODUCT_NAMES = {
+        "law": "LawTasksAI", "realtor": "RealtorTasksAI", "farmer": "FarmerTasksAI",
+        "teacher": "TeacherTasksAI", "therapist": "TherapistTasksAI",
+        "marketing": "MarketingTasksAI", "contractor": "ContractorTasksAI",
+        "accounting": "AccountingTasksAI", "chiropractor": "ChiropractorTasksAI",
+        "dentist": "DentistTasksAI", "designer": "DesignerTasksAI",
+        "electrician": "ElectricianTasksAI", "eventplanner": "EventPlannerTasksAI",
+        "funeral": "FuneralTasksAI", "hr": "HRTasksAI", "insurance": "InsuranceTasksAI",
+        "landlord": "LandlordTasksAI", "militaryspouse": "MilitarySpouseTasksAI",
+        "mortgage": "MortgageTasksAI", "mortuary": "MortuaryTasksAI",
+        "nutritionist": "NutritionistTasksAI", "pastor": "PastorTasksAI",
+        "personaltrainer": "PersonalTrainerTasksAI", "plumber": "PlumberTasksAI",
+        "principal": "PrincipalTasksAI", "restaurant": "RestaurantTasksAI",
+        "salon": "SalonTasksAI", "travelagent": "TravelAgentTasksAI", "vet": "VetTasksAI",
+        "church": "ChurchTasksAI",
+    }
+
+    def product_domain(pid: str) -> str:
+        if pid == "law":
+            return "lawtasksai.com"
+        return f"{pid}tasksai.com"
+
+    def sender_addr(pid: str) -> str:
+        return f"hello@{product_domain(pid)}"
+
+    # Fetch all real users + their primary license
+    users_result = await db.execute(
+        text("""
+            SELECT u.id, u.email, u.name, u.product_id AS user_product,
+                   l.license_key, l.product_id AS lic_product, l.status
+            FROM users u
+            LEFT JOIN licenses l ON l.user_id = u.id AND l.status = 'active'
+            ORDER BY u.created_at ASC
+        """)
+    )
+    all_rows = users_result.fetchall()
+
+    # Deduplicate: one record per (email, product_id)
+    seen = set()
+    candidates = []
+    SKIP_EMAILS = {"kentmercier@gmail.com", "test"}   # skip internal accounts
+    for row in all_rows:
+        uid, email, name, user_product, lic_key, lic_product, lic_status = row
+        if not email or any(s in email.lower() for s in SKIP_EMAILS):
+            continue
+        product_id = lic_product or user_product or "law"
+        if req.product_ids and product_id not in req.product_ids:
+            continue
+        dedup_key = (email.lower(), product_id)
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+        candidates.append({
+            "email": email,
+            "name": name or "",
+            "product_id": product_id,
+            "license_key": lic_key or "",
+        })
+
+    if not candidates:
+        return CampaignSendResponse(
+            campaign=req.campaign, queued=0, skipped=0,
+            errors=["No eligible users found"], dry_run=req.dry_run
+        )
+
+    # Get Zoho token once
+    zoho_token = None
+    zoho_account_id = os.getenv("ZOHO_ACCOUNT_ID", "6556209000000008002")
+    if not req.dry_run:
+        try:
+            zoho_token = await get_zoho_access_token()
+        except Exception as e:
+            return CampaignSendResponse(
+                campaign=req.campaign, queued=0, skipped=len(candidates),
+                errors=[f"Zoho auth failed: {e}"], dry_run=False
+            )
+
+    expires_at = datetime.utcnow() + timedelta(hours=req.token_ttl_hours)
+    queued = 0
+    skipped = 0
+    errors = []
+    preview = None
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        for user in candidates:
+            email = user["email"]
+            product_id = user["product_id"]
+            first_name = (user["name"] or "there").split()[0].title()
+            license_key = user["license_key"]
+            domain = product_domain(product_id)
+            product_name = PRODUCT_NAMES.get(product_id, f"{product_id.title()}TasksAI")
+
+            # Generate unique magic link token via shared helper
+            try:
+                magic_link = await _generate_magic_link_token(
+                    db=db, email=email, product_id=product_id,
+                    campaign=req.campaign,
+                    redirect_url=f"https://{domain}/download.html",
+                    ttl_hours=req.token_ttl_hours,
+                )
+            except Exception as e:
+                errors.append(f"{email}: token insert failed: {e}")
+                skipped += 1
+                continue
+
+            # Render template
+            html_body = req.template_html
+            html_body = html_body.replace("{{FIRST_NAME}}", first_name)
+            html_body = html_body.replace("{{PRODUCT_NAME}}", product_name)
+            html_body = html_body.replace("{{DOMAIN}}", domain)
+            html_body = html_body.replace("{{LICENSE_KEY}}", license_key)
+            html_body = html_body.replace("{{MAGIC_LINK}}", magic_link)
+            html_body = html_body.replace("{{CAMPAIGN}}", req.campaign)
+            html_body = html_body.replace("{{EMAIL_ENCODED}}", _urlparse.quote(email))
+
+            if req.dry_run:
+                if preview is None:
+                    preview = {
+                        "to": email, "from": sender_addr(product_id),
+                        "subject": req.subject, "magic_link": magic_link,
+                        "html_preview": html_body[:500] + "...",
+                    }
+                queued += 1
+                continue
+
+            # Send via Zoho Mail
+            try:
+                payload = {
+                    "fromAddress": sender_addr(product_id),
+                    "toAddress": email,
+                    "subject": req.subject,
+                    "mailFormat": "html",
+                    "content": html_body,
+                }
+                resp = await client.post(
+                    f"https://mail.zoho.com/api/accounts/{zoho_account_id}/messages",
+                    json=payload,
+                    headers={"Authorization": f"Zoho-oauthtoken {zoho_token}"},
+                )
+                if resp.status_code not in (200, 201):
+                    errors.append(f"{email}: Zoho {resp.status_code} — {resp.text[:120]}")
+                    skipped += 1
+                else:
+                    queued += 1
+            except Exception as e:
+                errors.append(f"{email}: send error: {e}")
+                skipped += 1
+
+    return CampaignSendResponse(
+        campaign=req.campaign,
+        queued=queued,
+        skipped=skipped,
+        errors=errors,
+        dry_run=req.dry_run,
+        preview=preview,
+    )
+
+
+@admin_router.get("/campaign/clicks")
+async def get_campaign_clicks(
+    campaign: Optional[str] = Query(None),
+    limit: int = Query(200),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_admin),
+):
+    """
+    GET /admin/campaign/clicks — list click events, optionally filtered by campaign.
+    """
+    where = "WHERE campaign = :campaign" if campaign else ""
+    result = await db.execute(
+        text(f"""
+            SELECT campaign, email, product_id, clicked_at
+            FROM campaign_clicks
+            {where}
+            ORDER BY clicked_at DESC
+            LIMIT :limit
+        """),
+        {"campaign": campaign or "", "limit": limit}
+    )
+    rows = result.fetchall()
+    clicks = [
+        {"campaign": r[0], "email": r[1], "product_id": r[2],
+         "clicked_at": r[3].isoformat() if r[3] else None}
+        for r in rows
+    ]
+    unique = len(set(r["email"] for r in clicks))
+    return {"clicks": clicks, "total": len(clicks), "unique_emails": unique}
 
 
 app.include_router(admin_router)
