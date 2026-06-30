@@ -228,6 +228,23 @@ class License(Base):
     downloaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     first_connected_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
+class MCPConnectSession(Base):
+    __tablename__ = "mcp_connect_sessions"
+    __table_args__ = (
+        UniqueConstraint("user_code", name="uq_mcp_connect_user_code"),
+    )
+
+    device_code: Mapped[str] = mapped_column(String(96), primary_key=True)
+    user_code: Mapped[str] = mapped_column(String(16), nullable=False)
+    product_id: Mapped[str] = mapped_column(String(50), default="law")
+    client_name: Mapped[Optional[str]] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    license_key: Mapped[Optional[str]] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
 class UsageLog(Base):
     __tablename__ = "usage_logs"
     
@@ -420,6 +437,37 @@ class TokenResponse(BaseModel):
     license_key: str
     product_id: Optional[str] = "law"  # Multi-tenancy: which product this user belongs to
 
+class MCPConnectStartRequest(BaseModel):
+    product_id: Optional[str] = None
+    client_name: Optional[str] = None
+
+class MCPConnectStartResponse(BaseModel):
+    device_code: str
+    user_code: str
+    verification_url: str
+    expires_in: int
+    interval: int = 2
+
+class MCPConnectApproveRequest(BaseModel):
+    user_code: str
+    license_key: str
+
+class MCPConnectApproveResponse(BaseModel):
+    success: bool
+    status: str
+    product_id: str
+    client_name: Optional[str] = None
+
+class MCPConnectTokenRequest(BaseModel):
+    device_code: str
+
+class MCPConnectTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    license_key: str
+    product_id: str
+    credits_remaining: int
+
 class SkillResponse(BaseModel):
     id: str
     name: str
@@ -574,6 +622,12 @@ def generate_token(user_id: str, license_key: str) -> str:
     """Generate a simple token (in production, use JWT)."""
     data = f"{user_id}:{license_key}:{secrets.token_hex(8)}"
     return hashlib.sha256(data.encode()).hexdigest()[:32]
+
+def generate_mcp_user_code() -> str:
+    """Generate a short human-readable browser connection code."""
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    raw = "".join(secrets.choice(alphabet) for _ in range(8))
+    return f"{raw[:4]}-{raw[4:]}"
 
 # Credit pack pricing — 3 tiers (redesigned 2026-06-05)
 CREDIT_PACKS = {
@@ -1026,6 +1080,32 @@ async def startup():
             """))
         except Exception as e:
             print(f"[startup migration] download_tokens table: {e}")
+        # Migration: create short-lived browser connection sessions for MCP installers
+        try:
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS mcp_connect_sessions (
+                    device_code VARCHAR(96) PRIMARY KEY,
+                    user_code VARCHAR(16) NOT NULL UNIQUE,
+                    product_id VARCHAR(50) NOT NULL DEFAULT 'law',
+                    client_name VARCHAR(100),
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                    license_key VARCHAR(255),
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    expires_at TIMESTAMP NOT NULL,
+                    approved_at TIMESTAMP,
+                    consumed_at TIMESTAMP
+                );
+            """))
+            await conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_mcp_connect_user_code
+                ON mcp_connect_sessions(user_code);
+            """))
+            await conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_mcp_connect_expires_at
+                ON mcp_connect_sessions(expires_at);
+            """))
+        except Exception as e:
+            print(f"[startup migration] mcp_connect_sessions table: {e}")
         # Migration: add funnel tracking columns to licenses + users
         try:
             await conn.execute(text("ALTER TABLE licenses ADD COLUMN IF NOT EXISTS downloaded_at TIMESTAMP"))
@@ -1144,6 +1224,196 @@ async def get_current_license(
         raise HTTPException(status_code=401, detail="License expired")
     
     return license
+
+# ============================================
+# Routes: MCP Browser Connect
+# ============================================
+
+@app.post("/v1/mcp/connect/start", response_model=MCPConnectStartResponse)
+async def start_mcp_connect(
+    request: Optional[MCPConnectStartRequest] = None,
+    db: AsyncSession = Depends(get_db),
+    product_id: str = Depends(get_product_id),
+):
+    """
+    Start a short-lived browser/device connection flow for MCP installers.
+
+    The installer calls this endpoint, opens verification_url for the user, then
+    polls /v1/mcp/connect/token with device_code until the browser approval is
+    complete.
+    """
+    requested_product_id = request.product_id if request else None
+    requested_client_name = request.client_name if request else None
+    resolved_product_id = (requested_product_id or product_id or "law").strip() or "law"
+    client_name = (requested_client_name or "unknown").strip()[:100]
+    expires_in = 600
+    expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+
+    user_code = None
+    for _ in range(5):
+        candidate = generate_mcp_user_code()
+        existing = await db.execute(
+            select(MCPConnectSession).where(MCPConnectSession.user_code == candidate)
+        )
+        if not existing.scalar_one_or_none():
+            user_code = candidate
+            break
+    if not user_code:
+        raise HTTPException(status_code=503, detail="Could not allocate connection code")
+
+    session = MCPConnectSession(
+        device_code=secrets.token_urlsafe(48),
+        user_code=user_code,
+        product_id=resolved_product_id,
+        client_name=client_name,
+        status="pending",
+        expires_at=expires_at,
+    )
+    db.add(session)
+    await db.commit()
+
+    base_url = FRONTEND_URL.rstrip("/")
+    verification_url = f"{base_url}/connect?code={user_code}&product={resolved_product_id}"
+    return MCPConnectStartResponse(
+        device_code=session.device_code,
+        user_code=session.user_code,
+        verification_url=verification_url,
+        expires_in=expires_in,
+        interval=2,
+    )
+
+
+@app.post("/v1/mcp/connect/approve", response_model=MCPConnectApproveResponse)
+async def approve_mcp_connect(
+    request: MCPConnectApproveRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Approve an MCP browser connection using an existing license key.
+
+    This is designed for the website /connect page. It does not accept user task
+    content, documents, prompts, or workflow inputs.
+    """
+    user_code = request.user_code.strip().upper()
+    license_key = request.license_key.strip()
+
+    result = await db.execute(
+        select(MCPConnectSession).where(MCPConnectSession.user_code == user_code)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Connection code not found")
+    if session.status != "pending":
+        raise HTTPException(status_code=409, detail=f"Connection is already {session.status}")
+    if session.expires_at < datetime.utcnow():
+        session.status = "expired"
+        await db.commit()
+        raise HTTPException(status_code=410, detail="Connection code expired")
+
+    license_result = await db.execute(
+        select(License).where(
+            License.license_key == license_key,
+            License.status == "active",
+        )
+    )
+    license = license_result.scalar_one_or_none()
+    if not license:
+        raise HTTPException(status_code=401, detail="Invalid or inactive license")
+    if license.valid_until and license.valid_until < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="License expired")
+    if license.product_id and session.product_id and license.product_id != session.product_id:
+        raise HTTPException(status_code=403, detail="License does not match requested product")
+
+    session.status = "approved"
+    session.license_key = license.license_key
+    session.approved_at = datetime.utcnow()
+    await db.commit()
+
+    return MCPConnectApproveResponse(
+        success=True,
+        status=session.status,
+        product_id=session.product_id,
+        client_name=session.client_name,
+    )
+
+
+@app.post("/v1/mcp/connect/token", response_model=MCPConnectTokenResponse)
+async def exchange_mcp_connect_token(
+    request: MCPConnectTokenRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Exchange an approved device code for the credential the MCP runtime uses.
+
+    MVP behavior returns the existing license key because current MCP endpoints
+    authenticate with Bearer license keys. A later version can return scoped,
+    revocable MCP tokens without changing the browser approval shape.
+    """
+    result = await db.execute(
+        select(MCPConnectSession).where(MCPConnectSession.device_code == request.device_code.strip())
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Connection request not found")
+    if session.expires_at < datetime.utcnow() and session.status == "pending":
+        session.status = "expired"
+        await db.commit()
+        raise HTTPException(status_code=410, detail="Connection code expired")
+    if session.status == "pending":
+        raise HTTPException(status_code=428, detail="authorization_pending")
+    if session.status == "expired":
+        raise HTTPException(status_code=410, detail="Connection code expired")
+    if session.status == "consumed":
+        raise HTTPException(status_code=409, detail="Connection code already used")
+    if session.status != "approved" or not session.license_key:
+        raise HTTPException(status_code=409, detail=f"Connection is {session.status}")
+
+    license_result = await db.execute(
+        select(License).where(
+            License.license_key == session.license_key,
+            License.status == "active",
+        )
+    )
+    license = license_result.scalar_one_or_none()
+    if not license:
+        raise HTTPException(status_code=401, detail="Invalid or inactive license")
+
+    if license.first_connected_at is None:
+        license.first_connected_at = datetime.utcnow()
+    session.status = "consumed"
+    session.consumed_at = datetime.utcnow()
+    await db.commit()
+
+    return MCPConnectTokenResponse(
+        access_token=license.license_key,
+        license_key=license.license_key,
+        product_id=license.product_id or session.product_id or "law",
+        credits_remaining=license.credits_remaining,
+    )
+
+
+@app.post("/v1/mcp/connect/revoke")
+async def revoke_mcp_connect(
+    license: License = Depends(get_current_license),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Mark previous browser-connect sessions for this license as revoked.
+
+    Current MCP auth still uses license keys, so this records installer-session
+    revocation intent. True token revocation should be added when scoped MCP
+    tokens replace license-key bearer auth.
+    """
+    await db.execute(
+        update(MCPConnectSession)
+        .where(
+            MCPConnectSession.license_key == license.license_key,
+            MCPConnectSession.status.in_(["approved", "consumed"]),
+        )
+        .values(status="revoked")
+    )
+    await db.commit()
+    return {"success": True, "status": "revoked"}
 
 # ============================================
 # Routes: Auth
