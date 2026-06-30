@@ -61,6 +61,12 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 # Admin authentication
 ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")  # Set via Cloud Run env var — never hardcode
+INTERNAL_TEST_EMAILS = {
+    email.strip().lower()
+    for email in os.getenv("INTERNAL_TEST_EMAILS", "").split(",")
+    if email.strip()
+}
+NO_CHARGE_LICENSE_TYPES = {"internal_test", "test_no_charge", "no_charge_test"}
 
 # Signing key for unsubscribe tokens — derived from ADMIN_SECRET so no extra env var needed
 def _waitlist_unsub_token(email: str, product_id: str) -> str:
@@ -79,6 +85,24 @@ def verify_admin(x_admin_secret: Optional[str] = Header(None, alias="X-Admin-Sec
         raise HTTPException(status_code=500, detail="Admin secret not configured on server")
     if x_admin_secret != ADMIN_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
+
+def is_internal_test_license(license, user=None) -> bool:
+    """
+    Explicit no-charge mode for internal installer/workflow tests.
+
+    This prevents admin/customer credit balances from being drained during bulk
+    QA while still recording usage rows for diagnostics and activation checks.
+    """
+    license_type = (getattr(license, "type", "") or "").strip().lower()
+    if license_type in NO_CHARGE_LICENSE_TYPES:
+        return True
+
+    notes = (getattr(license, "notes", "") or "").lower()
+    if "internal_test_no_charge" in notes or "no_charge_test" in notes:
+        return True
+
+    email = (getattr(user, "email", "") or "").strip().lower() if user else ""
+    return bool(email and email in INTERNAL_TEST_EMAILS)
 
 # Loader versioning
 CURRENT_LOADER_VERSION = "1.7.0"
@@ -2118,9 +2142,14 @@ async def get_skill_schema(
     # Check usage limit
     if license.usage_limit and license.usage_count >= license.usage_limit:
         raise HTTPException(status_code=403, detail="Usage limit reached")
+
+    user_result = await db.execute(select(User).where(User.id == license.user_id))
+    active_user = user_result.scalar_one_or_none()
+    no_charge_test = is_internal_test_license(license, active_user)
+    credits_to_charge = 0 if no_charge_test else skill.credits_per_use
     
     # Check credits
-    if license.credits_remaining < skill.credits_per_use:
+    if not no_charge_test and license.credits_remaining < skill.credits_per_use:
         raise HTTPException(status_code=402, detail="Insufficient credits")
     
     # Get current version
@@ -2134,18 +2163,15 @@ async def get_skill_schema(
     if not skill_version:
         raise HTTPException(status_code=404, detail="Skill version not found")
     
-    # Deduct credits and increment usage
-    license.credits_remaining -= skill.credits_per_use
+    # Deduct credits and increment usage. Internal test licenses are logged
+    # with zero credits used so QA cannot drain real balances.
+    if credits_to_charge:
+        license.credits_remaining -= credits_to_charge
     license.usage_count += 1
 
     # Stamp last_active_at on user for engagement tracking
-    try:
-        user_result = await db.execute(select(User).where(User.id == license.user_id))
-        active_user = user_result.scalar_one_or_none()
-        if active_user:
-            active_user.last_active_at = datetime.utcnow()
-    except Exception:
-        pass  # non-fatal — don't block skill execution
+    if active_user:
+        active_user.last_active_at = datetime.utcnow()
 
     # Log usage
     usage_log = UsageLog(
@@ -2153,7 +2179,7 @@ async def get_skill_schema(
         user_id=license.user_id,
         skill_id=skill_id,
         skill_version=skill_version.version,
-        credits_used=skill.credits_per_use,
+        credits_used=credits_to_charge,
         success=True,
     )
     db.add(usage_log)
@@ -2206,7 +2232,7 @@ Only this schema was retrieved (general legal knowledge, not your data).
         schema=schema_with_preamble,  # Preamble + expert framework
         required_inputs=None,  # TODO: Parse from YAML if structured
         credits_remaining=license.credits_remaining,
-        credits_used=skill.credits_per_use,
+        credits_used=credits_to_charge,
         instructions=instructions,
         meta=loader_meta
     )
@@ -4724,6 +4750,182 @@ async def add_credits(
         "credits_added": credits,
         "old_balance": old_balance,
         "new_balance": license.credits_remaining
+    }
+
+
+@admin_router.post("/test-license/provision")
+async def provision_internal_test_license(
+    email: EmailStr,
+    product_id: str = "law",
+    name: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create an explicit no-charge internal test license.
+
+    Use a dedicated test email address. This endpoint intentionally refuses to
+    add an internal test license on top of an existing normal active license for
+    the same email/product so real customer installs do not accidentally switch
+    to a no-charge test credential.
+    """
+    normalized_email = str(email).strip().lower()
+    normalized_product = normalize_mcp_product_id(product_id)
+
+    result = await db.execute(select(User).where(func.lower(User.email) == normalized_email))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(
+            id=uuid.uuid4(),
+            email=normalized_email,
+            name=name or "Internal Test",
+            password_hash=hash_password(secrets.token_urlsafe(24)),
+            credits_balance=0,
+            product_id=normalized_product,
+            platforms=[],
+        )
+        db.add(user)
+        await db.flush()
+
+    license_result = await db.execute(
+        select(License).where(
+            License.user_id == user.id,
+            License.product_id == normalized_product,
+            License.status == "active",
+        ).order_by(License.created_at.desc())
+    )
+    active_licenses = license_result.scalars().all()
+    internal_license = next((l for l in active_licenses if is_internal_test_license(l, user)), None)
+    normal_license = next((l for l in active_licenses if not is_internal_test_license(l, user)), None)
+
+    if normal_license and not internal_license:
+        raise HTTPException(
+            status_code=409,
+            detail="A normal active license already exists for this email/product. Use a dedicated internal test email.",
+        )
+
+    if internal_license:
+        license = internal_license
+        if "internal_test_no_charge" not in (license.notes or ""):
+            license.notes = ((license.notes or "").strip() + "\ninternal_test_no_charge").strip()
+        license.type = "internal_test"
+        license.updated_at = datetime.utcnow()
+    else:
+        license = License(
+            license_key=generate_license_key(),
+            user_id=user.id,
+            product_id=normalized_product,
+            type="internal_test",
+            status="active",
+            credits_purchased=0,
+            credits_remaining=0,
+            notes="internal_test_no_charge",
+        )
+        db.add(license)
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "email": user.email,
+        "product_id": normalized_product,
+        "license_key": license.license_key,
+        "license_type": license.type,
+        "credits_remaining": license.credits_remaining,
+        "no_charge_test": True,
+    }
+
+
+@admin_router.get("/diagnostics/account")
+async def account_diagnostics(
+    email: EmailStr,
+    db: AsyncSession = Depends(get_db),
+):
+    """Read-only account diagnostic view for credits, licenses, and recent usage."""
+    normalized_email = str(email).strip().lower()
+    result = await db.execute(select(User).where(func.lower(User.email) == normalized_email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="No account found with this email")
+
+    lic_result = await db.execute(
+        select(License)
+        .where(License.user_id == user.id)
+        .order_by(License.product_id, License.created_at.desc())
+    )
+    licenses = lic_result.scalars().all()
+
+    items = []
+    for lic in licenses:
+        usage_summary = await db.execute(
+            select(
+                func.count(UsageLog.id),
+                func.coalesce(func.sum(UsageLog.credits_used), 0),
+                func.max(UsageLog.executed_at),
+            ).where(UsageLog.license_id == lic.id)
+        )
+        usage_count, usage_credits, last_used = usage_summary.one()
+
+        recent_usage_result = await db.execute(
+            select(UsageLog, Skill.name)
+            .join(Skill, UsageLog.skill_id == Skill.id)
+            .where(UsageLog.license_id == lic.id)
+            .order_by(UsageLog.executed_at.desc())
+            .limit(10)
+        )
+        recent_usage = [
+            {
+                "skill_id": log.skill_id,
+                "skill_name": skill_name,
+                "executed_at": log.executed_at.isoformat() if log.executed_at else None,
+                "credits_used": log.credits_used,
+                "success": log.success,
+            }
+            for log, skill_name in recent_usage_result.all()
+        ]
+
+        tx_result = await db.execute(
+            select(CreditTransaction)
+            .where(CreditTransaction.license_id == lic.id)
+            .order_by(CreditTransaction.created_at.desc())
+            .limit(10)
+        )
+        recent_transactions = [
+            {
+                "type": tx.type,
+                "amount": tx.amount,
+                "balance_after": tx.balance_after,
+                "description": tx.description,
+                "created_at": tx.created_at.isoformat() if tx.created_at else None,
+            }
+            for tx in tx_result.scalars().all()
+        ]
+
+        items.append({
+            "product_id": lic.product_id or "law",
+            "status": lic.status,
+            "license_key": lic.license_key[:10] + "..." + lic.license_key[-4:],
+            "license_type": lic.type,
+            "no_charge_test": is_internal_test_license(lic, user),
+            "credits_purchased": lic.credits_purchased,
+            "credits_remaining": lic.credits_remaining,
+            "usage_count": lic.usage_count,
+            "usage_rows": int(usage_count or 0),
+            "usage_credits": int(usage_credits or 0),
+            "last_used_at": last_used.isoformat() if last_used else None,
+            "created_at": lic.created_at.isoformat() if lic.created_at else None,
+            "updated_at": lic.updated_at.isoformat() if lic.updated_at else None,
+            "first_connected_at": lic.first_connected_at.isoformat() if lic.first_connected_at else None,
+            "recent_usage": recent_usage,
+            "recent_transactions": recent_transactions,
+        })
+
+    return {
+        "email": user.email,
+        "name": user.name,
+        "product_id": user.product_id or "law",
+        "last_active_at": user.last_active_at.isoformat() if user.last_active_at else None,
+        "license_count": len(items),
+        "licenses": items,
     }
 
 
