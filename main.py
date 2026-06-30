@@ -638,9 +638,32 @@ def verify_password(password: str, stored_hash: str) -> bool:
     except:
         return False
 
-def generate_license_key() -> str:
-    """Generate a unique license key."""
-    return f"lt_{secrets.token_hex(16)}"
+LICENSE_KEY_PREFIX_BY_PRODUCT = {
+    "law": "lt",
+    "contractor": "ct",
+    "realtor": "rt",
+    "marketing": "mkt",
+    "farmer": "ft",
+    "pastor": "pt",
+    "salon": "st",
+    "teacher": "tt",
+    "therapist": "tht",
+    "hr": "ht",
+    "travelagent": "tat",
+    "dentist": "dt",
+    "chiropractor": "chrt",
+    "insurance": "it",
+    "accounting": "at",
+    "nutritionist": "nt",
+    "restaurant": "rest",
+}
+
+
+def generate_license_key(product_id: Optional[str] = "law") -> str:
+    """Generate a product-prefixed license key."""
+    normalized_product = normalize_mcp_product_id(product_id)
+    prefix = LICENSE_KEY_PREFIX_BY_PRODUCT.get(normalized_product, "lt")
+    return f"{prefix}_{secrets.token_hex(16)}"
 
 def generate_token(user_id: str, license_key: str) -> str:
     """Generate a simple token (in production, use JWT)."""
@@ -1304,7 +1327,15 @@ async def start_mcp_connect(
     db.add(session)
     await db.commit()
 
-    base_url = FRONTEND_URL.rstrip("/")
+    product_domain_result = await db.execute(
+        text("SELECT domain FROM products WHERE id = :pid AND is_active = TRUE"),
+        {"pid": resolved_product_id},
+    )
+    product_domain_row = product_domain_result.fetchone()
+    if product_domain_row and product_domain_row.domain:
+        base_url = f"https://{product_domain_row.domain}".rstrip("/")
+    else:
+        base_url = FRONTEND_URL.rstrip("/")
     verification_url = f"{base_url}/connect?code={user_code}&product={resolved_product_id}"
     return MCPConnectStartResponse(
         device_code=session.device_code,
@@ -1516,7 +1547,7 @@ async def register(
 
     # Create trial license for this product (always — new user or new vertical)
     license = License(
-        license_key=generate_license_key(),
+        license_key=generate_license_key(resolved_product_id),
         user_id=user_id,
         product_id=resolved_product_id,
         type="trial",
@@ -3364,7 +3395,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             await db.flush()  # get user.id
 
             license = License(
-                license_key=generate_license_key(),
+                license_key=generate_license_key(purchase_product_id),
                 user_id=user.id,
                 type="credits",
                 credits_purchased=credits,
@@ -3403,7 +3434,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             if not license:
                 # New vertical purchase for this user — create a fresh license
                 license = License(
-                    license_key=generate_license_key(),
+                    license_key=generate_license_key(purchase_product_id),
                     user_id=user.id,
                     type="credits",
                     credits_purchased=credits,
@@ -3549,11 +3580,12 @@ async def get_checkout_session(session_id: str, db: AsyncSession = Depends(get_d
             db.add(user)
             await db.flush()
             license = License(
-                license_key=generate_license_key(),
+                license_key=generate_license_key(purchase_product_id),
                 user_id=user.id,
                 type="credits",
                 credits_purchased=credits,
                 credits_remaining=credits,
+                product_id=purchase_product_id,
             )
             db.add(license)
             # Log transaction with session_id so webhook skips it later
@@ -4811,7 +4843,7 @@ async def provision_internal_test_license(
         license.updated_at = datetime.utcnow()
     else:
         license = License(
-            license_key=generate_license_key(),
+            license_key=generate_license_key(normalized_product),
             user_id=user.id,
             product_id=normalized_product,
             type="internal_test",
@@ -5672,11 +5704,12 @@ async def admin_provision_user(
         db.add(user)
         await db.flush()
         license = License(
-            license_key=generate_license_key(),
+            license_key=generate_license_key(product_id),
             user_id=user.id,
             type="credits",
             credits_purchased=credits,
             credits_remaining=credits,
+            product_id=product_id,
         )
         db.add(license)
         await db.flush()
@@ -5693,11 +5726,12 @@ async def admin_provision_user(
         license = result2.scalar_one_or_none()
         if not license:
             license = License(
-                license_key=generate_license_key(),
+                license_key=generate_license_key(product_id),
                 user_id=user.id,
                 type="credits",
                 credits_purchased=credits,
                 credits_remaining=credits,
+                product_id=product_id,
             )
             db.add(license)
             await db.flush()
