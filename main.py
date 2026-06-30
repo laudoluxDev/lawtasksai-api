@@ -629,6 +629,14 @@ def generate_mcp_user_code() -> str:
     raw = "".join(secrets.choice(alphabet) for _ in range(8))
     return f"{raw[:4]}-{raw[4:]}"
 
+def normalize_mcp_product_id(product_id: Optional[str]) -> str:
+    """Map public installer product ids to internal license product ids."""
+    aliases = {
+        "lawtasksai": "law",
+    }
+    normalized = (product_id or "law").strip().lower() or "law"
+    return aliases.get(normalized, normalized)
+
 # Credit pack pricing — 3 tiers (redesigned 2026-06-05)
 CREDIT_PACKS = {
     "starter":       {"credits": 50,   "price_cents": 2900,   "one_time": False, "name": "Starter"},
@@ -1244,7 +1252,7 @@ async def start_mcp_connect(
     """
     requested_product_id = request.product_id if request else None
     requested_client_name = request.client_name if request else None
-    resolved_product_id = (requested_product_id or product_id or "law").strip() or "law"
+    resolved_product_id = normalize_mcp_product_id(requested_product_id or product_id)
     client_name = (requested_client_name or "unknown").strip()[:100]
     expires_in = 600
     expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
@@ -1321,7 +1329,9 @@ async def approve_mcp_connect(
         raise HTTPException(status_code=401, detail="Invalid or inactive license")
     if license.valid_until and license.valid_until < datetime.utcnow():
         raise HTTPException(status_code=401, detail="License expired")
-    if license.product_id and session.product_id and license.product_id != session.product_id:
+    license_product_id = normalize_mcp_product_id(license.product_id)
+    session_product_id = normalize_mcp_product_id(session.product_id)
+    if license_product_id and session_product_id and license_product_id != session_product_id:
         raise HTTPException(status_code=403, detail="License does not match requested product")
 
     session.status = "approved"
