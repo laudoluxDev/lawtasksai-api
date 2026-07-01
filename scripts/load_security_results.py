@@ -12,6 +12,7 @@ Reads:
 Posts each skill result to:
     POST https://api.lawtasksai.com/admin/security-scans
 """
+import os
 
 import json
 import sys
@@ -29,7 +30,7 @@ except ImportError:
 
 SCAN_RESULTS_FILE = Path(__file__).parent / "promptfoo-test/scan-results/skill-verifications.json"
 API_BASE          = "https://api.lawtasksai.com"
-ADMIN_SECRET      = "2e3b1d4149297c9fe9bb0a4ea5be5a57b6dc28ed7f38cd3a5bf0092c44398643"
+ADMIN_SECRET      = os.getenv("LAWTASKSAI_ADMIN_SECRET", "")
 DEFAULT_SCAN_MODEL = "openai:gpt-4o-mini"
 
 # Ordered longest-first so prefix matching works correctly

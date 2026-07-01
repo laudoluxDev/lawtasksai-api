@@ -3271,11 +3271,19 @@ async def get_zoho_access_token() -> str:
 
 
 def _load_zoho_listkeys() -> dict:
-    """Load per-vertical Zoho list keys from bundled JSON."""
+    """Load per-vertical Zoho list keys from env JSON or an optional local file."""
+    raw = os.getenv("ZOHO_LIST_KEYS_JSON", "")
+    if raw:
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
     try:
         lk_path = os.path.join(os.path.dirname(__file__) if '__file__' in dir() else '/app', 'zoho-listkeys.json')
         with open(lk_path) as f:
-            return json.load(f)
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 

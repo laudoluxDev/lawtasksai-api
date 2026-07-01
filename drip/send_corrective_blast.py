@@ -4,7 +4,7 @@ import json, pathlib, urllib.request, urllib.parse, time, base64
 def rfc2047(name): return f"=?UTF-8?B?{base64.b64encode(name.encode()).decode()}?="
 
 ACCOUNT_ID = "6556209000000008002"
-ADMIN_SECRET = "2e3b1d4149297c9fe9bb0a4ea5be5a57b6dc28ed7f38cd3a5bf0092c44398643"
+ADMIN_SECRET = os.getenv("LAWTASKSAI_ADMIN_SECRET", "")
 API_BASE = "https://api.lawtasksai.com"
 TOKEN_FILE = pathlib.Path.home() / ".config/zoho-mail-tokens.json"
 
@@ -138,3 +138,4 @@ for pid, users in USERS.items():
         time.sleep(0.5)
 
 print(f"\n{'='*50}\nDone: {sent} sent, {failed} failed")
+import os

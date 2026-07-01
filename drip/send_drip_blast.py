@@ -10,13 +10,14 @@ Usage:
 
 Skips: test/internal accounts, unsubscribed users, users who already received this email number.
 """
+import os
 
 import json, pathlib, sys, time, urllib.request, urllib.error, urllib.parse, base64
 
 def rfc2047(name): return f"=?UTF-8?B?{base64.b64encode(name.encode()).decode()}?="
 
 # ── Config ──────────────────────────────────────────────────────────────
-ADMIN_SECRET    = "2e3b1d4149297c9fe9bb0a4ea5be5a57b6dc28ed7f38cd3a5bf0092c44398643"
+ADMIN_SECRET    = os.getenv("LAWTASKSAI_ADMIN_SECRET", "")
 API_BASE        = "https://api.lawtasksai.com"
 ZOHO_ACCOUNT_ID = "6556209000000008002"
 TOKEN_FILE      = pathlib.Path.home() / ".config/zoho-mail-tokens.json"

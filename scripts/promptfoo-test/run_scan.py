@@ -13,13 +13,14 @@ Usage:
 
 See FULL_SCAN_PROCEDURE.md for full instructions.
 """
+import os
 
 import subprocess, json, os, sys, yaml, requests, time, threading
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 API_BASE       = "https://api.lawtasksai.com"
-ADMIN_SECRET   = "2e3b1d4149297c9fe9bb0a4ea5be5a57b6dc28ed7f38cd3a5bf0092c44398643"
+ADMIN_SECRET   = os.getenv("LAWTASKSAI_ADMIN_SECRET", "")
 OUTPUT_DIR     = os.path.join(os.path.dirname(__file__), "scan-results")
 PROGRESS_FILE  = os.path.join(OUTPUT_DIR, "progress.json")
 VERIF_FILE     = os.path.join(OUTPUT_DIR, "skill-verifications.json")

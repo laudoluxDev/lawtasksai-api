@@ -9,11 +9,12 @@ This isolates whether the skill content itself introduces vulnerabilities.
 Usage:
   python3 scan_skills.py [--dry-run] [--skills skill-id-1,skill-id-2]
 """
+import os
 
 import subprocess, json, os, sys, yaml, requests
 
 API_BASE = "https://api.lawtasksai.com"
-ADMIN_SECRET = "2e3b1d4149297c9fe9bb0a4ea5be5a57b6dc28ed7f38cd3a5bf0092c44398643"
+ADMIN_SECRET = os.getenv("LAWTASKSAI_ADMIN_SECRET", "")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "scan-results")
 
 # Skill-specific plugins only

@@ -7,12 +7,13 @@ The instruction is added as a new numbered item at the end of
 the ## Instructions section (which is always the last section).
 """
 
+import os
 import requests
 import sys
 
 API_BASE = "https://api.lawtasksai.com"
-LICENSE_KEY = "lt_fdc54ddb69e8cb04adfb568eab6a14e6"
-ADMIN_SECRET = "2e3b1d4149297c9fe9bb0a4ea5be5a57b6dc28ed7f38cd3a5bf0092c44398643"
+LICENSE_KEY = os.getenv("LAWTASKSAI_LICENSE_KEY", "")
+ADMIN_SECRET = os.getenv("LAWTASKSAI_ADMIN_SECRET", "")
 PRODUCT = "law"
 
 TEST_SKILLS = [
@@ -40,6 +41,8 @@ SKILL_PURPOSES = {
 
 
 def fetch_schema(skill_id: str) -> dict:
+    if not LICENSE_KEY:
+        raise RuntimeError("Set LAWTASKSAI_LICENSE_KEY before fetching schemas.")
     url = f"{API_BASE}/v1/skills/{skill_id}/schema?product={PRODUCT}"
     r = requests.get(url, headers={"Authorization": f"Bearer {LICENSE_KEY}"}, timeout=15)
     r.raise_for_status()

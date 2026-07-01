@@ -16,7 +16,7 @@ import yaml
 import tempfile
 
 API_BASE = "https://api.lawtasksai.com"
-LICENSE_KEY = "lt_fdc54ddb69e8cb04adfb568eab6a14e6"
+LICENSE_KEY = os.getenv("LAWTASKSAI_LICENSE_KEY", "")
 PRODUCT = "law"
 
 # 5 diverse law skills to test (different categories)
@@ -42,10 +42,12 @@ PLUGINS = [
 ]
 
 
-ADMIN_SECRET = "2e3b1d4149297c9fe9bb0a4ea5be5a57b6dc28ed7f38cd3a5bf0092c44398643"
+ADMIN_SECRET = os.getenv("LAWTASKSAI_ADMIN_SECRET", "")
 
 def fetch_schema(skill_id: str) -> dict:
     """Fetch via admin endpoint to avoid burning user credits."""
+    if not ADMIN_SECRET:
+        raise RuntimeError("Set LAWTASKSAI_ADMIN_SECRET before running this scan.")
     url = f"{API_BASE}/admin/skills/{skill_id}"
     r = requests.get(url, headers={"X-Admin-Secret": ADMIN_SECRET}, timeout=15)
     r.raise_for_status()

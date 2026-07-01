@@ -15,3 +15,28 @@ venv/
 # Promptfoo scan results (generated, not source)
 scripts/promptfoo-test/scan-results/
 scripts/promptfoo-test/preamble-scan-results/
+
+# Local/generated noise
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+env/
+node_modules/
+dist/
+build/
+out/
+coverage/
+.wrangler/
+.cache/
+.turbo/
+*.log
+
+# Local secrets
+.env.*
+!.env.example
+*key*.json
+*keys*.json
+*token*.json
+*secret*.json
+zoho-listkeys.json
