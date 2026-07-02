@@ -698,6 +698,7 @@ async def ensure_magic_link_tokens_table(db: AsyncSession) -> None:
             );
         """))
         for col_def in [
+            "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid()",
             "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS product_id VARCHAR(50) NOT NULL DEFAULT 'law'",
             "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS campaign VARCHAR(100)",
             "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS redirect_url TEXT",
@@ -705,6 +706,7 @@ async def ensure_magic_link_tokens_table(db: AsyncSession) -> None:
             "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
             "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '30 minutes')",
             "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP",
+            "ALTER TABLE magic_link_tokens ALTER COLUMN id SET DEFAULT gen_random_uuid()",
             "ALTER TABLE magic_link_tokens ALTER COLUMN token TYPE VARCHAR(128)",
         ]:
             await db.execute(text(col_def))
@@ -1304,6 +1306,7 @@ async def startup():
                 );
             """))
             for col_def in [
+                "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid()",
                 "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS product_id VARCHAR(50) NOT NULL DEFAULT 'law'",
                 "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS campaign VARCHAR(100)",
                 "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS redirect_url TEXT",
@@ -1311,6 +1314,7 @@ async def startup():
                 "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
                 "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '30 minutes')",
                 "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP",
+                "ALTER TABLE magic_link_tokens ALTER COLUMN id SET DEFAULT gen_random_uuid()",
                 "ALTER TABLE magic_link_tokens ALTER COLUMN token TYPE VARCHAR(128)",
             ]:
                 await db.execute(text(col_def))
