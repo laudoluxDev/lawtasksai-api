@@ -3279,6 +3279,45 @@ async def admin_account_flow_test(db: AsyncSession = Depends(get_db)):
         }
 
 
+@app.post("/admin/signup-flow-test", dependencies=[Depends(verify_admin)])
+async def admin_signup_flow_test(db: AsyncSession = Depends(get_db)):
+    """Admin-only diagnostic that exercises the public signup logic with cleanup."""
+    email = f"signup-flow-test-{secrets.token_hex(6)}@example.com"
+    stage = "register"
+    try:
+        response = await register(
+            UserCreate(
+                email=email,
+                password="TemporaryResetTest123!",
+                product_id="farmer",
+                platforms=[],
+            ),
+            db,
+            "farmer",
+        )
+        stage = "cleanup"
+        await db.execute(text("DELETE FROM licenses WHERE user_id = :user_id"), {"user_id": uuid.UUID(response.id)})
+        await db.execute(text("DELETE FROM email_subscriptions WHERE user_id = :user_id"), {"user_id": uuid.UUID(response.id)})
+        await db.execute(text("DELETE FROM users WHERE id = :user_id"), {"user_id": uuid.UUID(response.id)})
+        await db.commit()
+        return {"ok": True, "email": email, "response_email": response.email}
+    except Exception as e:
+        await db.rollback()
+        try:
+            await db.execute(text("DELETE FROM licenses WHERE user_id IN (SELECT id FROM users WHERE email = :email)"), {"email": email})
+            await db.execute(text("DELETE FROM email_subscriptions WHERE user_id IN (SELECT id FROM users WHERE email = :email)"), {"email": email})
+            await db.execute(text("DELETE FROM users WHERE email = :email"), {"email": email})
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        return {
+            "ok": False,
+            "stage": stage,
+            "error_type": type(e).__name__,
+            "error": str(e)[:1200],
+        }
+
+
 # Routes: Email Tracking
 @app.get("/track/email-open")
 async def track_email_open(
