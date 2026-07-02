@@ -1612,6 +1612,7 @@ async def register(
     """
     # Resolve product_id: body field takes priority (explicit), then dependency (header/query/default)
     resolved_product_id = user_data.product_id or product_id
+    user_data.email = user_data.email.lower().strip()
 
     # Check if email exists
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -1633,6 +1634,8 @@ async def register(
         # New vertical for an existing user — add a license only
         user = existing_user
         user_id = existing_user.id
+        if user_data.password:
+            user.password_hash = hash_password(user_data.password)
         # Merge platforms if provided
         new_platforms = getattr(user_data, 'platforms', None) or []
         if new_platforms:
