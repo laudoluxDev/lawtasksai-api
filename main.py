@@ -1096,8 +1096,22 @@ async def startup():
                 ALTER TABLE users
                 ADD COLUMN IF NOT EXISTS platforms JSONB DEFAULT '[]'::jsonb;
             """))
+            for col_def in [
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS firm_name VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS credits_balance INTEGER DEFAULT 0",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS version_policy VARCHAR(20) DEFAULT 'latest'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS product_id VARCHAR(50) DEFAULT 'law'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB DEFAULT '{}'::jsonb",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP",
+            ]:
+                await conn.execute(text(col_def))
         except Exception as e:
-            print(f"[startup migration] platforms column: {e}")
+            print(f"[startup migration] users account columns: {e}")
         # Migration: create drip_emails table
         try:
             await conn.execute(text("""
@@ -1251,6 +1265,17 @@ async def startup():
                     used_at TIMESTAMP
                 );
             """))
+            for col_def in [
+                "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS product_id VARCHAR(50) NOT NULL DEFAULT 'law'",
+                "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS campaign VARCHAR(100)",
+                "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS redirect_url TEXT",
+                "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS used BOOLEAN NOT NULL DEFAULT FALSE",
+                "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+                "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '30 minutes')",
+                "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP",
+                "ALTER TABLE magic_link_tokens ALTER COLUMN token TYPE VARCHAR(128)",
+            ]:
+                await db.execute(text(col_def))
             await db.commit()
         except Exception as e:
             print(f"[startup migration] magic_link_tokens table: {e}")
@@ -1570,9 +1595,12 @@ async def register(
         new_platforms = getattr(user_data, 'platforms', None) or []
         if new_platforms:
             existing_platforms = user.platforms or []
-            merged = {p.get('platform'): p for p in existing_platforms}
+            merged = {
+                (p.get("platform") if isinstance(p, dict) else str(p)): p
+                for p in existing_platforms
+            }
             for p in new_platforms:
-                merged[p.get('platform')] = p
+                merged[p.get("platform") if isinstance(p, dict) else str(p)] = p
             user.platforms = list(merged.values())
     else:
         # Brand new user
