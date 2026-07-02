@@ -474,7 +474,8 @@ class MCPConnectStartResponse(BaseModel):
 
 class MCPConnectApproveRequest(BaseModel):
     user_code: str
-    license_key: str
+    license_key: Optional[str] = None
+    email: Optional[EmailStr] = None
 
 class MCPConnectApproveResponse(BaseModel):
     success: bool
@@ -1352,13 +1353,16 @@ async def approve_mcp_connect(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Approve an MCP browser connection using an existing license key.
+    Approve an MCP browser connection using an account email or license key.
 
     This is designed for the website /connect page. It does not accept user task
     content, documents, prompts, or workflow inputs.
     """
     user_code = request.user_code.strip().upper()
-    license_key = request.license_key.strip()
+    license_key = (request.license_key or "").strip()
+    email = str(request.email).lower().strip() if request.email else ""
+    if not license_key and not email:
+        raise HTTPException(status_code=400, detail="Email or license key is required")
 
     result = await db.execute(
         select(MCPConnectSession).where(MCPConnectSession.user_code == user_code)
@@ -1373,12 +1377,24 @@ async def approve_mcp_connect(
         await db.commit()
         raise HTTPException(status_code=410, detail="Connection code expired")
 
-    license_result = await db.execute(
-        select(License).where(
-            License.license_key == license_key,
-            License.status == "active",
+    if license_key:
+        license_result = await db.execute(
+            select(License).where(
+                License.license_key == license_key,
+                License.status == "active",
+            )
         )
-    )
+    else:
+        license_result = await db.execute(
+            select(License)
+            .join(User, License.user_id == User.id)
+            .where(
+                User.email == email,
+                License.status == "active",
+                License.product_id == normalize_mcp_product_id(session.product_id),
+            )
+            .order_by(License.created_at.desc())
+        )
     license = license_result.scalar_one_or_none()
     if not license:
         raise HTTPException(status_code=401, detail="Invalid or inactive license")
@@ -2481,7 +2497,7 @@ _VERTICAL_BY_PREFIX: list[tuple[str, dict]] = sorted([
     ("prt_",  {"product_id": "principal",     "product_name": "PrincipalTasksAI",    "display_name": "PrincipalTasksAI",    "tool_prefix": "principaltasksai",  "occupation": "school principal",    "support_email": "support@principaltasksai.com"}),
     ("mot_",  {"product_id": "mortuary",      "product_name": "MortuaryTasksAI",     "display_name": "MortuaryTasksAI",     "tool_prefix": "mortuarytasksai",   "occupation": "funeral director",    "support_email": "support@mortuarytasksai.com"}),
     ("evt_",  {"product_id": "eventplanner",  "product_name": "EventPlannerTasksAI", "display_name": "EventPlannerTasksAI", "tool_prefix": "eventplannertasksai","occupation": "event planner",      "support_email": "support@eventplannertasksai.com"}),
-    ("cht_",  {"product_id": "church",        "product_name": "ChurchTasksAI",       "display_name": "ChurchTasksAI",       "tool_prefix": "churchtasksai",     "occupation": "church administrator","support_email": "support@churchtasksai.com"}),
+    ("cht_",  {"product_id": "church",        "product_name": "ChurchAdminTasksAI",  "display_name": "ChurchAdminTasksAI",  "tool_prefix": "churchadmintasksai","occupation": "church administrator","support_email": "support@churchadmintasksai.com"}),
     ("per_",  {"product_id": "personaltrainer","product_name": "PersonalTrainerTasksAI","display_name": "PersonalTrainerTasksAI","tool_prefix": "personaltrainertasksai","occupation": "personal trainer",  "support_email": "support@personaltrainertasksai.com"}),
     ("elt_",  {"product_id": "electrician",   "product_name": "ElectricianTasksAI",  "display_name": "ElectricianTasksAI",  "tool_prefix": "electriciantasksai","occupation": "electrician",        "support_email": "support@electriciantasksai.com"}),
     ("mgt_",  {"product_id": "mortgage",      "product_name": "MortgageTasksAI",     "display_name": "MortgageTasksAI",     "tool_prefix": "mortgagetasksai",   "occupation": "mortgage broker",    "support_email": "support@mortgagetasksai.com"}),
@@ -3831,7 +3847,7 @@ _PRODUCT_NAME_MAP = {
     "contractor":     "ContractorTasksAI",
     "accounting":     "AccountingTasksAI",
     "chiropractor":   "ChiropractorTasksAI",
-    "church":         "ChurchTasksAI",
+    "church":         "ChurchAdminTasksAI",
     "dentist":        "DentistTasksAI",
     "designer":       "DesignerTasksAI",
     "electrician":    "ElectricianTasksAI",
@@ -4173,6 +4189,21 @@ async def get_product(product_id: str, db: AsyncSession = Depends(get_db)):
     )
     row = result.fetchone()
     if not row:
+        fallback_domains = {
+            "law": "lawtasksai.com",
+            "church": "churchadmintasksai.com",
+            "mortuary": "mortuarytasksai.com",
+        }
+        if product_id in _PRODUCT_NAME_MAP:
+            return {
+                "id": product_id,
+                "name": _PRODUCT_NAME_MAP[product_id],
+                "display_name": _PRODUCT_NAME_MAP[product_id],
+                "domain": fallback_domains.get(product_id, f"{product_id}tasksai.com"),
+                "primary_color": "#1a1a1a",
+                "accent_color": "#2563eb",
+                "background_color": "#FAFAFA",
+            }
         raise HTTPException(status_code=404, detail=f"Product '{product_id}' not found")
 
     return {
