@@ -682,9 +682,6 @@ def generate_mcp_user_code() -> str:
 async def ensure_magic_link_tokens_table(db: AsyncSession) -> None:
     """Ensure one-time account token storage exists before reset/login flows use it."""
     try:
-        exists_result = await db.execute(text("SELECT to_regclass('public.magic_link_tokens')"))
-        if exists_result.scalar_one_or_none():
-            return
         await db.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
         await db.execute(text("""
             CREATE TABLE IF NOT EXISTS magic_link_tokens (
@@ -700,6 +697,17 @@ async def ensure_magic_link_tokens_table(db: AsyncSession) -> None:
                 used_at TIMESTAMP
             );
         """))
+        for col_def in [
+            "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS product_id VARCHAR(50) NOT NULL DEFAULT 'law'",
+            "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS campaign VARCHAR(100)",
+            "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS redirect_url TEXT",
+            "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS used BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+            "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '30 minutes')",
+            "ALTER TABLE magic_link_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP",
+            "ALTER TABLE magic_link_tokens ALTER COLUMN token TYPE VARCHAR(128)",
+        ]:
+            await db.execute(text(col_def))
         await db.commit()
     except Exception as e:
         await db.rollback()
