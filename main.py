@@ -1662,6 +1662,15 @@ async def register(
 
     await db.commit()
     await db.refresh(user)
+    await db.refresh(license)
+    response_user_id = str(user.id)
+    response_email = user.email
+    response_name = user.name
+    response_firm_name = user.firm_name
+    response_created_at = user.created_at
+    response_credits = license.credits_remaining
+    response_license_key = license.license_key
+    response_platforms = user.platforms or []
 
     # Send drip Email 1 (HTML welcome) with license key
     try:
@@ -1696,8 +1705,9 @@ async def register(
         except Exception:
             pass
 
-        first_name = (user.name or "").split()[0] if user.name else ""
-        user_platform = (user.platforms or [{}])[0].get("platform", "other") if user.platforms else "other"
+        first_name = (response_name or "").split()[0] if response_name else ""
+        first_platform = response_platforms[0] if response_platforms else None
+        user_platform = first_platform.get("platform", "other") if isinstance(first_platform, dict) else (first_platform or "other")
 
         email1_html = drip_utils.build_drip_email(
             email_num=1,
@@ -1707,8 +1717,8 @@ async def register(
             skill_count=reg_skill_count,
             platform=user_platform,
             first_name=first_name,
-            user_email=user.email,
-            license_key=license.license_key,
+            user_email=response_email,
+            license_key=response_license_key,
         )
         email1_subject = drip_utils.drip_subject(1, reg_product_name)
 
@@ -1719,26 +1729,27 @@ async def register(
                     f"https://mail.zoho.com/api/accounts/6556209000000008002/messages",
                     json={
                         "fromAddress": f"=?UTF-8?B?{base64.b64encode(reg_product_name.encode()).decode()}?= <hello@{reg_product_domain}>",
-                        "toAddress": user.email,
+                        "toAddress": response_email,
                         "subject": email1_subject,
                         "content": email1_html,
                         "mailFormat": "html",
                     },
                     headers={"Authorization": f"Zoho-oauthtoken {access_token}"}
                 )
-                print(f"[Drip] Email 1 sent to {user.email} ({resolved_product_id}): Zoho {_resp.status_code}")
+                print(f"[Drip] Email 1 sent to {response_email} ({resolved_product_id}): Zoho {_resp.status_code}")
                 # Record in drip_emails table
                 try:
                     await db.execute(text("""
                         INSERT INTO drip_emails (email, product_id, email_number, status)
                         VALUES (:email, :pid, 1, 'sent')
                         ON CONFLICT (email, product_id, email_number) DO NOTHING
-                    """), {"email": user.email, "pid": resolved_product_id})
+                    """), {"email": response_email, "pid": resolved_product_id})
                     await db.commit()
                 except Exception:
+                    await db.rollback()
                     pass
         else:
-            print(f"[Drip] Email 1 skipped for {user.email}: no Zoho token")
+            print(f"[Drip] Email 1 skipped for {response_email}: no Zoho token")
 
         # Schedule Emails 2 (Day 2) and 3 (Day 7)
         try:
@@ -1751,7 +1762,7 @@ async def register(
                         (:email, :pid, :num, 'scheduled', :send_at, :platform, :fname)
                     ON CONFLICT (email, product_id, email_number) DO NOTHING
                 """), {
-                    "email":    user.email,
+                    "email":    response_email,
                     "pid":      resolved_product_id,
                     "num":      email_num,
                     "send_at":  now_utc + timedelta(days=days_delay),
@@ -1759,19 +1770,19 @@ async def register(
                     "fname":    first_name,
                 })
             await db.commit()
-            print(f"[Drip] Emails 2+3 scheduled for {user.email} ({resolved_product_id})")
+            print(f"[Drip] Emails 2+3 scheduled for {response_email} ({resolved_product_id})")
         except Exception as sched_err:
             await db.rollback()
-            print(f"[Drip] scheduling failed for {user.email}: {sched_err}")
+            print(f"[Drip] scheduling failed for {response_email}: {sched_err}")
     except Exception as email_err:
         await db.rollback()
-        print(f"[Drip] Email 1 failed for {user.email}: {email_err}")
+        print(f"[Drip] Email 1 failed for {response_email}: {email_err}")
 
     # Add to Zoho Campaigns subscriber list (fire-and-forget)
     try:
-        await add_to_zoho_list(user.email, user.name or "", resolved_product_id)
+        await add_to_zoho_list(response_email, response_name or "", resolved_product_id)
     except Exception as zoho_err:
-        print(f"[Zoho Campaigns] signup hook failed for {user.email}: {zoho_err}")
+        print(f"[Zoho Campaigns] signup hook failed for {response_email}: {zoho_err}")
 
     # Insert email_subscriptions row
     try:
@@ -1780,15 +1791,15 @@ async def register(
         await db.commit()
     except Exception as sub_err:
         await db.rollback()
-        print(f"[EmailSub] failed to insert subscription for {user.email}: {sub_err}")
+        print(f"[EmailSub] failed to insert subscription for {response_email}: {sub_err}")
 
     return UserResponse(
-        id=str(user.id),
-        email=user.email,
-        name=user.name,
-        firm_name=user.firm_name,
-        credits_balance=license.credits_remaining,
-        created_at=user.created_at
+        id=response_user_id,
+        email=response_email,
+        name=response_name,
+        firm_name=response_firm_name,
+        credits_balance=response_credits,
+        created_at=response_created_at
     )
 
 @app.post("/v1/signup", response_model=UserResponse, status_code=201)
