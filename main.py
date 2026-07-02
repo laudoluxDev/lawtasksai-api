@@ -678,6 +678,26 @@ def generate_mcp_user_code() -> str:
     raw = "".join(secrets.choice(alphabet) for _ in range(8))
     return f"{raw[:4]}-{raw[4:]}"
 
+
+async def ensure_magic_link_tokens_table(db: AsyncSession) -> None:
+    """Ensure one-time account token storage exists before reset/login flows use it."""
+    await db.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
+    await db.execute(text("""
+        CREATE TABLE IF NOT EXISTS magic_link_tokens (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            token VARCHAR(128) NOT NULL UNIQUE,
+            email VARCHAR(255) NOT NULL,
+            product_id VARCHAR(50) NOT NULL DEFAULT 'law',
+            campaign VARCHAR(100),
+            redirect_url TEXT,
+            used BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            expires_at TIMESTAMP NOT NULL,
+            used_at TIMESTAMP
+        );
+    """))
+    await db.commit()
+
 def normalize_mcp_product_id(product_id: Optional[str]) -> str:
     """Map public installer product ids to internal license product ids."""
     aliases = {
@@ -1955,6 +1975,8 @@ async def request_password_reset(
     if not user:
         return {"sent": True}
 
+    await ensure_magic_link_tokens_table(db)
+
     origin = (request.headers.get("origin") or "").rstrip("/")
     if origin.startswith("https://"):
         domain = origin.replace("https://", "").split("/")[0]
@@ -2047,6 +2069,8 @@ async def confirm_password_reset(
     new_password = request_data.password.strip()
     if len(new_password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    await ensure_magic_link_tokens_table(db)
 
     result = await db.execute(
         text("""
