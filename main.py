@@ -1953,20 +1953,29 @@ async def request_magic_link(
     if not access_token:
         raise HTTPException(status_code=503, detail="Email service unavailable")
 
+    zoho_url = f"https://mail.zoho.com/api/accounts/{os.getenv('ZOHO_ACCOUNT_ID', '6556209000000008002')}/messages"
+    from_addresses = [
+        f"=?UTF-8?B?{base64.b64encode(product_name.encode()).decode()}?= <hello@{domain}>",
+        f"=?UTF-8?B?{base64.b64encode(product_name.encode()).decode()}?= <hello@lawtasksai.com>",
+    ]
+    resp = None
     async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"https://mail.zoho.com/api/accounts/{os.getenv('ZOHO_ACCOUNT_ID', '6556209000000008002')}/messages",
-            json={
-                "fromAddress": f"=?UTF-8?B?{base64.b64encode(product_name.encode()).decode()}?= <hello@{domain}>",
-                "toAddress": email,
-                "subject": f"Your {product_name} login link",
-                "content": html_body,
-                "mailFormat": "html",
-            },
-            headers={"Authorization": f"Zoho-oauthtoken {access_token}"},
-        )
+        for from_addr in from_addresses:
+            resp = await client.post(
+                zoho_url,
+                json={
+                    "fromAddress": from_addr,
+                    "toAddress": email,
+                    "subject": f"Your {product_name} login link",
+                    "content": html_body,
+                    "mailFormat": "html",
+                },
+                headers={"Authorization": f"Zoho-oauthtoken {access_token}"},
+            )
+            if resp.status_code < 400:
+                break
+            print(f"[MagicLink] Zoho send failed from {from_addr} for {email}: {resp.status_code} {resp.text[:160]}")
     if resp.status_code >= 400:
-        print(f"[MagicLink] Zoho send failed for {email}: {resp.status_code} {resp.text[:160]}")
         raise HTTPException(status_code=503, detail="Email service unavailable")
 
     return {"sent": True}
