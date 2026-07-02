@@ -1955,6 +1955,11 @@ class EmailProviderTestRequest(BaseModel):
     email: EmailStr
 
 
+class ResetTokenDebugRequest(BaseModel):
+    email: EmailStr
+    token: Optional[str] = None
+
+
 @app.post("/auth/account-licenses")
 async def account_licenses(request: RecoverLicenseRequest, db: AsyncSession = Depends(get_db)):
     """
@@ -2156,9 +2161,12 @@ async def confirm_password_reset(
     db: AsyncSession = Depends(get_db),
 ):
     """Set a new password using a one-time reset token."""
+    reset_token = request_data.token.strip()
     new_password = request_data.password.strip()
     if len(new_password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if not reset_token:
+        raise HTTPException(status_code=404, detail="Invalid reset link")
 
     try:
         result = await db.execute(
@@ -2167,7 +2175,7 @@ async def confirm_password_reset(
                 FROM magic_link_tokens
                 WHERE token = :token AND campaign = 'password-reset'
             """),
-            {"token": request_data.token},
+            {"token": reset_token},
         )
     except Exception as e:
         await db.rollback()
@@ -3261,6 +3269,66 @@ async def admin_email_provider_test(request_data: EmailProviderTestRequest):
             "error_type": type(e).__name__,
             "error": str(e)[:500],
         }
+
+
+@app.post("/admin/reset-token-debug", dependencies=[Depends(verify_admin)])
+async def admin_reset_token_debug(
+    request_data: ResetTokenDebugRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin-only reset-token lookup. Returns token metadata, never the full token."""
+    email = request_data.email.lower().strip()
+    token = (request_data.token or "").strip()
+    rows_result = await db.execute(
+        text("""
+            SELECT token, product_id, campaign, redirect_url, used, expires_at, created_at
+            FROM magic_link_tokens
+            WHERE email = :email
+            ORDER BY created_at DESC
+            LIMIT 5
+        """),
+        {"email": email},
+    )
+    rows = rows_result.fetchall()
+    exact_match = None
+    if token:
+        exact_result = await db.execute(
+            text("""
+                SELECT product_id, campaign, used, expires_at
+                FROM magic_link_tokens
+                WHERE token = :token
+                LIMIT 1
+            """),
+            {"token": token},
+        )
+        exact_row = exact_result.fetchone()
+        if exact_row:
+            exact_match = {
+                "product_id": exact_row.product_id,
+                "campaign": exact_row.campaign,
+                "used": exact_row.used,
+                "expired": bool(exact_row.expires_at and datetime.utcnow() > exact_row.expires_at),
+            }
+
+    return {
+        "email": email,
+        "submitted_token_len": len(token) if token else 0,
+        "exact_match": exact_match,
+        "recent_tokens": [
+            {
+                "token_len": len(row.token),
+                "token_prefix": row.token[:8],
+                "product_id": row.product_id,
+                "campaign": row.campaign,
+                "redirect_url": row.redirect_url,
+                "used": row.used,
+                "expired": bool(row.expires_at and datetime.utcnow() > row.expires_at),
+                "created_at": row.created_at,
+                "expires_at": row.expires_at,
+            }
+            for row in rows
+        ],
+    }
 
 
 @app.post("/admin/account-flow-test", dependencies=[Depends(verify_admin)])
