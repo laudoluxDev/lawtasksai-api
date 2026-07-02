@@ -3369,6 +3369,19 @@ async def admin_reset_roundtrip_test(db: AsyncSession = Depends(get_db)):
         )
         await db.commit()
 
+        stage = "pre_confirm_lookup"
+        lookup_result = await db.execute(
+            text("""
+                SELECT id, email, campaign, used, expires_at
+                FROM magic_link_tokens
+                WHERE token = :token AND campaign = 'password-reset'
+            """),
+            {"token": token},
+        )
+        lookup_row = lookup_result.fetchone()
+        if not lookup_row:
+            raise RuntimeError("Inserted reset token could not be found before confirm")
+
         stage = "confirm"
         confirm_response = await confirm_password_reset(
             PasswordResetConfirmRequest(token=f" {token} ", password="TemporaryResetTest456!"),
