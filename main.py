@@ -681,22 +681,30 @@ def generate_mcp_user_code() -> str:
 
 async def ensure_magic_link_tokens_table(db: AsyncSession) -> None:
     """Ensure one-time account token storage exists before reset/login flows use it."""
-    await db.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
-    await db.execute(text("""
-        CREATE TABLE IF NOT EXISTS magic_link_tokens (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            token VARCHAR(128) NOT NULL UNIQUE,
-            email VARCHAR(255) NOT NULL,
-            product_id VARCHAR(50) NOT NULL DEFAULT 'law',
-            campaign VARCHAR(100),
-            redirect_url TEXT,
-            used BOOLEAN NOT NULL DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT NOW(),
-            expires_at TIMESTAMP NOT NULL,
-            used_at TIMESTAMP
-        );
-    """))
-    await db.commit()
+    exists_result = await db.execute(text("SELECT to_regclass('public.magic_link_tokens')"))
+    if exists_result.scalar_one_or_none():
+        return
+    try:
+        await db.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
+        await db.execute(text("""
+            CREATE TABLE IF NOT EXISTS magic_link_tokens (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                token VARCHAR(128) NOT NULL UNIQUE,
+                email VARCHAR(255) NOT NULL,
+                product_id VARCHAR(50) NOT NULL DEFAULT 'law',
+                campaign VARCHAR(100),
+                redirect_url TEXT,
+                used BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                expires_at TIMESTAMP NOT NULL,
+                used_at TIMESTAMP
+            );
+        """))
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        print(f"[TokenTable] could not ensure magic_link_tokens: {e}")
+        raise HTTPException(status_code=503, detail="Account token storage unavailable")
 
 def normalize_mcp_product_id(product_id: Optional[str]) -> str:
     """Map public installer product ids to internal license product ids."""
