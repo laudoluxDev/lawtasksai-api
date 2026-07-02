@@ -1834,6 +1834,15 @@ class MagicLinkVerifyRequest(BaseModel):
     token: str
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    token: str
+    password: str
+
+
 @app.post("/auth/account-licenses")
 async def account_licenses(request: RecoverLicenseRequest, db: AsyncSession = Depends(get_db)):
     """
@@ -1927,6 +1936,149 @@ async def account_login(
         access_token=generate_token(str(user.id), login_license.license_key),
         product_id=product_id,
     )
+
+
+@app.post("/auth/password-reset/request")
+async def request_password_reset(
+    request_data: PasswordResetRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    product_id: str = Depends(get_product_id),
+):
+    """
+    Send a one-time password reset link.
+    Always returns success so account existence is not exposed.
+    """
+    email = request_data.email.lower().strip()
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        return {"sent": True}
+
+    origin = (request.headers.get("origin") or "").rstrip("/")
+    if origin.startswith("https://"):
+        domain = origin.replace("https://", "").split("/")[0]
+        reset_url_base = f"{origin}/reset-password.html"
+    else:
+        domain = "lawtasksai.com" if product_id == "law" else f"{product_id}tasksai.com"
+        reset_url_base = f"https://{domain}/reset-password.html"
+
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(minutes=30)
+    await db.execute(
+        text("""
+            INSERT INTO magic_link_tokens
+                (token, email, product_id, campaign, redirect_url, expires_at)
+            VALUES (:token, :email, :product_id, 'password-reset', :redirect_url, :expires_at)
+        """),
+        {
+            "token": token,
+            "email": email,
+            "product_id": product_id,
+            "redirect_url": reset_url_base,
+            "expires_at": expires_at,
+        },
+    )
+    await db.commit()
+
+    product_name = "TasksAI"
+    try:
+        prod_result = await db.execute(
+            text("SELECT name FROM products WHERE id = :pid AND is_active = TRUE"),
+            {"pid": product_id},
+        )
+        prod_row = prod_result.fetchone()
+        if prod_row and prod_row.name:
+            product_name = prod_row.name
+    except Exception:
+        product_name = "LawTasksAI" if product_id == "law" else f"{product_id.capitalize()}TasksAI"
+
+    reset_url = f"{reset_url_base}?token={token}"
+    safe_name = product_name.replace("<", "&lt;").replace(">", "&gt;")
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:560px;margin:0 auto;padding:24px;">
+      <h2 style="margin:0 0 12px;">Reset your {safe_name} password</h2>
+      <p>Click the button below to choose a new password for your TasksAI account.</p>
+      <p style="margin:24px 0;">
+        <a href="{reset_url}" style="background:#2563eb;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;display:inline-block;">Reset Password</a>
+      </p>
+      <p style="font-size:0.9rem;color:#6b7280;">This link expires in 30 minutes. If you did not request it, you can ignore this email.</p>
+    </div>
+    """
+
+    access_token = await get_zoho_access_token()
+    if not access_token:
+        raise HTTPException(status_code=503, detail="Email service unavailable")
+
+    zoho_url = f"https://mail.zoho.com/api/accounts/{os.getenv('ZOHO_ACCOUNT_ID', '6556209000000008002')}/messages"
+    from_addresses = [
+        f"=?UTF-8?B?{base64.b64encode(product_name.encode()).decode()}?= <hello@{domain}>",
+        f"=?UTF-8?B?{base64.b64encode(product_name.encode()).decode()}?= <hello@lawtasksai.com>",
+    ]
+    resp = None
+    async with httpx.AsyncClient(timeout=15) as client:
+        for from_addr in from_addresses:
+            resp = await client.post(
+                zoho_url,
+                json={
+                    "fromAddress": from_addr,
+                    "toAddress": email,
+                    "subject": f"Reset your {product_name} password",
+                    "content": html_body,
+                    "mailFormat": "html",
+                },
+                headers={"Authorization": f"Zoho-oauthtoken {access_token}"},
+            )
+            if resp.status_code < 400:
+                break
+            print(f"[PasswordReset] Zoho send failed from {from_addr} for {email}: {resp.status_code} {resp.text[:160]}")
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=503, detail="Email service unavailable")
+
+    return {"sent": True}
+
+
+@app.post("/auth/password-reset/confirm")
+async def confirm_password_reset(
+    request_data: PasswordResetConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Set a new password using a one-time reset token."""
+    new_password = request_data.password.strip()
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    result = await db.execute(
+        text("""
+            SELECT id, email, used, expires_at
+            FROM magic_link_tokens
+            WHERE token = :token AND campaign = 'password-reset'
+        """),
+        {"token": request_data.token},
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Invalid reset link")
+
+    token_id, email, used, expires_at = row
+    if used:
+        raise HTTPException(status_code=400, detail="This reset link has already been used")
+    if expires_at and datetime.utcnow() > expires_at:
+        raise HTTPException(status_code=400, detail="This reset link has expired")
+
+    user_result = await db.execute(select(User).where(User.email == email))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    user.password_hash = hash_password(new_password)
+    user.last_login = datetime.utcnow()
+    await db.execute(
+        text("UPDATE magic_link_tokens SET used = TRUE, used_at = NOW() WHERE id = :id"),
+        {"id": str(token_id)},
+    )
+    await db.commit()
+    return {"reset": True}
 
 
 @app.post("/auth/magic-link")
