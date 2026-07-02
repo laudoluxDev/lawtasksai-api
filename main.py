@@ -437,9 +437,10 @@ class UserCreate(BaseModel):
     platforms: Optional[List[str]] = None  # e.g. ["claude_desktop", "openclaw"]
 
 class SimpleSignupRequest(BaseModel):
-    """Password-free signup — name + email only. Password is auto-generated."""
+    """Landing-page signup. Password is optional for legacy callers."""
     email: EmailStr
     name: Optional[str] = None
+    password: Optional[str] = None
     product_id: Optional[str] = None
     platforms: Optional[List[str]] = None  # e.g. ["claude_desktop", "openclaw"]
 
@@ -1708,18 +1709,20 @@ async def simple_signup(
     product_id: str = Depends(get_product_id),
 ):
     """
-    Password-free signup endpoint for landing page free-trial flow.
-    Accepts name + email only; generates a random password internally.
+    Signup endpoint for landing page free-trial flow.
+    Accepts name + email + password. Legacy callers without a password still
+    receive an internally generated password.
     Returns the same UserResponse as /auth/register.
     """
-    # Delegate to the existing register logic by constructing a UserCreate
-    # with an auto-generated password the user never needs to know.
-    auto_password = secrets.token_urlsafe(24)
+    supplied_password = (data.password or "").strip()
+    if supplied_password and len(supplied_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
     resolved_product_id = data.product_id or product_id
     user_create = UserCreate(
         email=data.email,
         name=data.name,
-        password=auto_password,
+        password=supplied_password or secrets.token_urlsafe(24),
         product_id=resolved_product_id,
         platforms=data.platforms or [],
     )
@@ -1817,6 +1820,12 @@ class AccountLicensesResponse(BaseModel):
     licenses: List[AccountLicenseItem]
 
 
+class AccountLoginResponse(AccountLicensesResponse):
+    access_token: str
+    token_type: str = "bearer"
+    product_id: Optional[str] = "law"
+
+
 class MagicLinkRequest(BaseModel):
     email: EmailStr
 
@@ -1879,6 +1888,45 @@ async def account_licenses(request: RecoverLicenseRequest, db: AsyncSession = De
         ))
 
     return AccountLicensesResponse(email=user.email, licenses=items)
+
+
+@app.post("/auth/account-login", response_model=AccountLoginResponse)
+async def account_login(
+    credentials: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+    product_id: str = Depends(get_product_id),
+):
+    """Traditional account login for the public website dashboard."""
+    email = credentials.email.lower().strip()
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if not user or not verify_password(credentials.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    lic_result = await db.execute(
+        select(License).where(
+            License.user_id == user.id,
+            License.status == "active",
+        ).order_by(
+            (License.product_id == product_id).desc(),
+            License.created_at.desc(),
+        )
+    )
+    login_license = lic_result.scalars().first()
+    if not login_license:
+        raise HTTPException(status_code=401, detail="No active license found")
+
+    user.last_login = datetime.utcnow()
+    await db.commit()
+
+    account = await account_licenses(RecoverLicenseRequest(email=user.email), db)
+    return AccountLoginResponse(
+        email=account.email,
+        licenses=account.licenses,
+        access_token=generate_token(str(user.id), login_license.license_key),
+        product_id=product_id,
+    )
 
 
 @app.post("/auth/magic-link")
