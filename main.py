@@ -1801,6 +1801,14 @@ class AccountLicensesResponse(BaseModel):
     licenses: List[AccountLicenseItem]
 
 
+class MagicLinkRequest(BaseModel):
+    email: EmailStr
+
+
+class MagicLinkVerifyRequest(BaseModel):
+    token: str
+
+
 @app.post("/auth/account-licenses")
 async def account_licenses(request: RecoverLicenseRequest, db: AsyncSession = Depends(get_db)):
     """
@@ -1855,6 +1863,126 @@ async def account_licenses(request: RecoverLicenseRequest, db: AsyncSession = De
         ))
 
     return AccountLicensesResponse(email=user.email, licenses=items)
+
+
+@app.post("/auth/magic-link")
+async def request_magic_link(
+    request_data: MagicLinkRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    product_id: str = Depends(get_product_id),
+):
+    """
+    Send a password-free account login link.
+    Always returns success so account existence is not exposed.
+    """
+    email = request_data.email.lower().strip()
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        return {"sent": True}
+
+    origin = (request.headers.get("origin") or "").rstrip("/")
+    if origin.startswith("https://"):
+        redirect_url = f"{origin}/download.html"
+        domain = origin.replace("https://", "").split("/")[0]
+    else:
+        domain = "lawtasksai.com" if product_id == "law" else f"{product_id}tasksai.com"
+        redirect_url = f"https://{domain}/download.html"
+
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(minutes=15)
+    await db.execute(
+        text("""
+            INSERT INTO magic_link_tokens
+                (token, email, product_id, campaign, redirect_url, expires_at)
+            VALUES (:token, :email, :product_id, 'account-login', :redirect_url, :expires_at)
+        """),
+        {
+            "token": token,
+            "email": email,
+            "product_id": product_id,
+            "redirect_url": redirect_url,
+            "expires_at": expires_at,
+        },
+    )
+    await db.commit()
+
+    product_name = "TasksAI"
+    try:
+        prod_result = await db.execute(
+            text("SELECT name FROM products WHERE id = :pid AND is_active = TRUE"),
+            {"pid": product_id},
+        )
+        prod_row = prod_result.fetchone()
+        if prod_row and prod_row.name:
+            product_name = prod_row.name
+    except Exception:
+        product_name = "LawTasksAI" if product_id == "law" else f"{product_id.capitalize()}TasksAI"
+
+    login_url = f"{redirect_url}?token={token}"
+    safe_name = product_name.replace("<", "&lt;").replace(">", "&gt;")
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:560px;margin:0 auto;padding:24px;">
+      <h2 style="margin:0 0 12px;">Your {safe_name} login link</h2>
+      <p>Click the button below to open your account, view your credits, and download your installer.</p>
+      <p style="margin:24px 0;">
+        <a href="{login_url}" style="background:#2563eb;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;display:inline-block;">Open My Account</a>
+      </p>
+      <p style="font-size:0.9rem;color:#6b7280;">This link expires in 15 minutes. If you did not request it, you can ignore this email.</p>
+    </div>
+    """
+
+    access_token = await get_zoho_access_token()
+    if not access_token:
+        raise HTTPException(status_code=503, detail="Email service unavailable")
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"https://mail.zoho.com/api/accounts/{os.getenv('ZOHO_ACCOUNT_ID', '6556209000000008002')}/messages",
+            json={
+                "fromAddress": f"=?UTF-8?B?{base64.b64encode(product_name.encode()).decode()}?= <hello@{domain}>",
+                "toAddress": email,
+                "subject": f"Your {product_name} login link",
+                "content": html_body,
+                "mailFormat": "html",
+            },
+            headers={"Authorization": f"Zoho-oauthtoken {access_token}"},
+        )
+    if resp.status_code >= 400:
+        print(f"[MagicLink] Zoho send failed for {email}: {resp.status_code} {resp.text[:160]}")
+        raise HTTPException(status_code=503, detail="Email service unavailable")
+
+    return {"sent": True}
+
+
+@app.post("/auth/magic-link/verify", response_model=AccountLicensesResponse)
+async def verify_magic_link(request: MagicLinkVerifyRequest, db: AsyncSession = Depends(get_db)):
+    """Verify a one-time account login token and return the user's active licenses."""
+    result = await db.execute(
+        text("""
+            SELECT id, email, used, expires_at
+            FROM magic_link_tokens
+            WHERE token = :token AND campaign = 'account-login'
+        """),
+        {"token": request.token},
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Invalid login link")
+
+    token_id, email, used, expires_at = row
+    if used:
+        raise HTTPException(status_code=400, detail="This login link has already been used")
+    if expires_at and datetime.utcnow() > expires_at:
+        raise HTTPException(status_code=400, detail="This login link has expired")
+
+    await db.execute(
+        text("UPDATE magic_link_tokens SET used = TRUE, used_at = NOW() WHERE id = :id"),
+        {"id": str(token_id)},
+    )
+    await db.commit()
+    return await account_licenses(RecoverLicenseRequest(email=email), db)
 
 
 # ============================================
@@ -3736,7 +3864,7 @@ def _get_installer_url(product_id: str, user_agent: str = "") -> dict:
     return {
         "product_name": prod_name,
         "windows": f"{GITHUB_RELEASES_BASE}/{prod_name}-Setup.exe",
-        "mac":     f"{GITHUB_RELEASES_BASE}/{prod_name}-Setup-mac",
+        "mac":     f"{GITHUB_RELEASES_BASE}/{prod_name}-Setup",
         "release_page": "https://github.com/laudoluxDev/lawtasksai-mcp/releases/latest",
     }
 
