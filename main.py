@@ -2041,27 +2041,21 @@ async def request_password_reset(
         raise HTTPException(status_code=503, detail="Email service unavailable")
 
     zoho_url = f"https://mail.zoho.com/api/accounts/{os.getenv('ZOHO_ACCOUNT_ID', '6556209000000008002')}/messages"
-    from_addresses = [
-        f"=?UTF-8?B?{base64.b64encode(product_name.encode()).decode()}?= <hello@{domain}>",
-        f"=?UTF-8?B?{base64.b64encode(product_name.encode()).decode()}?= <hello@lawtasksai.com>",
-    ]
     resp = None
     async with httpx.AsyncClient(timeout=15) as client:
-        for from_addr in from_addresses:
-            resp = await client.post(
-                zoho_url,
-                json={
-                    "fromAddress": from_addr,
-                    "toAddress": email,
-                    "subject": f"Reset your {product_name} password",
-                    "content": html_body,
-                    "mailFormat": "html",
-                },
-                headers={"Authorization": f"Zoho-oauthtoken {access_token}"},
-            )
-            if resp.status_code < 400:
-                break
-            print(f"[PasswordReset] Zoho send failed from {from_addr} for {email}: {resp.status_code} {resp.text[:160]}")
+        resp = await client.post(
+            zoho_url,
+            json={
+                "fromAddress": "hello@lawtasksai.com",
+                "toAddress": email,
+                "subject": f"Reset your {product_name} password",
+                "content": html_body,
+                "mailFormat": "html",
+            },
+            headers={"Authorization": f"Zoho-oauthtoken {access_token}"},
+        )
+        if resp.status_code >= 400:
+            print(f"[PasswordReset] Zoho send failed for {email}: {resp.status_code} {resp.text[:240]}")
     if resp.status_code >= 400:
         raise HTTPException(status_code=503, detail="Email service unavailable")
 
