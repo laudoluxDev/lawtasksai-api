@@ -1141,6 +1141,36 @@ async def startup():
                     pass
         except Exception as e:
             print(f"[startup migration] drip_emails table: {e}")
+        # Migration: create/repair email_subscriptions table
+        try:
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS email_subscriptions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID NOT NULL REFERENCES users(id),
+                    product_id VARCHAR(50) NOT NULL,
+                    subscribed BOOLEAN NOT NULL DEFAULT TRUE,
+                    subscribed_at TIMESTAMP DEFAULT NOW(),
+                    unsubscribed_at TIMESTAMP
+                );
+            """))
+            for col_def in [
+                "ALTER TABLE email_subscriptions ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid()",
+                "ALTER TABLE email_subscriptions ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id)",
+                "ALTER TABLE email_subscriptions ADD COLUMN IF NOT EXISTS product_id VARCHAR(50) NOT NULL DEFAULT 'law'",
+                "ALTER TABLE email_subscriptions ADD COLUMN IF NOT EXISTS subscribed BOOLEAN NOT NULL DEFAULT TRUE",
+                "ALTER TABLE email_subscriptions ADD COLUMN IF NOT EXISTS subscribed_at TIMESTAMP DEFAULT NOW()",
+                "ALTER TABLE email_subscriptions ADD COLUMN IF NOT EXISTS unsubscribed_at TIMESTAMP",
+                "ALTER TABLE email_subscriptions ALTER COLUMN id SET DEFAULT gen_random_uuid()",
+                "ALTER TABLE email_subscriptions ALTER COLUMN subscribed SET DEFAULT TRUE",
+                "ALTER TABLE email_subscriptions ALTER COLUMN subscribed_at SET DEFAULT NOW()",
+            ]:
+                await conn.execute(text(col_def))
+            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_email_sub_user_product ON email_subscriptions(user_id, product_id)"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_email_subscriptions_user_id ON email_subscriptions(user_id)"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_email_subscriptions_product_id ON email_subscriptions(product_id)"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_email_subscriptions_subscribed ON email_subscriptions(subscribed)"))
+        except Exception as e:
+            print(f"[startup migration] email_subscriptions table: {e}")
         # Migration: backfill licenses.product_id from users.product_id where NULL
         try:
             await conn.execute(text("""
@@ -1731,8 +1761,10 @@ async def register(
             await db.commit()
             print(f"[Drip] Emails 2+3 scheduled for {user.email} ({resolved_product_id})")
         except Exception as sched_err:
+            await db.rollback()
             print(f"[Drip] scheduling failed for {user.email}: {sched_err}")
     except Exception as email_err:
+        await db.rollback()
         print(f"[Drip] Email 1 failed for {user.email}: {email_err}")
 
     # Add to Zoho Campaigns subscriber list (fire-and-forget)
@@ -1747,6 +1779,7 @@ async def register(
         db.add(sub)
         await db.commit()
     except Exception as sub_err:
+        await db.rollback()
         print(f"[EmailSub] failed to insert subscription for {user.email}: {sub_err}")
 
     return UserResponse(
