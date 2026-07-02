@@ -681,10 +681,10 @@ def generate_mcp_user_code() -> str:
 
 async def ensure_magic_link_tokens_table(db: AsyncSession) -> None:
     """Ensure one-time account token storage exists before reset/login flows use it."""
-    exists_result = await db.execute(text("SELECT to_regclass('public.magic_link_tokens')"))
-    if exists_result.scalar_one_or_none():
-        return
     try:
+        exists_result = await db.execute(text("SELECT to_regclass('public.magic_link_tokens')"))
+        if exists_result.scalar_one_or_none():
+            return
         await db.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
         await db.execute(text("""
             CREATE TABLE IF NOT EXISTS magic_link_tokens (
@@ -2078,16 +2078,19 @@ async def confirm_password_reset(
     if len(new_password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
-    await ensure_magic_link_tokens_table(db)
-
-    result = await db.execute(
-        text("""
-            SELECT id, email, used, expires_at
-            FROM magic_link_tokens
-            WHERE token = :token AND campaign = 'password-reset'
-        """),
-        {"token": request_data.token},
-    )
+    try:
+        result = await db.execute(
+            text("""
+                SELECT id, email, used, expires_at
+                FROM magic_link_tokens
+                WHERE token = :token AND campaign = 'password-reset'
+            """),
+            {"token": request_data.token},
+        )
+    except Exception as e:
+        await db.rollback()
+        print(f"[PasswordReset] token lookup failed: {e}")
+        raise HTTPException(status_code=404, detail="Invalid reset link")
     row = result.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Invalid reset link")
