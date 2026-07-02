@@ -1871,6 +1871,10 @@ class PasswordResetConfirmRequest(BaseModel):
     password: str
 
 
+class EmailProviderTestRequest(BaseModel):
+    email: EmailStr
+
+
 @app.post("/auth/account-licenses")
 async def account_licenses(request: RecoverLicenseRequest, db: AsyncSession = Depends(get_db)):
     """
@@ -3138,6 +3142,43 @@ async def admin_email_provider_health():
         "token_refresh_ok": token_refresh_ok,
         "token_status": token_status,
     }
+
+
+@app.post("/admin/email-provider-test", dependencies=[Depends(verify_admin)])
+async def admin_email_provider_test(request_data: EmailProviderTestRequest):
+    """Send a small diagnostic email and return non-secret provider status."""
+    access_token = await get_zoho_access_token()
+    if not access_token:
+        return {"sent": False, "stage": "token", "status": "no_access_token"}
+
+    zoho_url = f"https://mail.zoho.com/api/accounts/{os.getenv('ZOHO_ACCOUNT_ID', '6556209000000008002')}/messages"
+    payload = {
+        "fromAddress": "hello@lawtasksai.com",
+        "toAddress": request_data.email,
+        "subject": "TasksAI email provider test",
+        "content": "This is a TasksAI email provider diagnostic message.",
+        "mailFormat": "plaintext",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                zoho_url,
+                json=payload,
+                headers={"Authorization": f"Zoho-oauthtoken {access_token}"},
+            )
+        return {
+            "sent": resp.status_code < 400,
+            "stage": "send",
+            "status_code": resp.status_code,
+            "provider_response": resp.text[:500],
+        }
+    except Exception as e:
+        return {
+            "sent": False,
+            "stage": "send_exception",
+            "error_type": type(e).__name__,
+            "error": str(e)[:500],
+        }
 
 
 # Routes: Email Tracking
