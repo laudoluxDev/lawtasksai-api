@@ -3209,6 +3209,76 @@ async def admin_email_provider_test(request_data: EmailProviderTestRequest):
         }
 
 
+@app.post("/admin/account-flow-test", dependencies=[Depends(verify_admin)])
+async def admin_account_flow_test(db: AsyncSession = Depends(get_db)):
+    """Admin-only diagnostic for signup/reset account storage. Does not expose secrets."""
+    email = f"account-flow-test-{secrets.token_hex(6)}@example.com"
+    product_id = "farmer"
+    user_id = uuid.uuid4()
+    license_key = generate_license_key(product_id)
+    stage = "start"
+    try:
+        stage = "schema"
+        schema = {}
+        for table in ("users", "licenses", "magic_link_tokens"):
+            result = await db.execute(
+                text("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = :table
+                    ORDER BY ordinal_position
+                """),
+                {"table": table},
+            )
+            schema[table] = [row[0] for row in result.fetchall()]
+
+        stage = "insert_user"
+        db.add(User(
+            id=user_id,
+            email=email,
+            password_hash=hash_password("TemporaryResetTest123!"),
+            credits_balance=5,
+            product_id=product_id,
+            platforms=[],
+        ))
+        await db.flush()
+
+        stage = "insert_license"
+        db.add(License(
+            license_key=license_key,
+            user_id=user_id,
+            product_id=product_id,
+            type="trial",
+            valid_until=datetime.utcnow() + timedelta(days=14),
+            credits_purchased=5,
+            credits_remaining=5,
+        ))
+        await db.flush()
+
+        stage = "commit"
+        await db.commit()
+
+        stage = "cleanup"
+        await db.execute(text("DELETE FROM licenses WHERE license_key = :license_key"), {"license_key": license_key})
+        await db.execute(text("DELETE FROM users WHERE id = :user_id"), {"user_id": user_id})
+        await db.commit()
+        return {"ok": True, "email": email, "schema": schema}
+    except Exception as e:
+        await db.rollback()
+        try:
+            await db.execute(text("DELETE FROM licenses WHERE license_key = :license_key"), {"license_key": license_key})
+            await db.execute(text("DELETE FROM users WHERE id = :user_id"), {"user_id": user_id})
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        return {
+            "ok": False,
+            "stage": stage,
+            "error_type": type(e).__name__,
+            "error": str(e)[:800],
+        }
+
+
 # Routes: Email Tracking
 @app.get("/track/email-open")
 async def track_email_open(
