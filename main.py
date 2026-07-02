@@ -3331,6 +3331,76 @@ async def admin_reset_token_debug(
     }
 
 
+@app.post("/admin/reset-roundtrip-test", dependencies=[Depends(verify_admin)])
+async def admin_reset_roundtrip_test(db: AsyncSession = Depends(get_db)):
+    """Admin-only end-to-end reset confirmation test with a temporary account."""
+    email = f"reset-roundtrip-{secrets.token_hex(6)}@example.com"
+    user_id = uuid.uuid4()
+    token = secrets.token_urlsafe(32)
+    stage = "start"
+    try:
+        stage = "ensure_token_table"
+        await ensure_magic_link_tokens_table(db)
+
+        stage = "insert_user"
+        db.add(User(
+            id=user_id,
+            email=email,
+            password_hash=hash_password("TemporaryResetTest123!"),
+            credits_balance=0,
+            product_id="farmer",
+            platforms=[],
+        ))
+        await db.flush()
+
+        stage = "insert_token"
+        await db.execute(
+            text("""
+                INSERT INTO magic_link_tokens
+                    (token, email, product_id, campaign, redirect_url, expires_at)
+                VALUES (:token, :email, 'farmer', 'password-reset', :redirect_url, :expires_at)
+            """),
+            {
+                "token": token,
+                "email": email,
+                "redirect_url": "https://farmertasksai.com/reset-password.html",
+                "expires_at": datetime.utcnow() + timedelta(minutes=30),
+            },
+        )
+        await db.commit()
+
+        stage = "confirm"
+        confirm_response = await confirm_password_reset(
+            PasswordResetConfirmRequest(token=f" {token} ", password="TemporaryResetTest456!"),
+            db,
+        )
+
+        stage = "cleanup"
+        await db.execute(text("DELETE FROM magic_link_tokens WHERE email = :email"), {"email": email})
+        await db.execute(text("DELETE FROM users WHERE id = :user_id"), {"user_id": user_id})
+        await db.commit()
+        return {
+            "ok": True,
+            "stage": stage,
+            "confirm_response": confirm_response,
+            "token_len": len(token),
+        }
+    except Exception as e:
+        await db.rollback()
+        try:
+            await db.execute(text("DELETE FROM magic_link_tokens WHERE email = :email"), {"email": email})
+            await db.execute(text("DELETE FROM users WHERE id = :user_id"), {"user_id": user_id})
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        return {
+            "ok": False,
+            "stage": stage,
+            "error_type": type(e).__name__,
+            "error": str(e)[:800],
+        }
+
+
 @app.post("/admin/account-flow-test", dependencies=[Depends(verify_admin)])
 async def admin_account_flow_test(db: AsyncSession = Depends(get_db)):
     """Admin-only diagnostic for signup/reset account storage. Does not expose secrets."""
