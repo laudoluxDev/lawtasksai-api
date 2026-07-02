@@ -3098,6 +3098,48 @@ async def health_check():
     return {"status": "healthy", "service": "lawtasksai-api", "version": "1.0.0"}
 
 
+@app.get("/admin/email-provider-health", dependencies=[Depends(verify_admin)])
+async def admin_email_provider_health():
+    """Non-secret email provider diagnostic for production troubleshooting."""
+    has_mail_refresh = bool(os.getenv("ZOHO_MAIL_REFRESH_TOKEN", "") or os.getenv("ZOHO_REFRESH_TOKEN", ""))
+    has_client_id = bool(os.getenv("ZOHO_CLIENT_ID", ""))
+    has_client_secret = bool(os.getenv("ZOHO_CLIENT_SECRET", ""))
+    has_account_id = bool(os.getenv("ZOHO_ACCOUNT_ID", "6556209000000008002"))
+    token_refresh_ok = False
+    token_status = "not_checked"
+
+    if has_mail_refresh and has_client_id and has_client_secret:
+        async with httpx.AsyncClient(timeout=10) as client:
+            try:
+                resp = await client.post(
+                    "https://accounts.zoho.com/oauth/v2/token",
+                    data={
+                        "refresh_token": os.getenv("ZOHO_MAIL_REFRESH_TOKEN", "") or os.getenv("ZOHO_REFRESH_TOKEN", ""),
+                        "client_id": os.getenv("ZOHO_CLIENT_ID", ""),
+                        "client_secret": os.getenv("ZOHO_CLIENT_SECRET", ""),
+                        "grant_type": "refresh_token",
+                    },
+                )
+                data = resp.json()
+                token_refresh_ok = resp.status_code < 400 and bool(data.get("access_token"))
+                token_status = "ok" if token_refresh_ok else f"failed_{resp.status_code}"
+            except Exception:
+                token_status = "request_failed"
+    else:
+        token_status = "missing_env"
+
+    return {
+        "provider": "zoho_mail",
+        "configured": has_mail_refresh and has_client_id and has_client_secret and has_account_id,
+        "has_mail_refresh_token": has_mail_refresh,
+        "has_client_id": has_client_id,
+        "has_client_secret": has_client_secret,
+        "has_account_id": has_account_id,
+        "token_refresh_ok": token_refresh_ok,
+        "token_status": token_status,
+    }
+
+
 # Routes: Email Tracking
 @app.get("/track/email-open")
 async def track_email_open(
