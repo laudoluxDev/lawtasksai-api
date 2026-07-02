@@ -2098,12 +2098,14 @@ async def request_password_reset(
     product_name = "TasksAI"
     try:
         prod_result = await db.execute(
-            text("SELECT name FROM products WHERE id = :pid AND is_active = TRUE"),
+            text("SELECT name, domain FROM products WHERE id = :pid AND is_active = TRUE"),
             {"pid": product_id},
         )
         prod_row = prod_result.fetchone()
         if prod_row and prod_row.name:
             product_name = prod_row.name
+        if prod_row and prod_row.domain:
+            domain = prod_row.domain
     except Exception:
         product_name = "LawTasksAI" if product_id == "law" else f"{product_id.capitalize()}TasksAI"
 
@@ -2127,19 +2129,21 @@ async def request_password_reset(
     zoho_url = f"https://mail.zoho.com/api/accounts/{os.getenv('ZOHO_ACCOUNT_ID', '6556209000000008002')}/messages"
     resp = None
     async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            zoho_url,
-            json={
-                "fromAddress": "hello@lawtasksai.com",
-                "toAddress": email,
-                "subject": f"Reset your {product_name} password",
-                "content": html_body,
-                "mailFormat": "html",
-            },
-            headers={"Authorization": f"Zoho-oauthtoken {access_token}"},
-        )
-        if resp.status_code >= 400:
-            print(f"[PasswordReset] Zoho send failed for {email}: {resp.status_code} {resp.text[:240]}")
+        for from_addr in product_sender_addresses(product_name, domain):
+            resp = await client.post(
+                zoho_url,
+                json={
+                    "fromAddress": from_addr,
+                    "toAddress": email,
+                    "subject": f"Reset your {product_name} password",
+                    "content": html_body,
+                    "mailFormat": "html",
+                },
+                headers={"Authorization": f"Zoho-oauthtoken {access_token}"},
+            )
+            if resp.status_code < 400:
+                break
+            print(f"[PasswordReset] Zoho send failed from {from_addr} for {email}: {resp.status_code} {resp.text[:160]}")
     if resp.status_code >= 400:
         raise HTTPException(status_code=503, detail="Email service unavailable")
 
@@ -2240,12 +2244,14 @@ async def request_magic_link(
     product_name = "TasksAI"
     try:
         prod_result = await db.execute(
-            text("SELECT name FROM products WHERE id = :pid AND is_active = TRUE"),
+            text("SELECT name, domain FROM products WHERE id = :pid AND is_active = TRUE"),
             {"pid": product_id},
         )
         prod_row = prod_result.fetchone()
         if prod_row and prod_row.name:
             product_name = prod_row.name
+        if prod_row and prod_row.domain:
+            domain = prod_row.domain
     except Exception:
         product_name = "LawTasksAI" if product_id == "law" else f"{product_id.capitalize()}TasksAI"
 
@@ -2267,13 +2273,9 @@ async def request_magic_link(
         raise HTTPException(status_code=503, detail="Email service unavailable")
 
     zoho_url = f"https://mail.zoho.com/api/accounts/{os.getenv('ZOHO_ACCOUNT_ID', '6556209000000008002')}/messages"
-    from_addresses = [
-        f"=?UTF-8?B?{base64.b64encode(product_name.encode()).decode()}?= <hello@{domain}>",
-        f"=?UTF-8?B?{base64.b64encode(product_name.encode()).decode()}?= <hello@lawtasksai.com>",
-    ]
     resp = None
     async with httpx.AsyncClient(timeout=15) as client:
-        for from_addr in from_addresses:
+        for from_addr in product_sender_addresses(product_name, domain):
             resp = await client.post(
                 zoho_url,
                 json={
@@ -3928,6 +3930,48 @@ async def get_zoho_access_token() -> str:
         if resp.status_code >= 400 or not data.get("access_token"):
             print(f"[ZohoMail] token refresh failed: {resp.status_code} {str(data)[:240]}")
         return data.get("access_token", "")
+
+
+def _encoded_sender_name(product_name: str) -> str:
+    """Return an RFC 2047 encoded sender display name for Zoho Mail."""
+    return f"=?UTF-8?B?{base64.b64encode(product_name.encode()).decode()}?="
+
+
+def _verified_sender_domains() -> Optional[set[str]]:
+    """Optional allow-list for vertical sender domains.
+
+    Set ZOHO_VERIFIED_SENDER_DOMAINS to a comma-separated list or JSON array
+    when only known verified Zoho sender domains should be attempted.
+    """
+    raw = os.getenv("ZOHO_VERIFIED_SENDER_DOMAINS", "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return {str(item).strip().lower() for item in parsed if str(item).strip()}
+    except Exception:
+        pass
+    return {item.strip().lower() for item in raw.split(",") if item.strip()}
+
+
+def product_sender_addresses(product_name: str, domain: str) -> List[str]:
+    """Build vertical-first sender addresses with a LawTasksAI fallback."""
+    display_name = _encoded_sender_name(product_name or "TasksAI")
+    normalized_domain = (domain or "lawtasksai.com").strip().lower()
+    verified_domains = _verified_sender_domains()
+    candidates: List[str] = []
+
+    if normalized_domain and (verified_domains is None or normalized_domain in verified_domains):
+        candidates.append(f"{display_name} <hello@{normalized_domain}>")
+
+    fallback_domain = "lawtasksai.com"
+    if fallback_domain not in {normalized_domain}:
+        candidates.append(f"{display_name} <hello@{fallback_domain}>")
+    elif not candidates:
+        candidates.append(f"{display_name} <hello@{fallback_domain}>")
+
+    return candidates
 
 
 def _load_zoho_listkeys() -> dict:
