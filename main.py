@@ -3638,17 +3638,23 @@ async def get_zoho_campaigns_token() -> str:
 
 async def get_zoho_access_token() -> str:
     """Exchange Zoho Mail refresh token for a fresh access token."""
+    refresh_token = os.getenv("ZOHO_MAIL_REFRESH_TOKEN", "") or os.getenv("ZOHO_REFRESH_TOKEN", "")
+    if not refresh_token:
+        print("[ZohoMail] missing ZOHO_MAIL_REFRESH_TOKEN/ZOHO_REFRESH_TOKEN")
+        return ""
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.post(
             "https://accounts.zoho.com/oauth/v2/token",
             data={
-                "refresh_token": os.getenv("ZOHO_REFRESH_TOKEN", ""),
+                "refresh_token": refresh_token,
                 "client_id": os.getenv("ZOHO_CLIENT_ID", ""),
                 "client_secret": os.getenv("ZOHO_CLIENT_SECRET", ""),
                 "grant_type": "refresh_token"
             }
         )
         data = resp.json()
+        if resp.status_code >= 400 or not data.get("access_token"):
+            print(f"[ZohoMail] token refresh failed: {resp.status_code} {str(data)[:240]}")
         return data.get("access_token", "")
 
 
