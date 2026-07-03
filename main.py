@@ -1973,7 +1973,8 @@ async def account_licenses(request: RecoverLicenseRequest, db: AsyncSession = De
     Return all active licenses for an email across all verticals.
     Used by the download page to render a per-vertical account dashboard.
     """
-    result = await db.execute(select(User).where(User.email == request.email))
+    email = request.email.lower().strip()
+    result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="No account found with this email")
@@ -2031,6 +2032,7 @@ async def account_login(
 ):
     """Traditional account login for the public website dashboard."""
     email = credentials.email.lower().strip()
+    requested_product_id = normalize_mcp_product_id(product_id)
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
@@ -2040,15 +2042,24 @@ async def account_login(
     lic_result = await db.execute(
         select(License).where(
             License.user_id == user.id,
+            License.product_id == requested_product_id,
             License.status == "active",
-        ).order_by(
-            (License.product_id == product_id).desc(),
-            License.created_at.desc(),
-        )
+        ).order_by(License.created_at.desc())
     )
     login_license = lic_result.scalars().first()
     if not login_license:
-        raise HTTPException(status_code=401, detail="No active license found")
+        product_name = requested_product_id.capitalize() + "TasksAI"
+        try:
+            prod_result = await db.execute(
+                text("SELECT name FROM products WHERE id = :pid AND is_active = TRUE"),
+                {"pid": requested_product_id},
+            )
+            prod_row = prod_result.fetchone()
+            if prod_row and prod_row.name:
+                product_name = prod_row.name
+        except Exception:
+            pass
+        raise HTTPException(status_code=404, detail=f"No active {product_name} account found for this email")
 
     user.last_login = datetime.utcnow()
     await db.commit()
@@ -2058,7 +2069,7 @@ async def account_login(
         email=account.email,
         licenses=account.licenses,
         access_token=generate_token(str(user.id), login_license.license_key),
-        product_id=product_id,
+        product_id=requested_product_id,
     )
 
 
