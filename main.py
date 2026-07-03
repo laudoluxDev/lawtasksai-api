@@ -5770,14 +5770,20 @@ async def account_diagnostics(
 ):
     """Read-only account diagnostic view for credits, licenses, and recent usage."""
     normalized_email = str(email).strip().lower()
-    result = await db.execute(select(User).where(func.lower(User.email) == normalized_email))
-    user = result.scalar_one_or_none()
-    if not user:
+    result = await db.execute(
+        select(User)
+        .where(func.lower(User.email) == normalized_email)
+        .order_by(User.created_at.asc())
+    )
+    users = result.scalars().all()
+    if not users:
         raise HTTPException(status_code=404, detail="No account found with this email")
+    user = next((u for u in users if (u.email or "").strip().lower() == normalized_email and u.email == normalized_email), users[0])
+    user_ids = [u.id for u in users]
 
     lic_result = await db.execute(
         select(License)
-        .where(License.user_id == user.id)
+        .where(License.user_id.in_(user_ids))
         .order_by(License.product_id, License.created_at.desc())
     )
     licenses = lic_result.scalars().all()
@@ -5852,6 +5858,16 @@ async def account_diagnostics(
         "name": user.name,
         "product_id": user.product_id or "law",
         "last_active_at": user.last_active_at.isoformat() if user.last_active_at else None,
+        "duplicate_user_count": len(users),
+        "duplicate_users": [
+            {
+                "id": str(u.id),
+                "email": u.email,
+                "product_id": u.product_id or "law",
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+            }
+            for u in users
+        ],
         "license_count": len(items),
         "licenses": items,
     }
@@ -6584,67 +6600,196 @@ async def admin_provision_user(
     db: AsyncSession = Depends(get_db)
 ):
     """Manually provision a user+license for a product. Idempotent — safe to run twice."""
+    normalized_email = email.lower().strip()
+    normalized_product = normalize_mcp_product_id(product_id)
     # Find user by email (one user per email, product tracked on license/user)
     result = await db.execute(
-        select(User).where(User.email == email.lower().strip())
+        select(User)
+        .where(func.lower(User.email) == normalized_email)
+        .order_by(User.created_at.asc())
     )
-    user = result.scalar_one_or_none()
+    matching_users = result.scalars().all()
+    user = next((u for u in matching_users if u.email == normalized_email), matching_users[0] if matching_users else None)
 
     if not user:
         user = User(
-            email=email.lower().strip(),
+            email=normalized_email,
             password_hash=hash_password(secrets.token_hex(16)),
             credits_balance=credits,
-            product_id=product_id,
+            product_id=normalized_product,
         )
         db.add(user)
         await db.flush()
         license = License(
-            license_key=generate_license_key(product_id),
+            license_key=generate_license_key(normalized_product),
             user_id=user.id,
             type="credits",
             credits_purchased=credits,
             credits_remaining=credits,
-            product_id=product_id,
+            product_id=normalized_product,
         )
         db.add(license)
         await db.flush()
         action = "created"
     else:
-        # Update product_id if being provisioned for a different product
-        if user.product_id != product_id:
-            user.product_id = product_id
-        # credits_balance derived from license — no write needed
+        if not user.email == normalized_email:
+            user.email = normalized_email
+        if not user.product_id:
+            user.product_id = normalized_product
         result2 = await db.execute(
-            select(License).where(License.user_id == user.id, License.status == "active")
+            select(License).where(
+                License.user_id == user.id,
+                License.product_id == normalized_product,
+                License.status == "active",
+            )
             .order_by(License.created_at.desc())
         )
         license = result2.scalar_one_or_none()
         if not license:
             license = License(
-                license_key=generate_license_key(product_id),
+                license_key=generate_license_key(normalized_product),
                 user_id=user.id,
                 type="credits",
                 credits_purchased=credits,
                 credits_remaining=credits,
-                product_id=product_id,
+                product_id=normalized_product,
             )
             db.add(license)
             await db.flush()
+            action = "created_license"
         else:
             license.credits_remaining += credits
             license.credits_purchased += credits
-        action = "updated"
+            license.updated_at = datetime.utcnow()
+            action = "updated_license"
 
     await db.commit()
     return {
         "action": action,
-        "email": email,
-        "product_id": product_id,
+        "email": normalized_email,
+        "product_id": normalized_product,
         "license_key": license.license_key,
         "credits": license.credits_remaining,
         "download_url": f"https://api.lawtasksai.com/download/loader/{license.license_key}",
     }
+
+
+@admin_router.post("/migrate/merge-duplicate-email-users")
+async def merge_duplicate_email_users(
+    email: Optional[EmailStr] = Query(None, description="Limit merge to one email address"),
+    dry_run: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Merge user rows that differ only by email casing.
+
+    The canonical row is the exact lowercase email row when present, otherwise
+    the oldest row. Product ownership stays on licenses; all license rows are
+    moved to the canonical user.
+    """
+    if email:
+        normalized_targets = [str(email).strip().lower()]
+    else:
+        dup_result = await db.execute(text("""
+            SELECT lower(email) AS normalized_email
+            FROM users
+            GROUP BY lower(email)
+            HAVING COUNT(*) > 1
+            ORDER BY lower(email)
+        """))
+        normalized_targets = [row.normalized_email for row in dup_result.fetchall()]
+
+    results = []
+    for normalized_email in normalized_targets:
+        user_result = await db.execute(
+            select(User)
+            .where(func.lower(User.email) == normalized_email)
+            .order_by(User.created_at.asc())
+        )
+        users = user_result.scalars().all()
+        if len(users) <= 1:
+            results.append({"email": normalized_email, "duplicate_count": len(users), "action": "none"})
+            continue
+
+        canonical = next((u for u in users if u.email == normalized_email), users[0])
+        duplicates = [u for u in users if u.id != canonical.id]
+        duplicate_ids = [u.id for u in duplicates]
+
+        before_licenses = await db.execute(
+            select(License.product_id, License.status, License.credits_remaining, License.user_id)
+            .where(License.user_id.in_([u.id for u in users]))
+            .order_by(License.product_id, License.created_at.asc())
+        )
+        license_snapshot = [
+            {
+                "product_id": row.product_id or "law",
+                "status": row.status,
+                "credits_remaining": row.credits_remaining,
+                "source_user_id": str(row.user_id),
+            }
+            for row in before_licenses.fetchall()
+        ]
+
+        result_item = {
+            "email": normalized_email,
+            "canonical_user_id": str(canonical.id),
+            "duplicate_user_ids": [str(uid) for uid in duplicate_ids],
+            "duplicate_count": len(users),
+            "licenses": license_snapshot,
+        }
+        if dry_run:
+            result_item["action"] = "dry_run"
+            results.append(result_item)
+            continue
+
+        canonical.email = normalized_email
+        if not canonical.product_id:
+            canonical.product_id = next((u.product_id for u in users if u.product_id), "law")
+        if not canonical.name:
+            canonical.name = next((u.name for u in users if u.name), None)
+        if not canonical.firm_name:
+            canonical.firm_name = next((u.firm_name for u in users if u.firm_name), None)
+
+        merged_profile = {}
+        for u in users:
+            if isinstance(u.profile, dict):
+                merged_profile.update(u.profile)
+        if merged_profile:
+            canonical.profile = {**merged_profile, **(canonical.profile or {})}
+
+        merged_platforms = []
+        seen_platforms = set()
+        for u in users:
+            for platform in (u.platforms or []):
+                key = json.dumps(platform, sort_keys=True) if isinstance(platform, dict) else str(platform)
+                if key not in seen_platforms:
+                    seen_platforms.add(key)
+                    merged_platforms.append(platform)
+        if merged_platforms:
+            canonical.platforms = merged_platforms
+
+        for dup_id in duplicate_ids:
+            await db.execute(text("UPDATE licenses SET user_id = :canonical WHERE user_id = :duplicate"), {"canonical": canonical.id, "duplicate": dup_id})
+            await db.execute(text("UPDATE credit_transactions SET user_id = :canonical WHERE user_id = :duplicate"), {"canonical": canonical.id, "duplicate": dup_id})
+            await db.execute(text("UPDATE usage_logs SET user_id = :canonical WHERE user_id = :duplicate"), {"canonical": canonical.id, "duplicate": dup_id})
+            await db.execute(text("UPDATE drip_emails SET user_id = :canonical WHERE user_id = :duplicate"), {"canonical": canonical.id, "duplicate": dup_id})
+            await db.execute(text("""
+                DELETE FROM email_subscriptions dup
+                USING email_subscriptions canon
+                WHERE dup.user_id = :duplicate
+                  AND canon.user_id = :canonical
+                  AND canon.product_id = dup.product_id
+            """), {"canonical": canonical.id, "duplicate": dup_id})
+            await db.execute(text("UPDATE email_subscriptions SET user_id = :canonical WHERE user_id = :duplicate"), {"canonical": canonical.id, "duplicate": dup_id})
+            await db.execute(text("DELETE FROM users WHERE id = :duplicate"), {"duplicate": dup_id})
+
+        result_item["action"] = "merged"
+        results.append(result_item)
+
+    if not dry_run:
+        await db.commit()
+
+    return {"dry_run": dry_run, "groups": results}
 
 
 @admin_router.post("/migrate/set-product-domains")
