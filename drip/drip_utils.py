@@ -320,112 +320,42 @@ VERTICAL_CONFIG = {
 # ── Platform install blocks ──────────────────────────────────────────────
 
 def platform_install_block(platform: str, product_id: str, product_name: str, domain: str) -> str:
-    gs_url = f"https://{domain}/getting-started"
-    new_badge = "<span style='display:inline-block;background:#f59e0b;color:#ffffff;font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:20px;letter-spacing:0.04em;text-transform:uppercase;margin-left:8px;'>✨ New Installer!</span>"
-
-    blocks = {
-        "claude_desktop": f"""
-<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:0.85rem;color:#92400e;">
-  ⚠️ <strong>Important:</strong> These instructions are for the <strong>Claude Desktop app</strong>, not claude.ai (the website). They're different products.
-  <a href="https://claude.ai/download" style="color:#92400e;font-weight:700;">Download Claude Desktop free →</a>
-</div>
-<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get set up in 5 minutes {new_badge}</h3>
-  <p style="margin:0 0 12px;font-size:0.88rem;color:#4b5563;">Our new one-click installer handles everything automatically:</p>
-  <ol style="margin:0;padding-left:20px;color:#4b5563;font-size:0.9rem;line-height:1.9;">
-    <li>Click the download button above to get your installer</li>
-    <li>Double-click <code style="background:#e5e7eb;padding:1px 5px;border-radius:3px;font-size:0.85em;">{product_name}-Setup.exe</code> (Windows) or <code style="background:#e5e7eb;padding:1px 5px;border-radius:3px;font-size:0.85em;">{product_name}-Setup</code> (Mac)</li>
-    <li>Enter your license key when prompted</li>
-    <li>Restart Claude Desktop</li>
-  </ol>
-  <p style="margin:14px 0 0;font-size:0.82rem;background:#ecfdf5;border-radius:6px;padding:10px 12px;color:#065f46;">
-    ✅ The installer automatically configures Claude Desktop — no manual file editing needed.
-  </p>
-</div>
-<p style="font-size:0.8rem;color:#9ca3af;text-align:center;margin-top:8px;">
-  Using a different AI tool? <a href="{gs_url}" style="color:#6b7280;">Get updated install instructions →</a>
-</p>""",
-
-        "openclaw": f"""
-<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get set up in 5 minutes {new_badge}</h3>
-  <p style="margin:0 0 10px;color:#4b5563;font-size:0.9rem;">Open OpenClaw and run:</p>
-  <code style="background:#1a1a2e;color:#7dd3fc;padding:10px 16px;border-radius:6px;display:block;font-size:0.88rem;margin-bottom:10px;">openclaw skills install {product_id}</code>
-  <p style="margin:0;color:#6b7280;font-size:0.85rem;">That's it. OpenClaw downloads and configures everything automatically.</p>
-</div>
-<p style="font-size:0.8rem;color:#9ca3af;text-align:center;margin-top:8px;">
-  Using a different AI tool? <a href="{gs_url}" style="color:#6b7280;">Get updated install instructions →</a>
-</p>""",
-
-        "cursor": f"""
-<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get set up in 5 minutes {new_badge}</h3>
-  <p style="margin:0 0 10px;font-size:0.88rem;color:#4b5563;">Our new one-click installer handles everything automatically:</p>
-  <ol style="margin:0;padding-left:20px;color:#4b5563;font-size:0.9rem;line-height:1.9;">
-    <li>Click the download button above to get your installer</li>
-    <li>Double-click the installer and enter your license key</li>
-    <li>In Cursor: <strong>Settings → MCP</strong> — confirm {product_name} appears</li>
-    <li>Restart Cursor</li>
-  </ol>
-</div>
-<p style="font-size:0.8rem;color:#9ca3af;text-align:center;margin-top:8px;">
-  Using a different AI tool? <a href="{gs_url}" style="color:#6b7280;">Get updated install instructions →</a>
-</p>""",
-
-        "windsurf": f"""
-<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get set up in 5 minutes {new_badge}</h3>
-  <p style="margin:0 0 10px;font-size:0.88rem;color:#4b5563;">Our new one-click installer handles everything automatically:</p>
-  <ol style="margin:0;padding-left:20px;color:#4b5563;font-size:0.9rem;line-height:1.9;">
-    <li>Click the download button above to get your installer</li>
-    <li>Double-click the installer and enter your license key</li>
-    <li>In Windsurf: click the <strong>MCPs icon</strong> (top-right of Cascade panel) — confirm {product_name} appears</li>
-    <li>Restart Windsurf</li>
-  </ol>
-</div>
-<p style="font-size:0.8rem;color:#9ca3af;text-align:center;margin-top:8px;">
-  Using a different AI tool? <a href="{gs_url}" style="color:#6b7280;">Get updated install instructions →</a>
-</p>""",
-
-        "cline": f"""
-<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get set up in 5 minutes {new_badge}</h3>
-  <p style="margin:0 0 10px;font-size:0.88rem;color:#4b5563;">Our new one-click installer handles everything automatically:</p>
-  <ol style="margin:0;padding-left:20px;color:#4b5563;font-size:0.9rem;line-height:1.9;">
-    <li>Click the download button above to get your installer</li>
-    <li>Double-click the installer and enter your license key</li>
-    <li>In VS Code: <strong>Cline sidebar → MCP Servers → Configure MCP Servers</strong></li>
-    <li>Reload VS Code</li>
-  </ol>
-</div>
-<p style="font-size:0.8rem;color:#9ca3af;text-align:center;margin-top:8px;">
-  Using a different AI tool? <a href="{gs_url}" style="color:#6b7280;">Get updated install instructions →</a>
-</p>""",
-
-        "claude_code": f"""
-<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get set up in 5 minutes {new_badge}</h3>
-  <p style="margin:0 0 10px;font-size:0.88rem;color:#4b5563;">Our new one-click installer handles everything automatically:</p>
-  <ol style="margin:0;padding-left:20px;color:#4b5563;font-size:0.9rem;line-height:1.9;">
-    <li>Click the download button above to get your installer</li>
-    <li>Double-click the installer and enter your license key</li>
-    <li>Start a new Claude Code session</li>
-  </ol>
-  <p style="margin:14px 0 0;font-size:0.82rem;background:#ecfdf5;border-radius:6px;padding:10px 12px;color:#065f46;">
-    ✅ The installer writes to <code>~/.claude.json</code> automatically.
-  </p>
-</div>
-<p style="font-size:0.8rem;color:#9ca3af;text-align:center;margin-top:8px;">
-  Using a different AI tool? <a href="{gs_url}" style="color:#6b7280;">Get updated install instructions →</a>
-</p>""",
+    install_url = f"https://{domain}/install.html"
+    platform_names = {
+        "claude_desktop": "Claude Desktop",
+        "claude_code": "Claude Code",
+        "openclaw": "OpenClaw",
+        "cursor": "Cursor",
+        "windsurf": "Windsurf",
+        "cline": "Cline",
     }
+    client_name = platform_names.get(platform, "your AI assistant")
+    desktop_note = ""
+    if platform == "claude_desktop":
+        desktop_note = """
+<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:0.85rem;color:#92400e;">
+  <strong>Important:</strong> These instructions are for the <strong>Claude Desktop app</strong>, not claude.ai. <a href="https://claude.ai/download" style="color:#92400e;font-weight:700;">Download Claude Desktop free &rarr;</a>
+</div>"""
 
-    return blocks.get(platform, f"""
+    return f"""
+{desktop_note}
 <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px 24px;margin:16px 0;">
-  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Get installed</h3>
-  <p style="margin:0 0 10px;color:#4b5563;font-size:0.9rem;">Visit your getting-started page for full instructions:</p>
-  <a href="{gs_url}" style="color:#2563eb;font-weight:700;">→ {domain}/getting-started</a>
-</div>""")
+  <h3 style="margin:0 0 12px;font-size:1rem;color:#1a1a2e;">Install {product_name} from GitHub</h3>
+  <p style="margin:0 0 12px;font-size:0.88rem;color:#4b5563;">Use the official GitHub install prompt. It connects your account in the browser, so you do not need to copy a license key.</p>
+  <ol style="margin:0;padding-left:20px;color:#4b5563;font-size:0.9rem;line-height:1.9;">
+    <li>Open the <a href="{install_url}" style="color:#2563eb;font-weight:700;">{product_name} install page</a></li>
+    <li>Copy the official GitHub install prompt</li>
+    <li>Paste it into {client_name}</li>
+    <li>Approve the browser connection with your {product_name} account email</li>
+    <li>Restart {client_name}</li>
+  </ol>
+  <p style="margin:14px 0 0;font-size:0.82rem;background:#ecfdf5;border-radius:6px;padding:10px 12px;color:#065f46;">
+    To confirm it worked, ask: <strong>Check my {product_name} balance</strong>
+  </p>
+</div>
+<p style="font-size:0.8rem;color:#9ca3af;text-align:center;margin-top:8px;">
+  Using a different AI tool? <a href="{install_url}" style="color:#6b7280;">Get the official GitHub install prompt &rarr;</a>
+</p>"""
 
 
 # ── Task cards ───────────────────────────────────────────────────────────
@@ -472,6 +402,7 @@ def build_drip_email(
         "{{GREETING}}":            greeting,
         "{{SKILL_COUNT}}":         str(skill_count),
         "{{TASK_LIBRARY_URL}}":    f"https://{domain}/task-library",
+        "{{INSTALL_URL}}":         f"https://{domain}/install.html",
         "{{GETTING_STARTED_URL}}": f"https://{domain}/getting-started",
         "{{UNSUBSCRIBE_URL}}":     f"https://api.lawtasksai.com/v1/unsubscribe?email={urllib.parse.quote(user_email)}&product={product_id}",
         "{{FEEDBACK_BASE}}":       "https://api.lawtasksai.com/v1/feedback",
