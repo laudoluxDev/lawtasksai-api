@@ -2741,9 +2741,14 @@ This skill runs LOCALLY on your machine. LawTasksAI.com never sees your prompts,
    - Generate analysis based on the schema
    - All processing happens on your machine
 
+5. **Optional local file output:**
+   - After the final answer is drafted, ask your AI assistant to save it as a Word document or Markdown file
+   - Current MCP installs include a local save-document tool that writes under `~/Documents/TasksAI/<ProductName>/` by default
+   - The generated file is created by your local AI/MCP environment, not by the LawTasksAI website or API
+
 ### Privacy Guarantee
 Your document content is NEVER sent to LawTasksAI servers.
-Only this schema was retrieved (general legal knowledge, not your data).
+Only this schema was retrieved (general legal knowledge, not your data). Generated output files are not uploaded to LawTasksAI servers.
 """
     
     # Prepend universal security preamble to every schema
