@@ -20,6 +20,7 @@ import asyncio
 import stripe
 import anthropic
 import re
+import urllib.parse
 
 # Database imports (using async SQLAlchemy)
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
@@ -7984,6 +7985,405 @@ class CampaignSendResponse(BaseModel):
     errors: List[str]
     dry_run: bool
     preview: Optional[dict] = None         # First user preview when dry_run=True
+
+
+class InstallDocUpdateRequest(BaseModel):
+    product_ids: Optional[List[str]] = None
+    send: bool = False
+    confirmation: Optional[str] = None
+    test_email: Optional[EmailStr] = None
+    test_product_id: str = "farmer"
+    limit: Optional[int] = None
+    include_internal: bool = False
+
+
+class InstallDocUpdateResponse(BaseModel):
+    campaign: str
+    subject: str
+    dry_run: bool
+    test_email: bool
+    eligible: int
+    skipped: dict
+    counts_by_product: dict
+    senders_by_product: dict
+    sent: int = 0
+    failed: int = 0
+    errors: List[str] = []
+    preview: Optional[dict] = None
+
+
+INSTALL_DOC_UPDATE_CAMPAIGN = "install-doc-output-update-2026-07"
+INSTALL_DOC_UPDATE_EMAIL_NUMBER = 105
+INSTALL_DOC_UPDATE_SUBJECT = "New: easier install prompts and local saved documents"
+INSTALL_DOC_UPDATE_CONFIRMATION = "SEND_INSTALL_DOC_UPDATE"
+
+
+def _campaign_product_domain(product_id: str) -> str:
+    return "lawtasksai.com" if product_id == "law" else f"{product_id}tasksai.com"
+
+
+def _campaign_support_email(domain: str) -> str:
+    return f"hello@{domain}"
+
+
+def _campaign_unsubscribe_url(domain: str, email: str) -> str:
+    return f"https://{domain}/unsubscribe.html?email={urllib.parse.quote(email)}"
+
+
+def _campaign_install_url(domain: str) -> str:
+    return f"https://{domain}/install.html?utm_source=email&utm_medium=broadcast&utm_campaign={INSTALL_DOC_UPDATE_CAMPAIGN}"
+
+
+def _campaign_first_name(name: str) -> str:
+    cleaned = (name or "").strip()
+    return cleaned.split()[0].title() if cleaned else "there"
+
+
+def _campaign_is_internal_email(email: str) -> bool:
+    lowered = (email or "").lower()
+    return any(marker in lowered for marker in ("test", "internal", "mailinator", "example.com", "probe"))
+
+
+def _campaign_sender(product_name: str, domain: str) -> str:
+    return f"{_encoded_sender_name(product_name)} <{_campaign_support_email(domain)}>"
+
+
+def _install_doc_update_html(product_name: str, domain: str, accent_color: str, email: str, name: str) -> str:
+    import html as _html
+
+    safe_name = _html.escape(_campaign_first_name(name))
+    product = _html.escape(product_name)
+    safe_domain = _html.escape(domain)
+    support = _html.escape(_campaign_support_email(domain))
+    color = _html.escape(accent_color or "#2563eb")
+    install = _html.escape(_campaign_install_url(domain))
+    unsubscribe = _html.escape(_campaign_unsubscribe_url(domain, email))
+    subject = _html.escape(INSTALL_DOC_UPDATE_SUBJECT)
+
+    return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{subject}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f5f7;padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background:{color};padding:28px 36px;text-align:center;">
+              <div style="font-size:21px;line-height:1.3;font-weight:700;color:#ffffff;">{product}</div>
+              <div style="font-size:13px;line-height:1.5;color:#ffffff;opacity:.9;margin-top:6px;">Easier setup and local saved documents</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:34px 36px 30px;">
+              <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:#374151;">Hi {safe_name},</p>
+              <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:#374151;">We updated {product} so setup is simpler, and your task results are easier to keep.</p>
+              <h2 style="font-size:17px;line-height:1.35;margin:26px 0 10px;color:#111827;">1. The install prompt is now the main setup path</h2>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#4b5563;">Go to the install page, choose your AI app, copy the official GitHub install prompt, and paste it into your AI assistant. The assistant can connect your account through the browser and configure the supported client automatically.</p>
+              <h2 style="font-size:17px;line-height:1.35;margin:26px 0 10px;color:#111827;">2. Skill runs can now save a local file</h2>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#4b5563;">When your AI app runs a {product} task, it can now save the result as a Word document or Markdown file in your local workspace. Headings, bullets, quotes, and tables are handled as document formatting instead of plain pasted text.</p>
+              <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin:24px 0;">
+                <p style="margin:0;font-size:14px;line-height:1.6;color:#374151;"><strong>Your data stays with your AI app.</strong> These files are created on your computer by your AI framework. They are not created on, uploaded to, or stored by {safe_domain}.</p>
+              </div>
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:28px 0 18px;">
+                <tr>
+                  <td style="border-radius:7px;background:{color};">
+                    <a href="{install}" style="display:inline-block;padding:13px 22px;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;">Open the {product} install page</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#4b5563;">After updating, you can check the connection by asking your AI assistant: <strong>Check my {product} balance.</strong></p>
+              <p style="margin:0;font-size:15px;line-height:1.65;color:#4b5563;">Questions? Reply to this email or write to <a href="mailto:{support}" style="color:{color};">{support}</a>.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:22px 36px 28px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+              <p style="margin:0 0 10px;font-size:12px;line-height:1.55;color:#6b7280;"><strong>Why am I receiving this?</strong> You're receiving this because you created a {product} account or have an active {product} license.</p>
+              <p style="margin:0;font-size:12px;line-height:1.55;color:#6b7280;"><a href="{unsubscribe}" style="color:#6b7280;text-decoration:underline;">Unsubscribe from {product} emails</a>. Unsubscribing only stops marketing and update emails; it does not affect your account, credits, or license.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
+def _install_doc_update_text(product_name: str, domain: str, email: str, name: str) -> str:
+    return f"""Hi {_campaign_first_name(name)},
+
+We updated {product_name} so setup is simpler, and your task results are easier to keep.
+
+1. The install prompt is now the main setup path
+Go to the install page, choose your AI app, copy the official GitHub install prompt, and paste it into your AI assistant. The assistant can connect your account through the browser and configure the supported client automatically.
+
+2. Skill runs can now save a local file
+When your AI app runs a {product_name} task, it can now save the result as a Word document or Markdown file in your local workspace. Headings, bullets, quotes, and tables are handled as document formatting instead of plain pasted text.
+
+Your data stays with your AI app. These files are created on your computer by your AI framework. They are not created on, uploaded to, or stored by {domain}.
+
+Open the install page:
+{_campaign_install_url(domain)}
+
+After updating, you can check the connection by asking your AI assistant:
+Check my {product_name} balance.
+
+Questions? Reply to this email or write to {_campaign_support_email(domain)}.
+
+Why am I receiving this?
+You're receiving this because you created a {product_name} account or have an active {product_name} license.
+
+Unsubscribe from {product_name} emails:
+{_campaign_unsubscribe_url(domain, email)}
+
+Unsubscribing only stops marketing and update emails; it does not affect your account, credits, or license.
+"""
+
+
+async def _install_doc_update_product_meta(db: AsyncSession, product_id: str) -> dict:
+    domain = _campaign_product_domain(product_id)
+    name = "LawTasksAI" if product_id == "law" else f"{product_id.title()}TasksAI"
+    accent_color = "#2563eb"
+    try:
+        result = await db.execute(text("""
+            SELECT name, domain, accent_color
+            FROM products
+            WHERE id = :product_id
+            LIMIT 1
+        """), {"product_id": product_id})
+        row = result.fetchone()
+        if row:
+            name = row.name or name
+            domain = row.domain or domain
+            accent_color = row.accent_color or accent_color
+    except Exception:
+        pass
+    return {
+        "product_id": product_id,
+        "name": name,
+        "domain": domain,
+        "accent_color": accent_color,
+    }
+
+
+async def _send_install_doc_update_email(
+    client: httpx.AsyncClient,
+    zoho_token: str,
+    zoho_account_id: str,
+    product_meta: dict,
+    email: str,
+    name: str,
+) -> tuple[bool, str]:
+    domain = product_meta["domain"]
+    product_name = product_meta["name"]
+    payload = {
+        "fromAddress": _campaign_sender(product_name, domain),
+        "toAddress": email,
+        "subject": INSTALL_DOC_UPDATE_SUBJECT,
+        "mailFormat": "html",
+        "content": _install_doc_update_html(product_name, domain, product_meta["accent_color"], email, name),
+        "textContent": _install_doc_update_text(product_name, domain, email, name),
+    }
+    response = await client.post(
+        f"https://mail.zoho.com/api/accounts/{zoho_account_id}/messages",
+        json=payload,
+        headers={"Authorization": f"Zoho-oauthtoken {zoho_token}"},
+    )
+    return response.status_code in (200, 201), f"Zoho {response.status_code}: {response.text[:180]}"
+
+
+@admin_router.post("/campaign/install-doc-update", response_model=InstallDocUpdateResponse)
+async def send_install_doc_update(
+    req: InstallDocUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_admin),
+):
+    """
+    Dry-run or send the installer/document-output customer update.
+
+    Uses email_subscriptions per product_id. A marketing opt-out never touches
+    account access, credits, or licenses.
+    """
+    if req.send and not req.test_email and req.confirmation != INSTALL_DOC_UPDATE_CONFIRMATION:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Set confirmation to {INSTALL_DOC_UPDATE_CONFIRMATION} before sending to customers.",
+        )
+
+    product_ids = [pid.strip().lower() for pid in (req.product_ids or []) if pid.strip()]
+    requested_products = set(product_ids) if product_ids else None
+
+    rows = []
+    skipped = {
+        "unsubscribed": 0,
+        "already_sent": 0,
+        "internal": 0,
+    }
+
+    if req.test_email:
+        product_id = (req.test_product_id or "farmer").strip().lower()
+        rows = [{
+            "user_id": None,
+            "email": str(req.test_email).lower(),
+            "name": "Kent",
+            "product_id": product_id,
+        }]
+    else:
+        product_filter = ""
+        params = {"email_number": INSTALL_DOC_UPDATE_EMAIL_NUMBER}
+        if requested_products:
+            product_filter = "AND COALESCE(l.product_id, u.product_id, 'law') = ANY(:product_ids)"
+            params["product_ids"] = sorted(requested_products)
+        limit_sql = ""
+        if req.limit:
+            limit_sql = "LIMIT :limit"
+            params["limit"] = req.limit
+
+        result = await db.execute(text(f"""
+            WITH candidates AS (
+                SELECT DISTINCT ON (LOWER(u.email), COALESCE(l.product_id, u.product_id, 'law'))
+                    u.id AS user_id,
+                    LOWER(u.email) AS email,
+                    COALESCE(u.name, '') AS name,
+                    COALESCE(l.product_id, u.product_id, 'law') AS product_id,
+                    COALESCE(es.subscribed, TRUE) AS subscribed,
+                    de.id IS NOT NULL AS already_sent,
+                    u.created_at AS created_at
+                FROM users u
+                JOIN licenses l
+                  ON l.user_id = u.id
+                 AND l.status = 'active'
+                LEFT JOIN email_subscriptions es
+                  ON es.user_id = u.id
+                 AND es.product_id = COALESCE(l.product_id, u.product_id, 'law')
+                LEFT JOIN drip_emails de
+                  ON LOWER(de.email) = LOWER(u.email)
+                 AND de.product_id = COALESCE(l.product_id, u.product_id, 'law')
+                 AND de.email_number = :email_number
+                WHERE u.is_active = TRUE
+                  AND u.email IS NOT NULL
+                  {product_filter}
+                ORDER BY LOWER(u.email), COALESCE(l.product_id, u.product_id, 'law'), l.created_at DESC
+            )
+            SELECT user_id, email, name, product_id, subscribed, already_sent
+            FROM candidates
+            ORDER BY product_id, created_at ASC
+            {limit_sql}
+        """), params)
+
+        for row in result.fetchall():
+            if not row.subscribed:
+                skipped["unsubscribed"] += 1
+                continue
+            if row.already_sent:
+                skipped["already_sent"] += 1
+                continue
+            if not req.include_internal and _campaign_is_internal_email(row.email):
+                skipped["internal"] += 1
+                continue
+            rows.append({
+                "user_id": str(row.user_id),
+                "email": row.email,
+                "name": row.name or "",
+                "product_id": row.product_id or "law",
+            })
+
+    counts_by_product: dict[str, int] = {}
+    for row in rows:
+        counts_by_product[row["product_id"]] = counts_by_product.get(row["product_id"], 0) + 1
+    counts_by_product = dict(sorted(counts_by_product.items()))
+
+    product_meta: dict[str, dict] = {}
+    for product_id in counts_by_product:
+        product_meta[product_id] = await _install_doc_update_product_meta(db, product_id)
+
+    senders_by_product = {
+        product_id: _campaign_sender(meta["name"], meta["domain"])
+        for product_id, meta in product_meta.items()
+    }
+
+    preview = None
+    if rows:
+        first = rows[0]
+        meta = product_meta[first["product_id"]]
+        html_preview = _install_doc_update_html(meta["name"], meta["domain"], meta["accent_color"], first["email"], first["name"])
+        preview = {
+            "product_id": first["product_id"],
+            "from": senders_by_product[first["product_id"]],
+            "subject": INSTALL_DOC_UPDATE_SUBJECT,
+            "install_url": _campaign_install_url(meta["domain"]),
+            "unsubscribe_url_example": _campaign_unsubscribe_url(meta["domain"], first["email"]),
+            "html_preview": html_preview[:1600],
+        }
+
+    if not req.send:
+        return InstallDocUpdateResponse(
+            campaign=INSTALL_DOC_UPDATE_CAMPAIGN,
+            subject=INSTALL_DOC_UPDATE_SUBJECT,
+            dry_run=True,
+            test_email=bool(req.test_email),
+            eligible=len(rows),
+            skipped=skipped,
+            counts_by_product=counts_by_product,
+            senders_by_product=senders_by_product,
+            preview=preview,
+        )
+
+    zoho_token = await get_zoho_access_token()
+    if not zoho_token:
+        raise HTTPException(status_code=503, detail="Zoho email service unavailable")
+    zoho_account_id = os.getenv("ZOHO_ACCOUNT_ID", "6556209000000008002")
+    sent = 0
+    errors: List[str] = []
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        for row in rows:
+            meta = product_meta[row["product_id"]]
+            ok, detail = await _send_install_doc_update_email(
+                client=client,
+                zoho_token=zoho_token,
+                zoho_account_id=zoho_account_id,
+                product_meta=meta,
+                email=row["email"],
+                name=row["name"],
+            )
+            if ok:
+                sent += 1
+                if row["user_id"]:
+                    await db.execute(text("""
+                        INSERT INTO drip_emails (user_id, email, product_id, email_number, subject)
+                        VALUES (:user_id, :email, :product_id, :email_number, :subject)
+                        ON CONFLICT (email, product_id, email_number) DO NOTHING
+                    """), {
+                        "user_id": row["user_id"],
+                        "email": row["email"],
+                        "product_id": row["product_id"],
+                        "email_number": INSTALL_DOC_UPDATE_EMAIL_NUMBER,
+                        "subject": INSTALL_DOC_UPDATE_SUBJECT,
+                    })
+                    await db.commit()
+            else:
+                errors.append(f"{row['product_id']}: {row['email']} - {detail}")
+
+    return InstallDocUpdateResponse(
+        campaign=INSTALL_DOC_UPDATE_CAMPAIGN,
+        subject=INSTALL_DOC_UPDATE_SUBJECT,
+        dry_run=False,
+        test_email=bool(req.test_email),
+        eligible=len(rows),
+        skipped=skipped,
+        counts_by_product=counts_by_product,
+        senders_by_product=senders_by_product,
+        sent=sent,
+        failed=len(errors),
+        errors=errors[:20],
+        preview=preview,
+    )
 
 
 @admin_router.post("/campaign/send", response_model=CampaignSendResponse)
