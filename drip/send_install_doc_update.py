@@ -361,7 +361,6 @@ async def send_email(
         "subject": SUBJECT,
         "mailFormat": "html",
         "content": build_html_email(vertical, recipient),
-        "textContent": build_text_email(vertical, recipient),
     }
     response = await client.post(
         f"https://mail.zoho.com/api/accounts/{account_id}/messages",

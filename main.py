@@ -8187,7 +8187,6 @@ async def _send_install_doc_update_email(
         "subject": INSTALL_DOC_UPDATE_SUBJECT,
         "mailFormat": "html",
         "content": _install_doc_update_html(product_name, domain, product_meta["accent_color"], email, name),
-        "textContent": _install_doc_update_text(product_name, domain, email, name),
     }
     response = await client.post(
         f"https://mail.zoho.com/api/accounts/{zoho_account_id}/messages",
