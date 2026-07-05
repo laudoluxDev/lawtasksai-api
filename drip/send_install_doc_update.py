@@ -23,6 +23,7 @@ import os
 import sys
 import time
 import urllib.parse
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -378,10 +379,11 @@ async def record_send(db: AsyncSession, recipient: Recipient, subject: str) -> N
     if not recipient.user_id:
         return
     await db.execute(text("""
-        INSERT INTO drip_emails (user_id, email, product_id, email_number, subject)
-        VALUES (:user_id, :email, :product_id, :email_number, :subject)
+        INSERT INTO drip_emails (id, user_id, email, product_id, email_number, subject)
+        VALUES (:id, :user_id, :email, :product_id, :email_number, :subject)
         ON CONFLICT (email, product_id, email_number) DO NOTHING
     """), {
+        "id": str(uuid.uuid4()),
         "user_id": recipient.user_id,
         "email": recipient.email,
         "product_id": recipient.product_id,

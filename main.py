@@ -8355,10 +8355,11 @@ async def send_install_doc_update(
                 sent += 1
                 if row["user_id"]:
                     await db.execute(text("""
-                        INSERT INTO drip_emails (user_id, email, product_id, email_number, subject)
-                        VALUES (:user_id, :email, :product_id, :email_number, :subject)
+                        INSERT INTO drip_emails (id, user_id, email, product_id, email_number, subject)
+                        VALUES (:id, :user_id, :email, :product_id, :email_number, :subject)
                         ON CONFLICT (email, product_id, email_number) DO NOTHING
                     """), {
+                        "id": str(uuid.uuid4()),
                         "user_id": row["user_id"],
                         "email": row["email"],
                         "product_id": row["product_id"],
