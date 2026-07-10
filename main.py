@@ -147,6 +147,8 @@ class User(Base):
     platforms: Mapped[Optional[list]] = mapped_column(JSONB, default=list)
     # Last time user executed a skill — used for activation/engagement tracking
     last_active_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Privacy-safe acquisition metadata captured at signup. No page content or prompts.
+    signup_attribution: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
 
     @property
     def credits_balance(self) -> int:
@@ -252,6 +254,7 @@ class License(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     downloaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     first_connected_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    signup_attribution: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
 
 class MCPConnectSession(Base):
     __tablename__ = "mcp_connect_sessions"
@@ -287,6 +290,21 @@ class UsageLog(Base):
     tokens_output: Mapped[Optional[int]] = mapped_column(Integer)
     # Store result for document regeneration (no extra credit charge)
     result_text: Mapped[Optional[str]] = mapped_column(Text)
+
+class ActivationEvent(Base):
+    __tablename__ = "activation_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    license_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("licenses.id"))
+    product_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    event_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    skill_id: Mapped[Optional[str]] = mapped_column(String(100))
+    file_format: Mapped[Optional[str]] = mapped_column(String(20))
+    install_id_hash: Mapped[Optional[str]] = mapped_column(String(64))
+    is_first_for_license: Mapped[bool] = mapped_column(Boolean, default=False)
+    event_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class CreditTransaction(Base):
     __tablename__ = "credit_transactions"
@@ -436,6 +454,7 @@ class UserCreate(BaseModel):
     firm_name: Optional[str] = None
     product_id: Optional[str] = None  # Multi-tenancy: which product they registered from
     platforms: Optional[List[str]] = None  # e.g. ["claude_desktop", "openclaw"]
+    attribution: Optional[dict] = None
 
 class SimpleSignupRequest(BaseModel):
     """Landing-page signup. Password is optional for legacy callers."""
@@ -444,6 +463,14 @@ class SimpleSignupRequest(BaseModel):
     password: Optional[str] = None
     product_id: Optional[str] = None
     platforms: Optional[List[str]] = None  # e.g. ["claude_desktop", "openclaw"]
+    attribution: Optional[dict] = None
+
+class ActivationEventRequest(BaseModel):
+    event_name: str = "first_file_generated"
+    skill_id: Optional[str] = None
+    file_format: Optional[str] = None
+    install_id: Optional[str] = None
+    metadata: Optional[dict] = None
 
 class UserResponse(BaseModel):
     id: str
@@ -640,6 +667,38 @@ def verify_password(password: str, stored_hash: str) -> bool:
         return hashlib.sha256((password + salt).encode()).hexdigest() == pw_hash
     except:
         return False
+
+ATTRIBUTION_KEYS = {
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_content",
+    "utm_term",
+    "gclid",
+    "gbraid",
+    "wbraid",
+    "landing_path",
+    "referrer_host",
+}
+
+def normalize_attribution(raw: Optional[dict]) -> dict:
+    """Keep only small, privacy-safe signup attribution fields."""
+    if not isinstance(raw, dict):
+        return {}
+    cleaned = {}
+    for key in ATTRIBUTION_KEYS:
+        value = raw.get(key)
+        if value is None:
+            continue
+        value = str(value).strip()
+        if value:
+            cleaned[key] = value[:300]
+    return cleaned
+
+def hash_install_id(install_id: Optional[str]) -> Optional[str]:
+    if not install_id:
+        return None
+    return hashlib.sha256(install_id.strip().encode("utf-8")).hexdigest()
 
 LICENSE_KEY_PREFIX_BY_PRODUCT = {
     "law": "lt",
@@ -1251,8 +1310,37 @@ async def startup():
             await conn.execute(text("ALTER TABLE licenses ADD COLUMN IF NOT EXISTS downloaded_at TIMESTAMP"))
             await conn.execute(text("ALTER TABLE licenses ADD COLUMN IF NOT EXISTS first_connected_at TIMESTAMP"))
             await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_attribution JSONB DEFAULT '{}'::jsonb"))
+            await conn.execute(text("ALTER TABLE licenses ADD COLUMN IF NOT EXISTS signup_attribution JSONB DEFAULT '{}'::jsonb"))
         except Exception as e:
             print(f"[startup migration] funnel tracking columns: {e}")
+        # Migration: create privacy-safe activation event table
+        try:
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS activation_events (
+                    id SERIAL PRIMARY KEY,
+                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    license_id UUID NOT NULL REFERENCES licenses(id) ON DELETE CASCADE,
+                    product_id VARCHAR(50) NOT NULL,
+                    event_name VARCHAR(80) NOT NULL,
+                    skill_id VARCHAR(100),
+                    file_format VARCHAR(20),
+                    install_id_hash VARCHAR(64),
+                    is_first_for_license BOOLEAN NOT NULL DEFAULT FALSE,
+                    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    occurred_at TIMESTAMP NOT NULL DEFAULT NOW()
+                );
+            """))
+            await conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_activation_events_license_event
+                ON activation_events(license_id, event_name, occurred_at DESC);
+            """))
+            await conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_activation_events_product_event
+                ON activation_events(product_id, event_name, occurred_at DESC);
+            """))
+        except Exception as e:
+            print(f"[startup migration] activation_events table: {e}")
         # Migration: create support_requests table
         try:
             await conn.execute(text("""
@@ -1614,6 +1702,7 @@ async def register(
     # Resolve product_id: body field takes priority (explicit), then dependency (header/query/default)
     resolved_product_id = user_data.product_id or product_id
     user_data.email = user_data.email.lower().strip()
+    signup_attribution = normalize_attribution(user_data.attribution)
 
     # Check if email exists
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -1648,6 +1737,8 @@ async def register(
             for p in new_platforms:
                 merged[p.get("platform") if isinstance(p, dict) else str(p)] = p
             user.platforms = list(merged.values())
+        if signup_attribution:
+            user.signup_attribution = signup_attribution
     else:
         # Brand new user
         user_id = uuid.uuid4()
@@ -1660,6 +1751,7 @@ async def register(
             credits_balance=5,  # Free signup credits
             product_id=resolved_product_id,
             platforms=getattr(user_data, 'platforms', None) or [],
+            signup_attribution=signup_attribution,
         )
         db.add(user)
         await db.flush()  # Ensure user row exists before license FK insert
@@ -1672,7 +1764,8 @@ async def register(
         type="trial",
         valid_until=datetime.utcnow() + timedelta(days=14),
         credits_purchased=5,
-        credits_remaining=5
+        credits_remaining=5,
+        signup_attribution=signup_attribution,
     )
     db.add(license)
 
@@ -1841,6 +1934,7 @@ async def simple_signup(
         password=supplied_password or secrets.token_urlsafe(24),
         product_id=resolved_product_id,
         platforms=data.platforms or [],
+        attribution=data.attribution,
     )
     # Reuse register() — pass the assembled UserCreate
     return await register(user_create, db, resolved_product_id)
@@ -2767,6 +2861,68 @@ Only this schema was retrieved (general legal knowledge, not your data). Generat
         instructions=instructions,
         meta=loader_meta
     )
+
+
+@app.post("/v1/events/activation")
+async def record_activation_event(
+    event: ActivationEventRequest,
+    license: License = Depends(get_current_license),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Record privacy-safe local runtime activation events.
+
+    Do not send prompts, customer inputs, generated document text, filenames, or
+    file paths. This endpoint exists so a local save-document tool can report
+    that a first file was generated without uploading the file.
+    """
+    allowed_events = {"first_file_generated", "doctor_passed", "first_skill_run"}
+    event_name = (event.event_name or "").strip() or "first_file_generated"
+    if event_name not in allowed_events:
+        raise HTTPException(status_code=400, detail="Unsupported activation event")
+
+    file_format = (event.file_format or "").strip().lower()[:20] or None
+    safe_metadata = {}
+    if isinstance(event.metadata, dict):
+        for key in ["source", "client", "tool_version"]:
+            value = event.metadata.get(key)
+            if value is not None:
+                safe_metadata[key] = str(value).strip()[:120]
+
+    first_result = await db.execute(text("""
+        SELECT 1
+        FROM activation_events
+        WHERE license_id = :license_id
+          AND event_name = :event_name
+        LIMIT 1
+    """), {"license_id": license.id, "event_name": event_name})
+    is_first = first_result.fetchone() is None
+
+    activation = ActivationEvent(
+        user_id=license.user_id,
+        license_id=license.id,
+        product_id=license.product_id or "law",
+        event_name=event_name,
+        skill_id=(event.skill_id or "").strip()[:100] or None,
+        file_format=file_format,
+        install_id_hash=hash_install_id(event.install_id),
+        is_first_for_license=is_first,
+        event_metadata=safe_metadata,
+    )
+    db.add(activation)
+
+    user_result = await db.execute(select(User).where(User.id == license.user_id))
+    active_user = user_result.scalar_one_or_none()
+    if active_user:
+        active_user.last_active_at = datetime.utcnow()
+
+    await db.commit()
+    return {
+        "status": "ok",
+        "event_name": event_name,
+        "product_id": license.product_id or "law",
+        "is_first_for_license": is_first,
+    }
 
 
 # ============================================
@@ -7635,6 +7791,280 @@ class BroadcastRequest(BaseModel):
     from_name: Optional[str] = None  # Defaults to product display name
     from_email: Optional[str] = None # Defaults to hello@{domain}
     dry_run: bool = False            # If true, create draft campaign but don't send
+
+
+class DailyActivityReportRequest(BaseModel):
+    recipient_email: EmailStr = "kentmercier@gmail.com"
+    hours: int = 24
+    include_google_ads: bool = True
+    send_email: bool = True
+
+
+def _html_escape(value) -> str:
+    return (
+        str(value if value is not None else "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _report_table(headers: list[str], rows: list[list[object]]) -> str:
+    if not rows:
+        return "<p style='margin:8px 0 0;color:#64748b'>None found.</p>"
+    head = "".join(f"<th style='text-align:left;padding:8px;border-bottom:1px solid #e2e8f0'>{_html_escape(h)}</th>" for h in headers)
+    body = ""
+    for row in rows:
+        body += "<tr>" + "".join(f"<td style='padding:8px;border-bottom:1px solid #f1f5f9'>{_html_escape(cell)}</td>" for cell in row) + "</tr>"
+    return f"<table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;font-size:14px'><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+
+
+async def _fetch_google_ads_summary(start_time: datetime, end_time: datetime) -> dict:
+    required = {
+        "GOOGLE_ADS_DEVELOPER_TOKEN": os.getenv("GOOGLE_ADS_DEVELOPER_TOKEN", ""),
+        "GOOGLE_ADS_CUSTOMER_ID": os.getenv("GOOGLE_ADS_CUSTOMER_ID", ""),
+        "GOOGLE_ADS_REFRESH_TOKEN": os.getenv("GOOGLE_ADS_REFRESH_TOKEN", ""),
+        "GOOGLE_ADS_CLIENT_ID": os.getenv("GOOGLE_ADS_CLIENT_ID", ""),
+        "GOOGLE_ADS_CLIENT_SECRET": os.getenv("GOOGLE_ADS_CLIENT_SECRET", ""),
+    }
+    missing = [key for key, value in required.items() if not value]
+    if missing:
+        return {"available": False, "reason": f"Missing Google Ads env vars: {', '.join(missing)}"}
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        token_resp = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": required["GOOGLE_ADS_CLIENT_ID"],
+                "client_secret": required["GOOGLE_ADS_CLIENT_SECRET"],
+                "refresh_token": required["GOOGLE_ADS_REFRESH_TOKEN"],
+                "grant_type": "refresh_token",
+            },
+        )
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token")
+        if token_resp.status_code >= 400 or not access_token:
+            return {"available": False, "reason": f"Google OAuth failed: {token_resp.status_code}"}
+
+        customer_id = required["GOOGLE_ADS_CUSTOMER_ID"].replace("-", "")
+        api_version = os.getenv("GOOGLE_ADS_API_VERSION", "v23")
+        query = f"""
+            SELECT
+              campaign.id,
+              campaign.name,
+              metrics.impressions,
+              metrics.clicks,
+              metrics.cost_micros,
+              metrics.conversions,
+              metrics.all_conversions
+            FROM campaign
+            WHERE segments.date BETWEEN '{start_time.date().isoformat()}' AND '{end_time.date().isoformat()}'
+            ORDER BY metrics.cost_micros DESC
+        """
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "developer-token": required["GOOGLE_ADS_DEVELOPER_TOKEN"],
+            "Content-Type": "application/json",
+        }
+        login_customer_id = os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID", "").replace("-", "")
+        if login_customer_id:
+            headers["login-customer-id"] = login_customer_id
+        ads_resp = await client.post(
+            f"https://googleads.googleapis.com/{api_version}/customers/{customer_id}/googleAds:searchStream",
+            json={"query": query},
+            headers=headers,
+        )
+        if ads_resp.status_code >= 400:
+            return {"available": False, "reason": f"Google Ads API failed: {ads_resp.status_code} {ads_resp.text[:180]}"}
+        payload = ads_resp.json()
+
+    campaigns = []
+    totals = {"impressions": 0, "clicks": 0, "cost_micros": 0, "conversions": 0.0, "all_conversions": 0.0}
+    for chunk in payload if isinstance(payload, list) else []:
+        for item in chunk.get("results", []):
+            metrics = item.get("metrics", {})
+            campaign = item.get("campaign", {})
+            row = {
+                "campaign": campaign.get("name", campaign.get("id", "")),
+                "impressions": int(metrics.get("impressions", 0)),
+                "clicks": int(metrics.get("clicks", 0)),
+                "cost": int(metrics.get("costMicros", 0)) / 1_000_000,
+                "conversions": float(metrics.get("conversions", 0) or 0),
+                "all_conversions": float(metrics.get("allConversions", 0) or 0),
+            }
+            campaigns.append(row)
+            totals["impressions"] += row["impressions"]
+            totals["clicks"] += row["clicks"]
+            totals["cost_micros"] += int(metrics.get("costMicros", 0))
+            totals["conversions"] += row["conversions"]
+            totals["all_conversions"] += row["all_conversions"]
+    totals["cost"] = totals.pop("cost_micros") / 1_000_000
+    return {"available": True, "totals": totals, "campaigns": campaigns}
+
+
+async def _send_daily_activity_email(to_email: str, subject: str, html: str) -> dict:
+    access_token = await get_zoho_access_token()
+    if not access_token:
+        return {"sent": False, "reason": "Zoho Mail token unavailable"}
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.post(
+            f"https://mail.zoho.com/api/accounts/{os.getenv('ZOHO_ACCOUNT_ID', '6556209000000008002')}/messages",
+            json={
+                "fromAddress": os.getenv("DAILY_REPORT_FROM_EMAIL", "hello@lawtasksai.com"),
+                "toAddress": to_email,
+                "subject": subject,
+                "content": html,
+                "mailFormat": "html",
+            },
+            headers={"Authorization": f"Zoho-oauthtoken {access_token}"},
+        )
+    return {"sent": resp.status_code == 200, "status_code": resp.status_code, "response": resp.text[:200]}
+
+
+@admin_router.post("/reports/daily-activity")
+async def admin_daily_activity_report(req: DailyActivityReportRequest, db: AsyncSession = Depends(get_db)):
+    """Build and optionally email a daily user, credit usage, and Google Ads report."""
+    hours = max(1, min(req.hours, 168))
+    end_time = datetime.utcnow()
+    start_time = end_time - timedelta(hours=hours)
+
+    new_users_result = await db.execute(text("""
+        SELECT u.email, u.name, u.product_id, u.created_at,
+               COALESCE(l.credits_remaining, u.credits_balance, 0) AS credits_remaining,
+               COALESCE(l.signup_attribution, u.signup_attribution, '{}'::jsonb) AS signup_attribution
+        FROM users u
+        LEFT JOIN LATERAL (
+            SELECT credits_remaining, signup_attribution
+            FROM licenses
+            WHERE user_id = u.id
+            ORDER BY created_at DESC
+            LIMIT 1
+        ) l ON TRUE
+        WHERE u.created_at >= :start_time
+        ORDER BY u.created_at DESC
+    """), {"start_time": start_time})
+    new_users = [dict(row._mapping) for row in new_users_result.fetchall()]
+
+    usage_result = await db.execute(text("""
+        SELECT ul.executed_at, u.email, COALESCE(ul.credits_used, 0) AS credits_used,
+               COALESCE(s.product_id, l.product_id, u.product_id, 'unknown') AS vertical,
+               ul.skill_id, COALESCE(s.name, ul.skill_id) AS skill_name, ul.success
+        FROM usage_logs ul
+        JOIN users u ON u.id = ul.user_id
+        LEFT JOIN licenses l ON l.id = ul.license_id
+        LEFT JOIN skills s ON s.id = ul.skill_id
+        WHERE ul.executed_at >= :start_time
+          AND COALESCE(ul.credits_used, 0) > 0
+        ORDER BY ul.executed_at DESC
+    """), {"start_time": start_time})
+    usages = [dict(row._mapping) for row in usage_result.fetchall()]
+
+    usage_by_vertical_result = await db.execute(text("""
+        SELECT COALESCE(s.product_id, l.product_id, u.product_id, 'unknown') AS vertical,
+               COUNT(*) AS uses,
+               COALESCE(SUM(ul.credits_used), 0) AS credits_used
+        FROM usage_logs ul
+        JOIN users u ON u.id = ul.user_id
+        LEFT JOIN licenses l ON l.id = ul.license_id
+        LEFT JOIN skills s ON s.id = ul.skill_id
+        WHERE ul.executed_at >= :start_time
+          AND COALESCE(ul.credits_used, 0) > 0
+        GROUP BY 1
+        ORDER BY credits_used DESC, uses DESC
+    """), {"start_time": start_time})
+    usage_by_vertical = [dict(row._mapping) for row in usage_by_vertical_result.fetchall()]
+
+    activation_result = await db.execute(text("""
+        SELECT ae.occurred_at, ae.product_id AS vertical, u.email, ae.event_name,
+               ae.skill_id, ae.file_format, ae.is_first_for_license
+        FROM activation_events ae
+        JOIN users u ON u.id = ae.user_id
+        WHERE ae.occurred_at >= :start_time
+        ORDER BY ae.occurred_at DESC
+    """), {"start_time": start_time})
+    activation_events = [dict(row._mapping) for row in activation_result.fetchall()]
+
+    ads = await _fetch_google_ads_summary(start_time, end_time) if req.include_google_ads else {"available": False, "reason": "Skipped by request"}
+
+    def attribution_summary(value) -> str:
+        data = value if isinstance(value, dict) else {}
+        if not data:
+            return ""
+        parts = []
+        for key in ["utm_source", "utm_medium", "utm_campaign", "utm_content", "gclid", "gbraid", "wbraid"]:
+            if data.get(key):
+                parts.append(f"{key}={data[key]}")
+        return "; ".join(parts)
+
+    new_user_rows = [
+        [u["created_at"].strftime("%Y-%m-%d %H:%M UTC") if u.get("created_at") else "", u.get("product_id") or "", u.get("email") or "", u.get("name") or "", u.get("credits_remaining"), attribution_summary(u.get("signup_attribution"))]
+        for u in new_users
+    ]
+    usage_rows = [
+        [r["executed_at"].strftime("%Y-%m-%d %H:%M UTC") if r.get("executed_at") else "", r.get("vertical") or "", r.get("email") or "", r.get("skill_name") or "", r.get("credits_used"), "yes" if r.get("success") else "no"]
+        for r in usages
+    ]
+    usage_summary_rows = [[r.get("vertical"), r.get("uses"), r.get("credits_used")] for r in usage_by_vertical]
+    activation_rows = [
+        [r["occurred_at"].strftime("%Y-%m-%d %H:%M UTC") if r.get("occurred_at") else "", r.get("vertical") or "", r.get("email") or "", r.get("event_name") or "", r.get("skill_id") or "", r.get("file_format") or "", "yes" if r.get("is_first_for_license") else "no"]
+        for r in activation_events
+    ]
+    ads_rows = []
+    if ads.get("available"):
+        ads_rows = [
+            [c["campaign"], c["impressions"], c["clicks"], f"${c['cost']:.2f}", c["conversions"], c["all_conversions"]]
+            for c in ads.get("campaigns", [])
+        ]
+
+    subject = f"TasksAI daily activity report - {end_time.strftime('%Y-%m-%d')}"
+    ads_html = (
+        _report_table(["Campaign", "Impressions", "Clicks", "Cost", "Conversions", "All conversions"], ads_rows)
+        if ads.get("available")
+        else f"<p style='margin:8px 0 0;color:#64748b'>{_html_escape(ads.get('reason', 'Google Ads unavailable'))}</p>"
+    )
+    if ads.get("available"):
+        totals = ads.get("totals", {})
+        ads_html = (
+            f"<p style='margin:0 0 10px;color:#334155'>Totals: {totals.get('impressions', 0)} impressions, "
+            f"{totals.get('clicks', 0)} clicks, ${totals.get('cost', 0):.2f} spend, "
+            f"{totals.get('conversions', 0)} conversions.</p>" + ads_html
+        )
+
+    html = f"""<!DOCTYPE html>
+<html><body style="margin:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a">
+<div style="max-width:760px;margin:0 auto;padding:28px">
+  <h1 style="font-size:24px;margin:0 0 4px">TasksAI daily activity report</h1>
+  <p style="margin:0 0 24px;color:#64748b">Window: {start_time.strftime('%Y-%m-%d %H:%M UTC')} to {end_time.strftime('%Y-%m-%d %H:%M UTC')}</p>
+  <h2 style="font-size:18px;margin:24px 0 10px">New users ({len(new_users)})</h2>
+  {_report_table(["Created", "Vertical", "Email", "Name", "Credits", "Attribution"], new_user_rows)}
+  <h2 style="font-size:18px;margin:24px 0 10px">Credit usage ({len(usages)} events)</h2>
+  {_report_table(["Vertical", "Uses", "Credits used"], usage_summary_rows)}
+  <div style="height:12px"></div>
+  {_report_table(["Time", "Vertical", "User", "Skill", "Credits", "Success"], usage_rows)}
+  <h2 style="font-size:18px;margin:24px 0 10px">Activation events ({len(activation_events)})</h2>
+  {_report_table(["Time", "Vertical", "User", "Event", "Skill", "Format", "First for license"], activation_rows)}
+  <h2 style="font-size:18px;margin:24px 0 10px">Google Ads</h2>
+  {ads_html}
+</div>
+</body></html>"""
+
+    email_result = {"sent": False, "reason": "Skipped by request"}
+    if req.send_email:
+        email_result = await _send_daily_activity_email(str(req.recipient_email), subject, html)
+
+    return {
+        "status": "ok",
+        "window_start": start_time.isoformat(),
+        "window_end": end_time.isoformat(),
+        "new_users_count": len(new_users),
+        "credit_usage_count": len(usages),
+        "credit_usage_by_vertical": usage_by_vertical,
+        "activation_events_count": len(activation_events),
+        "activation_events": activation_events,
+        "google_ads": ads,
+        "email": email_result,
+    }
 
 
 @admin_router.post("/broadcast")
